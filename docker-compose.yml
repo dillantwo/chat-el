@@ -73,6 +73,10 @@ services:
       AZURE_OPENAI_RAG_DEPLOYMENT: ${AZURE_OPENAI_RAG_DEPLOYMENT:-${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-3-small}}
       AZURE_OPENAI_RAG_API_VERSION: ${AZURE_OPENAI_RAG_API_VERSION:-preview}
       SESSION_SECRET: ${SESSION_SECRET}
+      # Passed through empty when unset so lib/session.ts keeps its own default
+      # (Secure in production). Set to false in .env while the site is HTTP-only,
+      # otherwise the browser drops the session cookie and nobody can log in.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE-}
     healthcheck:
       test:
         [

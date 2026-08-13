@@ -25,6 +25,26 @@ function getEncodedKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+/**
+ * Whether the session cookie carries the `Secure` attribute.
+ *
+ * Browsers discard a Secure cookie that arrives over plain HTTP, so a
+ * production build served without TLS can never sign anyone in: the login
+ * request succeeds, the cookie is dropped, and the next request is bounced back
+ * to /login by proxy.ts.
+ *
+ * SESSION_COOKIE_SECURE=false is the escape hatch for a deployment that does
+ * not have a certificate yet. The session token then travels unencrypted, so
+ * remove the override as soon as HTTPS is in place. Unset means "secure in
+ * production", which is the right default.
+ */
+function useSecureCookie(): boolean {
+  const flag = process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase();
+  if (flag === "false" || flag === "0") return false;
+  if (flag === "true" || flag === "1") return true;
+  return process.env.NODE_ENV === "production";
+}
+
 export async function encrypt(payload: SessionPayload): Promise<string> {
   return new SignJWT(JSON.parse(JSON.stringify(payload)))
     .setProtectedHeader({ alg: "HS256" })
@@ -53,7 +73,7 @@ export async function createSession(payload: Omit<SessionPayload, "expiresAt">):
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureCookie(),
     expires: expiresAt,
     sameSite: "lax",
     path: "/",
