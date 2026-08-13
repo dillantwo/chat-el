@@ -1,0 +1,153 @@
+services:
+  # ---------- MongoDB ----------
+  mongo:
+    image: mongo:latest
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+      - ./docker/mongo/init-user.sh:/docker-entrypoint-initdb.d/init-user.sh:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-ai-qef}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@127.0.0.1:27017/admin?authSource=admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Not exposed to host by default; only the app container connects.
+    # Uncomment the following to access from host for debugging:
+    # ports:
+    #   - "27017:27017"
+
+  # ---------- Next.js App ----------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Explicit target: the Dockerfile has more than one final-ish stage
+      # (see "tools"). Without this, the app would silently pick up whichever
+      # stage happens to be last in the file.
+      target: runner
+      args:
+        # basePath is inlined into the client bundles at build time, so it must
+        # be passed here as well as in `environment` below, and both must agree.
+        # Empty (the default) serves the app from the domain root.
+        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH-}
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    # Baseline replica count for higher concurrency. Declaring it here (rather
+    # than relying on `--scale`) means a plain `docker compose up -d` always
+    # converges to 2 containers; without it the default is 1 and any `up` that
+    # omits the flag would silently halve capacity.
+    #
+    # `--scale` still overrides this for a single invocation, e.g.
+    #   docker compose up -d --scale app=4   # temporary spike
+    #   docker compose up -d                 # back to the 2 declared here
+    #
+    # Requires no `container_name` on this service, and no host `ports` mapping
+    # (both would collide across replicas). nginx load-balances across them via
+    # Docker DNS — see the resolver note in nginx.conf.
+    deploy:
+      replicas: 2
+    environment:
+      MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/${MONGO_INITDB_DATABASE:-ai-qef}?authSource=${MONGO_INITDB_DATABASE:-ai-qef}
+      NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH-}
+      AZURE_RESOURCE_NAME: ${AZURE_RESOURCE_NAME}
+      AZURE_API_KEY: ${AZURE_API_KEY}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4.1}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-12-01-preview}
+      # Math AI tool generator (generate-html) — separate codex deployment/version.
+      AZURE_OPENAI_HTML_DEPLOYMENT: ${AZURE_OPENAI_HTML_DEPLOYMENT:-gpt-5.3-codex}
+      AZURE_OPENAI_HTML_API_VERSION: ${AZURE_OPENAI_HTML_API_VERSION:-preview}
+      # RAG retrieval for the Humanities / Science chatbots (lib/rag.ts runs at
+      # request time inside this container, not just in the tools image).
+      # Without PINECONE_API_KEY, retrieval silently returns no chunks and the
+      # chatbots fall back to prompt-only answers.
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      AZURE_OPENAI_RAG_DEPLOYMENT: ${AZURE_OPENAI_RAG_DEPLOYMENT:-${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-3-small}}
+      AZURE_OPENAI_RAG_API_VERSION: ${AZURE_OPENAI_RAG_API_VERSION:-preview}
+      SESSION_SECRET: ${SESSION_SECRET}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const http=require('http');const path=(process.env.NEXT_PUBLIC_BASE_PATH||'')+'/api/health';const req=http.get({host:'127.0.0.1',port:3000,path},res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));req.setTimeout(5000,()=>{req.destroy();process.exit(1);});"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # Not exposed to host; NGINX proxies traffic.
+    # Uncomment to access directly for debugging:
+    # ports:
+    #   - "3000:3000"
+
+  # ---------- One-off maintenance tasks ----------
+  # Never starts with `docker compose up` (guarded by the "tools" profile).
+  # Run a script explicitly, e.g.:
+  #   docker compose run --rm tools npx tsx scripts/backfill-token-usage.ts --dry-run
+  #   docker compose run --rm tools npx tsx scripts/backfill-token-usage.ts
+  tools:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tools
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/${MONGO_INITDB_DATABASE:-ai-qef}?authSource=${MONGO_INITDB_DATABASE:-ai-qef}
+      AZURE_RESOURCE_NAME: ${AZURE_RESOURCE_NAME}
+      AZURE_API_KEY: ${AZURE_API_KEY}
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-3-small}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-12-01-preview}
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      PINECONE_INDEX: ${PINECONE_INDEX:-ai-qef-knowledge}
+
+  # ---------- NGINX Reverse Proxy ----------
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Certificates are issued and renewed by certbot on the HOST, not by a
+      # container, so the host's letsencrypt tree is bind-mounted read-only.
+      # Mount the whole directory rather than live/<domain>: the files under
+      # live/ are symlinks into ../../archive/, which dangle inside the
+      # container if only live/ is mounted.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # ACME http-01 webroot. nginx owns port 80, so host renewals must use
+      # `--webroot -w /var/www/certbot` instead of `--standalone`; this mount
+      # is what makes the challenge files visible to nginx.
+      - /var/www/certbot:/var/www/certbot:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# Certificates are managed outside compose: certbot is installed on the host and
+# renewed by its own systemd timer (certbot.timer). A deploy hook at
+# /etc/letsencrypt/renewal-hooks/deploy/ reloads the nginx container after a
+# successful renewal — see the deployment notes. There is deliberately no
+# certbot service here; one would fight the host installation over port 80 and
+# over /etc/letsencrypt.
+
+volumes:
+  mongo-data:
