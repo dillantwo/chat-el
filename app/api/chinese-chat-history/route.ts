@@ -52,16 +52,23 @@ export async function GET(req: Request) {
       });
     }
 
+    // The list feeds the sidebar, which shows titles and timestamps only.
+    // `messages` is projected out: it holds the whole transcript with any
+    // images inlined as base64, so returning it here re-sent every conversation
+    // the student has ever had on each save. Transcripts come from the
+    // ?chatId= branch above instead.
     const docs = await ChineseChatHistory.find({
       userId: session.userId,
       ...(searchParams.get("topic")?.trim() ? { topic: searchParams.get("topic")!.trim() } : {}),
-    }).sort({ updatedAt: -1 }).lean();
+    })
+      .select("-messages")
+      .sort({ updatedAt: -1 })
+      .lean();
     return Response.json({
       items: docs.map((doc) => ({
         id: String(doc.chatId),
         title: String(doc.title),
         topic: String(doc.topic),
-        messages: Array.isArray(doc.messages) ? doc.messages : [],
         updatedAt: doc.updatedAt,
       })),
     });

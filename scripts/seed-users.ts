@@ -25,7 +25,7 @@
  */
 
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "../lib/password";
 import { requireMongoUri } from "./lib/load-env";
 import { ALL_SUBJECTS, User, type Subject, type UserRole } from "../models/User";
 import { School } from "../models/School";
@@ -79,7 +79,7 @@ async function seed() {
       fail(`school "${SCHOOL_CODE}" has no enabled subjects, so the accounts would see nothing.`);
     }
 
-    const hashedPassword = await bcrypt.hash(PASSWORD, 12);
+    const hashedPassword = await hashPassword(PASSWORD);
 
     for (const u of USERS) {
       const existing = await User.findOne({ username: u.username });

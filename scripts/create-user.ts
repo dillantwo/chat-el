@@ -20,7 +20,7 @@
  *
  * Flags:
  *   --username      (required) login name, stored lowercase
- *   --password      (required) plaintext; hashed with bcrypt (12 rounds)
+ *   --password      (required) plaintext; hashed with scrypt (see lib/password.ts)
  *   --school        (required) the school's `code`, e.g. spc
  *   --displayName   (optional) defaults to the username
  *   --role          (optional) teacher | student   (default: teacher)
@@ -35,7 +35,7 @@
  */
 
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "../lib/password";
 import { requireMongoUri } from "./lib/load-env";
 import { isDuplicateKeyError } from "../lib/duplicate-key";
 import { ALL_SUBJECTS, User, type Subject, type UserRole } from "../models/User";
@@ -168,7 +168,7 @@ async function main() {
       fail(`user "${username}" already exists. Re-run with --force to update it.`);
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await hashPassword(password);
 
     if (existing) {
       if (existing.role === "admin") {

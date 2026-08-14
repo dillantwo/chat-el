@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
+import { hashPassword } from "@/lib/password";
 import { User, ALL_SUBJECTS, type Subject } from "@/models/User";
 import { School } from "@/models/School";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -40,7 +40,7 @@ export async function PATCH(
       if (body.password.length < 6) {
         return NextResponse.json({ error: "密碼至少需要 6 個字元" }, { status: 400 });
       }
-      user.hashedPassword = await bcrypt.hash(body.password, 10);
+      user.hashedPassword = await hashPassword(body.password);
     }
 
     // Only teacher/student carry school + subjects + classes.

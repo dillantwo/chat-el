@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
+import { hashPassword } from "@/lib/password";
 import { User, ALL_SUBJECTS, type Subject, type UserRole } from "@/models/User";
 import { School } from "@/models/School";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
       classes = await resolveClassesForSchool(body.classes, school._id);
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await hashPassword(password);
     const user = await User.create({
       username,
       hashedPassword,

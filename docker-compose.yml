@@ -3,6 +3,15 @@ services:
   mongo:
     image: mongo:latest
     restart: unless-stopped
+    # WiredTiger sizes its cache at 50% of (RAM - 1GB) by default, which on an
+    # 8GB host means ~3.5GB — most of the box, for a dataset that is mostly small
+    # text documents. Pinning it keeps room for the app replicas; GridFS files
+    # (learning materials, podcast audio) stream and are not cached whole.
+    command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     volumes:
       - mongo-data:/data/db
       - ./docker/mongo/init-user.sh:/docker-entrypoint-initdb.d/init-user.sh:ro
@@ -47,15 +56,31 @@ services:
     # omits the flag would silently halve capacity.
     #
     # `--scale` still overrides this for a single invocation, e.g.
-    #   docker compose up -d --scale app=4   # temporary spike
-    #   docker compose up -d                 # back to the 2 declared here
+    #   docker compose up -d --scale app=6   # temporary spike
+    #   docker compose up -d                 # back to the 3 declared here
     #
     # Requires no `container_name` on this service, and no host `ports` mapping
     # (both would collide across replicas). nginx load-balances across them via
     # Docker DNS — see the resolver note in nginx.conf.
     deploy:
-      replicas: 2
+      # Sized for a 4-core host: cores minus one, so mongod, nginx and the OS
+      # keep a core. Node is single-threaded, so this number is what decides how
+      # many cores the app can occupy — one replica per core would let an upload
+      # burst or a login storm starve mongod, which surfaces as app-wide 5s
+      # serverSelectionTimeoutMS failures rather than as merely slow requests.
+      replicas: 3
+      resources:
+        limits:
+          # A single 20MB upload becomes ~27MB of base64 plus copies while it is
+          # parsed, sent to Azure and written to history, so per-request peaks
+          # are large. The limit turns a runaway replica into one restarted
+          # container instead of an OOM that takes the host down.
+          memory: 1500M
     environment:
+      # Keep V8's heap ceiling under the container limit so GC runs before the
+      # kernel's OOM killer does. Without this, Node sizes the old space from
+      # host RAM (8GB here) and would happily grow past 1500M.
+      NODE_OPTIONS: --max-old-space-size=1152
       MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/${MONGO_INITDB_DATABASE:-ai-qef}?authSource=${MONGO_INITDB_DATABASE:-ai-qef}
       NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH-}
       AZURE_RESOURCE_NAME: ${AZURE_RESOURCE_NAME}
@@ -121,6 +146,10 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     depends_on:
       app:
         condition: service_healthy

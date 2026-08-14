@@ -22,7 +22,7 @@
  */
 
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "../lib/password";
 import { requireMongoUri } from "./lib/load-env";
 import { User } from "../models/User";
 
@@ -45,7 +45,7 @@ async function seed() {
           "Use ADMIN_RESET=1 with ADMIN_PASSWORD to reset its password.",
       );
     } else {
-      existing.hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 12);
+      existing.hashedPassword = await hashPassword(ADMIN_PASSWORD);
       // Force the account back to a usable global admin: a demoted or
       // school-scoped account is exactly the state you are recovering from.
       existing.role = "admin";
@@ -56,7 +56,7 @@ async function seed() {
   } else {
     await User.create({
       username: ADMIN_USERNAME,
-      hashedPassword: await bcrypt.hash(ADMIN_PASSWORD, 12),
+      hashedPassword: await hashPassword(ADMIN_PASSWORD),
       role: "admin",
       displayName: ADMIN_DISPLAY,
       school: null,

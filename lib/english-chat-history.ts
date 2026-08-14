@@ -69,14 +69,22 @@ export function restoreUiMessages(savedMessages: SavedChatMessage[]): UIMessage[
   }));
 }
 
-export async function getEnglishChatHistory(topic?: string): Promise<EnglishChatHistoryItem[]> {
+/**
+ * A row in the history list. `messages` is absent on purpose: the API projects
+ * the transcript out of the list response (it carries every image as base64),
+ * so a sidebar refresh stays small no matter how long the conversations are.
+ * Use getEnglishChatHistoryItem() when the transcript is needed.
+ */
+export type EnglishChatHistorySummary = Omit<EnglishChatHistoryItem, "messages">;
+
+export async function getEnglishChatHistory(topic?: string): Promise<EnglishChatHistorySummary[]> {
   try {
     const url = topic
       ? `${basePath}/api/english-chat-history?topic=${encodeURIComponent(topic)}`
       : `${basePath}/api/english-chat-history`;
     const response = await fetch(url, { credentials: "include" });
     if (!response.ok) return [];
-    const json = (await response.json()) as { items?: EnglishChatHistoryItem[] };
+    const json = (await response.json()) as { items?: EnglishChatHistorySummary[] };
     return Array.isArray(json.items) ? json.items : [];
   } catch {
     return [];

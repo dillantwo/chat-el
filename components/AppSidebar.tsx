@@ -40,9 +40,9 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { basePath } from "@/lib/utils";
-import { deleteMathChatHistoryItem, getMathChatHistory, type MathChatHistoryItem } from "@/lib/math-chat-history";
-import { getEnglishChatHistory, deleteEnglishChatHistoryItem, type EnglishChatHistoryItem } from "@/lib/english-chat-history";
-import { getChineseChatHistory, deleteChineseChatHistoryItem, type ChineseChatHistoryItem } from "@/lib/chinese-chat-history";
+import { deleteMathChatHistoryItem, getMathChatHistory, type MathChatHistorySummary } from "@/lib/math-chat-history";
+import { getEnglishChatHistory, deleteEnglishChatHistoryItem, type EnglishChatHistorySummary } from "@/lib/english-chat-history";
+import { getChineseChatHistory, deleteChineseChatHistoryItem, type ChineseChatHistorySummary } from "@/lib/chinese-chat-history";
 import { VocabBank } from "@/components/VocabBank";
 
 interface SavedMessagePart {
@@ -162,9 +162,9 @@ export function AppSidebar() {
     sharedWithStudents?: boolean;
     updatedAt?: string;
   }>>([]);
-  const [mathChatHistory, setMathChatHistory] = useState<MathChatHistoryItem[]>([]);
-  const [englishChatHistory, setEnglishChatHistory] = useState<EnglishChatHistoryItem[]>([]);
-  const [chineseChatHistory, setChineseChatHistory] = useState<ChineseChatHistoryItem[]>([]);
+  const [mathChatHistory, setMathChatHistory] = useState<MathChatHistorySummary[]>([]);
+  const [englishChatHistory, setEnglishChatHistory] = useState<EnglishChatHistorySummary[]>([]);
+  const [chineseChatHistory, setChineseChatHistory] = useState<ChineseChatHistorySummary[]>([]);
   const [activeEnglishChatId, setActiveEnglishChatId] = useState<string | null>(null);
   const [activeChineseChatId, setActiveChineseChatId] = useState<string | null>(null);
   const [activeMathChatId, setActiveMathChatId] = useState<string | null>(null);
@@ -334,7 +334,7 @@ export function AppSidebar() {
     }
   }
 
-  function getMathHistoryIcon(kind: MathChatHistoryItem["kind"], selectedTool?: string | null) {
+  function getMathHistoryIcon(kind: MathChatHistorySummary["kind"], selectedTool?: string | null) {
     if (kind === "volume-cubes") return Box;
     if (kind === "clock-24hrs") return Clock;
     if (kind === "clock-time-difference") return Timer;

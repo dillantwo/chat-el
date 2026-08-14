@@ -58,7 +58,13 @@ export async function GET(req: Request) {
       });
     }
 
-    const docs = await MathChatHistory.find({ userId: session.userId }).sort({ updatedAt: -1 }).lean();
+    // Metadata only — see the note in the Chinese equivalent: `messages` holds
+    // the full transcript (base64 images included) and the sidebar never reads
+    // it, so it is projected out and fetched per chat via ?chatId=.
+    const docs = await MathChatHistory.find({ userId: session.userId })
+      .select("-messages")
+      .sort({ updatedAt: -1 })
+      .lean();
     return Response.json({
       items: docs.map((doc) => ({
         id: String(doc.chatId),
@@ -70,7 +76,6 @@ export async function GET(req: Request) {
         selectedTool: typeof doc.selectedTool === "string" ? doc.selectedTool : null,
         toolUrl: doc.toolUrl ? String(doc.toolUrl) : undefined,
         entryMode: doc.entryMode,
-        messages: Array.isArray(doc.messages) ? doc.messages : [],
         updatedAt: doc.updatedAt,
       })),
     });

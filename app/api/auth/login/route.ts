@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import { User, type Subject } from "@/models/User";
 import "@/models/School";
 import { createSession } from "@/lib/session";
+import { hashPassword, isLegacyHash, verifyPassword } from "@/lib/password";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,9 +26,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "用戶名或密碼錯誤" }, { status: 401 });
     }
 
-    const passwordMatch = await bcrypt.compare(password, user.hashedPassword);
+    const passwordMatch = await verifyPassword(password, user.hashedPassword);
     if (!passwordMatch) {
       return NextResponse.json({ error: "用戶名或密碼錯誤" }, { status: 401 });
+    }
+
+    // Upgrade bcrypt hashes to scrypt on the way through — this is the only
+    // moment the plaintext is available. updateOne rather than user.save() so
+    // the populated `school` path is left alone.
+    if (isLegacyHash(user.hashedPassword)) {
+      try {
+        await User.updateOne(
+          { _id: user._id },
+          { $set: { hashedPassword: await hashPassword(password) } },
+        );
+      } catch (err) {
+        // A failed upgrade must not block the login; it retries next time.
+        console.error("[auth/login] password rehash failed", err);
+      }
     }
 
     // Non-admin users must belong to an active school.

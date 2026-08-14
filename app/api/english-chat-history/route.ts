@@ -54,10 +54,16 @@ export async function GET(req: Request) {
       });
     }
 
+    // Metadata only — see the note in the Chinese equivalent: `messages` holds
+    // the full transcript (base64 images included) and the sidebar never reads
+    // it, so it is projected out and fetched per chat via ?chatId=.
     const docs = await EnglishChatHistory.find({
       userId: session.userId,
       ...(searchParams.get("topic")?.trim() ? { topic: searchParams.get("topic")!.trim() } : {}),
-    }).sort({ updatedAt: -1 }).lean();
+    })
+      .select("-messages")
+      .sort({ updatedAt: -1 })
+      .lean();
     return Response.json({
       items: docs.map((doc) => ({
         id: String(doc.chatId),
@@ -65,7 +71,6 @@ export async function GET(req: Request) {
         topic: String(doc.topic),
         selectedTask: doc.selectedTask ?? null,
         studentRole: doc.studentRole ?? null,
-        messages: Array.isArray(doc.messages) ? doc.messages : [],
         updatedAt: doc.updatedAt,
       })),
     });

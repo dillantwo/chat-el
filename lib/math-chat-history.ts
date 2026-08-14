@@ -77,11 +77,19 @@ export function restoreUiMessages(savedMessages: SavedChatMessage[]): UIMessage[
   }));
 }
 
-export async function getMathChatHistory(): Promise<MathChatHistoryItem[]> {
+/**
+ * A row in the history list. `messages` is absent on purpose: the API projects
+ * the transcript out of the list response (it carries every image as base64),
+ * so a sidebar refresh stays small no matter how long the conversations are.
+ * Use getMathChatHistoryItem() when the transcript is needed.
+ */
+export type MathChatHistorySummary = Omit<MathChatHistoryItem, "messages">;
+
+export async function getMathChatHistory(): Promise<MathChatHistorySummary[]> {
   try {
     const response = await fetch(`${basePath}/api/math-chat-history`, { credentials: "include" });
     if (!response.ok) return [];
-    const json = (await response.json()) as { items?: MathChatHistoryItem[] };
+    const json = (await response.json()) as { items?: MathChatHistorySummary[] };
     return Array.isArray(json.items) ? json.items : [];
   } catch {
     return [];

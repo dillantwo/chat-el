@@ -29,14 +29,22 @@ export function createChineseChatId() {
   return `chi-chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export async function getChineseChatHistory(topic?: string): Promise<ChineseChatHistoryItem[]> {
+/**
+ * A row in the history list. `messages` is absent on purpose: the API projects
+ * the transcript out of the list response (it carries every image as base64),
+ * so a sidebar refresh stays small no matter how long the conversations are.
+ * Use getChineseChatHistoryItem() when the transcript is needed.
+ */
+export type ChineseChatHistorySummary = Omit<ChineseChatHistoryItem, "messages">;
+
+export async function getChineseChatHistory(topic?: string): Promise<ChineseChatHistorySummary[]> {
   try {
     const url = topic
       ? `${basePath}/api/chinese-chat-history?topic=${encodeURIComponent(topic)}`
       : `${basePath}/api/chinese-chat-history`;
     const response = await fetch(url, { credentials: "include" });
     if (!response.ok) return [];
-    const json = (await response.json()) as { items?: ChineseChatHistoryItem[] };
+    const json = (await response.json()) as { items?: ChineseChatHistorySummary[] };
     return Array.isArray(json.items) ? json.items : [];
   } catch {
     return [];
