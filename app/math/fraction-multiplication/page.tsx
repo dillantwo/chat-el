@@ -96,11 +96,19 @@ const STYLES = `
 .fa45-root .tool-btn:hover{ background:#2980b9; transform:scale(1.05); }
 .fa45-root .tool-btn:active{ transform:scale(0.95); background:#1f618d; }
 
-.fa45-root .bars-column{ width:70%; display:flex; flex-direction:column; }
-.fa45-root .bar-wrap-container{ width:100%; display:flex; flex-wrap:wrap; gap:15px; justify-content:flex-start; align-items:center;
+/* 長條圖與數線放在同一個橫向捲動區：整數部分多（例如帶分數 9 2/8）時不再折行，
+   而是保持一排並顯示水平捲軸，長條圖與數線一起捲動、刻度永遠對齊。 */
+.fa45-root .bars-column{ width:70%; display:flex; flex-direction:column;
+  overflow-x:auto; overflow-y:hidden; padding:4px 14px 8px 12px;
+  overscroll-behavior-x:contain; scrollbar-width:thin; scrollbar-color:#bdc3c7 #eef1f3; }
+.fa45-root .bars-column::-webkit-scrollbar{ height:10px; }
+.fa45-root .bars-column::-webkit-scrollbar-track{ background:#eef1f3; border-radius:5px; }
+.fa45-root .bars-column::-webkit-scrollbar-thumb{ background:#bdc3c7; border-radius:5px; }
+.fa45-root .bars-column::-webkit-scrollbar-thumb:hover{ background:#95a5a6; }
+.fa45-root .bar-wrap-container{ width:100%; display:flex; flex-wrap:nowrap; gap:15px; justify-content:flex-start; align-items:center;
   background:transparent; border:none; min-height:60px; transition:0.5s ease; }
 .fa45-root .bar-unit{ position:relative; height:50px; width:calc((100% - (var(--max-wholes) - 1) * 15px) / var(--max-wholes));
-  min-width:120px; flex:none; border:var(--bar-border-width) solid var(--bar-border-color); box-sizing:border-box;
+  min-width:var(--unit-min-w, 120px); flex:none; border:var(--bar-border-width) solid var(--bar-border-color); box-sizing:border-box;
   background:var(--bar-bg); border-radius:var(--bar-border-radius); overflow:hidden; }
 .fa45-root .bar-fill{ height:100%; transition:width var(--anim-time) ease; position:absolute; z-index:1; top:0; left:0; opacity:var(--bar-fill-opacity); }
 .fa45-root .grid-overlay{ position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; pointer-events:none; overflow:hidden; }
@@ -110,11 +118,16 @@ const STYLES = `
 .fa45-root .bar-wrap-container.continuous .bar-unit{ width:calc(100% / var(--max-wholes)) !important; border-right:none; border-radius:0; }
 .fa45-root .bar-wrap-container.continuous .bar-unit:last-child{ border-right:var(--bar-border-width) solid var(--bar-border-color); border-top-right-radius:4px; border-bottom-right-radius:4px; }
 .fa45-root .bar-wrap-container.continuous .bar-unit:first-child{ border-top-left-radius:4px; border-bottom-left-radius:4px; }
-.fa45-root .nl-wrap-container{ width:100%; display:flex; flex-wrap:wrap; justify-content:flex-start; align-items:flex-start;
-  min-height:45px; margin-top:2px; border:none; position:relative; gap:15px; }
+.fa45-root .nl-wrap-container{ width:100%; display:flex; flex-wrap:nowrap; justify-content:flex-start; align-items:flex-start;
+  min-height:56px; margin-top:2px; border:none; position:relative; gap:15px; }
 .fa45-root .nl-wrap-container.continuous{ gap:0 !important; }
-.fa45-root .nl-unit{ position:relative; height:45px; width:calc((100% - (var(--max-wholes) - 1) * 15px) / var(--max-wholes)); min-width:120px; flex:none; box-sizing:border-box; }
+.fa45-root .nl-unit{ position:relative; height:56px; width:calc((100% - (var(--max-wholes) - 1) * 15px) / var(--max-wholes)); min-width:var(--unit-min-w, 120px); flex:none; box-sizing:border-box; }
 .fa45-root .nl-wrap-container.continuous .nl-unit{ width:calc(100% / var(--max-wholes)) !important; }
+/* 數線刻度標籤：收緊分數左右內距，讓每個標籤佔的寬度小一點，比較不容易擠在一起 */
+.fa45-root .nl-unit .inline-frac span{ padding:1px 2px; }
+/* 帶分數刻度（例如 1 1/8）：去掉 .inline-frac 預設的 0 5px 外距，
+   整數和分數才會靠在一起，讀起來像一個帶分數而不是兩個數字。 */
+.fa45-root .nl-unit .inline-frac{ margin:0; }
 
 .fa45-root #bottom-answer-zone{ width:100%; max-width:650px; background:#fff8e1; padding:20px; border-radius:15px;
   border:2px dashed var(--red); margin-top:15px; display:none; flex-direction:column; align-items:center; gap:10px;
@@ -430,6 +443,13 @@ export default function FractionMultiplicationPage() {
         Math.ceil((vals.total_n1 * vals.total_n2) / (vals.d1 * vals.d2)),
       );
       de.style.setProperty("--max-wholes", String(maxW));
+      // 每個「整數格」的最小寬度。數線上每個刻度標籤（例如 2/8、1 2/8）都需要一定
+      // 的水平空間，格子太窄時標籤會互相重疊看不清楚。用最細的分母（相乘後的
+      // d1×d2）計算，動畫各階段的整數格寬度才不會忽大忽小；算出來比可用寬度大時，
+      // .bars-column 會出現水平捲軸。
+      const cd = Math.max(1, vals.d1 * vals.d2);
+      const perTick = 6 + 8 * String(cd).length + (maxW > 1 ? 12 : 0);
+      de.style.setProperty("--unit-min-w", `${Math.max(120, Math.ceil(perTick * cd))}px`);
       return maxW;
     }
 
@@ -1028,6 +1048,7 @@ export default function FractionMultiplicationPage() {
     window.__FA45 = api;
 
     de.style.setProperty("--max-wholes", "1");
+    de.style.setProperty("--unit-min-w", "120px");
     de.style.setProperty("--anim-time", "0.6s");
     root.innerHTML = BODY_HTML;
 
@@ -1131,6 +1152,7 @@ export default function FractionMultiplicationPage() {
       document.querySelectorAll(".fa45-ghost").forEach((el) => el.remove());
       if (window.__FA45 === api) delete window.__FA45;
       de.style.removeProperty("--max-wholes");
+      de.style.removeProperty("--unit-min-w");
       de.style.removeProperty("--anim-time");
     };
   }, []);

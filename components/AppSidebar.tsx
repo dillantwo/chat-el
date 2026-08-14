@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Box, Clock, LogOut, MessageSquare, Sparkles, Save, Share2, Timer, Trash2, Variable, Zap } from "lucide-react";
@@ -40,9 +40,9 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { basePath } from "@/lib/utils";
-import { deleteMathChatHistoryItem, getMathChatHistory, type MathChatHistorySummary } from "@/lib/math-chat-history";
-import { getEnglishChatHistory, deleteEnglishChatHistoryItem, type EnglishChatHistorySummary } from "@/lib/english-chat-history";
-import { getChineseChatHistory, deleteChineseChatHistoryItem, type ChineseChatHistorySummary } from "@/lib/chinese-chat-history";
+import { deleteMathChatHistoryItem, getMathChatHistory, getMathChatHistoryItem, type MathChatHistorySummary } from "@/lib/math-chat-history";
+import { getEnglishChatHistory, getEnglishChatHistoryItem, deleteEnglishChatHistoryItem, type EnglishChatHistorySummary } from "@/lib/english-chat-history";
+import { getChineseChatHistory, getChineseChatHistoryItem, deleteChineseChatHistoryItem, type ChineseChatHistorySummary } from "@/lib/chinese-chat-history";
 import { VocabBank } from "@/components/VocabBank";
 
 interface SavedMessagePart {
@@ -168,6 +168,28 @@ export function AppSidebar() {
   const [activeEnglishChatId, setActiveEnglishChatId] = useState<string | null>(null);
   const [activeChineseChatId, setActiveChineseChatId] = useState<string | null>(null);
   const [activeMathChatId, setActiveMathChatId] = useState<string | null>(null);
+
+  /**
+   * Opening a conversation fetches its transcript, because the history list is
+   * metadata only (the API projects `messages` out — see lib/*-chat-history.ts).
+   * This counter drops the result of an earlier click when a later one has
+   * already been made, so a slow fetch cannot overwrite the chat the student
+   * most recently picked.
+   */
+  const chatLoadRequestRef = useRef(0);
+
+  /** Fetch a conversation, then hand it to the panel listening on `eventName`. */
+  const openChat = useCallback(
+    <T,>(eventName: string, fetchItem: () => Promise<T | null>) => {
+      const request = ++chatLoadRequestRef.current;
+      void (async () => {
+        const item = await fetchItem();
+        if (!item || chatLoadRequestRef.current !== request) return;
+        window.dispatchEvent(new CustomEvent(eventName, { detail: { item } }));
+      })();
+    },
+    [],
+  );
 
   // Teachers review student records on /teacher/student-data (查看學生數據),
   // reached from the home page — not from this sidebar or from any topic page.
@@ -490,7 +512,7 @@ export function AppSidebar() {
                       className="flex min-w-0 flex-1 items-start gap-2 text-left"
                       onClick={() => {
                         setActiveEnglishChatId(item.id);
-                        window.dispatchEvent(new CustomEvent("english-chat:load", { detail: { item } }));
+                        openChat("english-chat:load", () => getEnglishChatHistoryItem(item.id));
                       }}
                     >
                       <MessageSquare className={`size-3.5 mt-0.5 shrink-0 ${activeEnglishChatId === item.id ? "text-blue-600" : "text-muted-foreground"}`} />
@@ -549,7 +571,7 @@ export function AppSidebar() {
                       className="flex min-w-0 flex-1 items-start gap-2 text-left"
                       onClick={() => {
                         setActiveChineseChatId(item.id);
-                        window.dispatchEvent(new CustomEvent("chinese-chat:load", { detail: { item } }));
+                        openChat("chinese-chat:load", () => getChineseChatHistoryItem(item.id));
                       }}
                     >
                       <MessageSquare className={`size-3.5 mt-0.5 shrink-0 ${activeChineseChatId === item.id ? "text-blue-600" : "text-muted-foreground"}`} />
@@ -702,7 +724,7 @@ export function AppSidebar() {
                         className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
                         onClick={() => {
                           setActiveMathChatId(item.id);
-                          window.dispatchEvent(new CustomEvent("dashboard:load-math-chat", { detail: { item } }));
+                          openChat("dashboard:load-math-chat", () => getMathChatHistoryItem(item.id));
                         }}
                       >
                         {(() => {
