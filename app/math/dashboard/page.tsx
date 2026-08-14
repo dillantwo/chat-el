@@ -579,10 +579,9 @@ function MathDashboardContent() {
       "volume-cubes": "/math/volume",
       "journey-graph": "/math/journey",
       // 四則運算（加/減/乘/除）：已改寫為 Next.js route。這些工具不讀取 URL 參數（沿用自身預設 / 隨機出題），
-      // 因此當作靜態路由直接開啟，不需 AI 提取參數。
+      // 因此當作靜態路由直接開啟，不需 AI 提取參數。會讀取參數的請改列到下方 fractionOpRouteMap。
       "fraction-addition": "/math/fraction-addition",
       "fraction-subtraction": "/math/fraction-subtraction",
-      "fraction-multiplication": "/math/fraction-multiplication",
       "fraction-division": "/math/fraction-division",
     };
     const staticRoute = staticRouteMap[selectedTool];
@@ -592,10 +591,13 @@ function MathDashboardContent() {
       return;
     }
 
-    // 四則運算（加/減/乘/除）皆已改寫為 Next.js route（見上方 staticRouteMap），
-    // 故此對照表留空；保留變數與後備邏輯以相容其他潛在的 HTML 版工具。
-    const fractionOpHtmlMap: Record<string, string> = {};
-    const fractionOpHtml = fractionOpHtmlMap[selectedTool];
+    // 「兩數運算」版面的工具頁中，會讀取 URL 參數
+    // （num1/den1/num2/den2/whole1/whole2/context）的那些，需要先經 AI 提取參數再帶參數開啟。
+    // 其餘運算工具沿用自身預設，列在上方 staticRouteMap。
+    const fractionOpRouteMap: Record<string, string> = {
+      "fraction-multiplication": "fraction-multiplication",
+    };
+    const fractionOpRoute = fractionOpRouteMap[selectedTool];
 
     // 直接帶參數的獨立工具頁（非「兩數運算」的版面）的 HTML 版本。
     // 分數概念工具皆已改寫為 Next.js route（見下方 standaloneRouteMap），故此表留空；
@@ -617,8 +619,8 @@ function MathDashboardContent() {
         ? `${basePath}/math/${standaloneRoute}`
         : standaloneHtml
           ? `${basePath}/math/${standaloneHtml}`
-          : fractionOpHtml
-            ? `${basePath}/math/${fractionOpHtml}`
+          : fractionOpRoute
+            ? `${basePath}/math/${fractionOpRoute}`
             : `${basePath}/math/preview.html`;
 
     if (suppressHistoryAnalysisRef.current) {
@@ -704,18 +706,18 @@ function MathDashboardContent() {
           qs.set("den", String(params.den && params.den !== 0 ? params.den : 1));
           if (params.mode) qs.set("mode", String(params.mode));
           if (!cancelled) setPreviewUrl(`${basePath}/math/fraction-converting?${qs.toString()}`);
-        } else if (fractionOpHtml) {
+        } else if (fractionOpRoute) {
           const qs = new URLSearchParams();
           // 分子默認 1（AI 回傳 0 通常代表純整數題目，0/1 顯示醜，改用 1）
           qs.set("num1", String(params.num1 && params.num1 !== 0 ? params.num1 : 1));
-          // 分母為 0 通常代表題目缺少對應分數，使用默認 1 避免 HTML 除零
+          // 分母為 0 通常代表題目缺少對應分數，使用默認 1 避免除零
           qs.set("den1", String(params.den1 && params.den1 !== 0 ? params.den1 : 1));
           qs.set("num2", String(params.num2 && params.num2 !== 0 ? params.num2 : 1));
           qs.set("den2", String(params.den2 && params.den2 !== 0 ? params.den2 : 1));
           if (params.whole1 != null) qs.set("whole1", String(params.whole1));
           if (params.whole2 != null) qs.set("whole2", String(params.whole2));
           if (params.questionTemplate) qs.set("context", params.questionTemplate);
-          if (!cancelled) setPreviewUrl(`${basePath}/math/${fractionOpHtml}?${qs.toString()}`);
+          if (!cancelled) setPreviewUrl(`${basePath}/math/${fractionOpRoute}?${qs.toString()}`);
         } else {
           const qs = new URLSearchParams({
             whole1: String(params.whole1 ?? 0),
