@@ -578,11 +578,6 @@ function MathDashboardContent() {
       "clock-time-difference": "/math/clock-time-difference",
       "volume-cubes": "/math/volume",
       "journey-graph": "/math/journey",
-      // 四則運算（加/減/乘/除）：已改寫為 Next.js route。這些工具不讀取 URL 參數（沿用自身預設 / 隨機出題），
-      // 因此當作靜態路由直接開啟，不需 AI 提取參數。會讀取參數的請改列到下方 fractionOpRouteMap。
-      "fraction-addition": "/math/fraction-addition",
-      "fraction-subtraction": "/math/fraction-subtraction",
-      "fraction-division": "/math/fraction-division",
     };
     const staticRoute = staticRouteMap[selectedTool];
     if (staticRoute) {
@@ -591,11 +586,14 @@ function MathDashboardContent() {
       return;
     }
 
-    // 「兩數運算」版面的工具頁中，會讀取 URL 參數
-    // （num1/den1/num2/den2/whole1/whole2/context）的那些，需要先經 AI 提取參數再帶參數開啟。
-    // 其餘運算工具沿用自身預設，列在上方 staticRouteMap。
+    // 「兩數運算」版面的工具頁（加/減/乘/除）都會讀取 URL 參數
+    // （num1/den1/num2/den2/whole1/whole2/context），需要先經 AI 提取參數再帶參數開啟。
+    // 新增同版面的工具時，請一併在該頁加上 applyIncomingParams() 再列到這裏。
     const fractionOpRouteMap: Record<string, string> = {
+      "fraction-addition": "fraction-addition",
+      "fraction-subtraction": "fraction-subtraction",
       "fraction-multiplication": "fraction-multiplication",
+      "fraction-division": "fraction-division",
     };
     const fractionOpRoute = fractionOpRouteMap[selectedTool];
 

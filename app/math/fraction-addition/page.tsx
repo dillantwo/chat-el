@@ -1610,7 +1610,39 @@ export default function FractionAdditionPage() {
     const onCtx = (e: Event) => e.preventDefault();
     root.addEventListener("contextmenu", onCtx);
 
+    // 由 dashboard 經 AI 提取題目後帶入的參數：num1/den1/num2/den2/whole1/whole2/context
+    // （題目文字，分數位置為 [FRAC1] / [FRAC2]）。沒有參數時沿用輸入框的預設 1/2 + 1/3，
+    // 且不顯示題目 —— 題目只在 AI 提取到題目、或用家按「隨機出題」時才出現。
+    function applyIncomingParams() {
+      const params = new URLSearchParams(window.location.search);
+
+      // 分子分母的可用範圍與 getSafeValues() 一致，避免輸入框顯示的值和動畫用的值不同。
+      const setInt = (id: string, key: string, min: number, max: number) => {
+        const v = parseInt(params.get(key) ?? "", 10);
+        if (isNaN(v)) return 0;
+        const clamped = Math.min(Math.max(v, min), max);
+        $i(id)!.value = String(clamped);
+        return clamped;
+      };
+
+      setInt("n1", "num1", 1, 100);
+      setInt("d1", "den1", 1, 100);
+      setInt("n2", "num2", 1, 100);
+      setInt("d2", "den2", 1, 100);
+      const w1 = setInt("w1", "whole1", 0, 10);
+      const w2 = setInt("w2", "whole2", 0, 10);
+      // 整數部分為 0 就留空，輸入框顯示 "0" 會誤導。
+      if (w1 === 0) $i("w1")!.value = "";
+      if (w2 === 0) $i("w2")!.value = "";
+      // 整數部分只在「顯示帶分數」開啟時才可見，否則 toggleWholeNumber() 會把它清掉。
+      if (w1 > 0 || w2 > 0) $i("show-whole-cb")!.checked = true;
+
+      const context = params.get("context");
+      if (context) currentWordProblemTemplate = context;
+    }
+
     // window.onload sequence
+    applyIncomingParams();
     updateSpeed();
     toggleWholeNumber();
     updateUI();
