@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>不同高度軌道的衛星</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0b0f19;
+            color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow-x: hidden;
+        }
+        .canvas-container {
+            position: relative;
+            box-shadow: 0 12px 36px -10px rgba(0, 0, 0, 0.8);
+        }
+        .glass-panel {
+            background: rgba(20, 27, 41, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-2 md:p-3 gap-1 md:gap-2">
+
+    <!-- Header Title -->
+    <header class="w-full max-w-6xl mb-0.5 text-left md:text-center">
+        <h1 class="text-2xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-sky-400 via-emerald-400 to-purple-400 bg-clip-text text-transparent">
+            🛰️ 不同高度軌道的衛星
+        </h1>
+        <p class="text-xs md:text-sm text-slate-300 mt-0.5 font-medium">
+            比較低軌道衛星(LEO)、中軌道衛星(LEO)及高軌道衛星(HEO/GEO)軌道        </p>
+    </header>
+
+    <!-- Main Content Grid Container (50/50 Equal Ratio) -->
+    <main class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch">
+
+        <!-- Simulation View Area (Left Side - 50%) -->
+        <section class="flex flex-col justify-start">
+            
+            <!-- Interactive Instruction aligned with LEO/MEO/GEO buttons -->
+            <div class="mb-1.5 flex justify-between items-center gap-2">
+                <div class="bg-sky-950/90 border-2 border-sky-400 text-sky-100 px-3 py-1.5 rounded-xl text-xs md:text-sm font-black shadow-lg flex items-center gap-2 backdrop-blur">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping"></span>
+                    <span>👇 點擊下方人造衛星 或 右方按鈕切換顯示</span>
+                </div>
+            </div>
+
+            <!-- Canvas Viewport -->
+            <div class="canvas-container w-full aspect-[4/3] max-h-[380px] lg:max-h-[510px] rounded-2xl overflow-hidden glass-panel flex justify-center items-center relative border border-slate-700/60">
+                <canvas id="simCanvas" class="w-full h-full block cursor-pointer"></canvas>
+            </div>
+        </section>
+
+        <!-- Right Sidebar Details Panel (Right Side - 50%) -->
+        <aside class="flex flex-col gap-2">
+            
+            <!-- Compare All Button -->
+            <button id="card-all" onclick="selectSatellite('ALL')" class="w-full py-2 px-3 rounded-xl border-2 text-center transition-all duration-200 bg-gradient-to-r from-sky-950/80 via-emerald-950/80 to-purple-950/80 border-amber-400/80 text-amber-300 hover:border-amber-400 shadow-lg flex items-center justify-center gap-2 shrink-0">
+                <span class="text-base">🌐</span>
+                <span class="text-xs md:text-sm font-black">按此對比所有衛星</span>
+            </button>
+
+            <!-- Orbit Type Cards Buttons -->
+            <div class="grid grid-cols-3 gap-2 shrink-0">
+                <button id="card-leo" onclick="selectSatellite('LEO')" class="p-2.5 rounded-xl border-2 text-left transition-all duration-200 bg-sky-950/40 border-sky-400 text-sky-300 shadow-lg">
+                    <div class="text-xs text-sky-400 font-extrabold uppercase tracking-wider">LEO</div>
+                    <div class="text-base md:text-lg font-black mt-0.5">低軌道衛星</div>
+                    <div class="text-xs text-slate-300 mt-0.5 font-medium">高度約160–2,000 km</div>
+                </button>
+                
+                <button id="card-meo" onclick="selectSatellite('MEO')" class="p-2.5 rounded-xl border-2 text-left transition-all duration-200 bg-slate-900/70 border-slate-800 text-slate-400 hover:border-emerald-500/50">
+                    <div class="text-xs text-emerald-400 font-extrabold uppercase tracking-wider">MEO</div>
+                    <div class="text-base md:text-lg font-black mt-0.5">中軌道衛星</div>
+                    <div class="text-xs text-slate-300 mt-0.5 font-medium">高度約2,000-35,786 km</div>
+                </button>
+
+                <button id="card-geo" onclick="selectSatellite('GEO')" class="p-2.5 rounded-xl border-2 text-left transition-all duration-200 bg-slate-900/70 border-slate-800 text-slate-400 hover:border-purple-500/50">
+                    <div class="text-xs text-purple-400 font-extrabold uppercase tracking-wider">HEO/GEO</div>
+                    <div class="text-base md:text-lg font-black mt-0.5">高軌道衛星</div>
+                    <div class="text-xs text-slate-300 mt-0.5 font-medium">高度約35,786 km</div>
+                </button>
+            </div>
+
+            <!-- Panel Container with expanded height to fit all rows without scrollbar -->
+            <div class="relative flex-1 min-h-[460px] lg:min-h-[500px]">
+
+                <!-- Single Satellite Info Panel -->
+                <div class="glass-panel p-3 rounded-2xl flex flex-col justify-between border-t-2 absolute inset-0 w-full h-full overflow-y-auto" id="single-info-panel">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span id="detail-tag" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                                低地 / LEO
+                            </span>
+                            <span id="detail-speed" class="text-xs text-slate-300 font-mono font-semibold">飛行速度: 約 7.8 km/s</span>
+                        </div>
+
+                        <h2 id="detail-title" class="text-lg md:text-xl font-black text-white mb-0.5 truncate">低軌道衛星 (Low Earth Orbit)</h2>
+                        <p id="detail-desc" class="text-xs text-slate-200 leading-snug mb-2 font-medium min-h-[2.5rem] flex items-center">
+                            距離地球最近，訊號傳遞速度極快。但因單一衛星照射範圍較小，需要許多顆衛星組成團隊覆蓋全球。
+                        </p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                            <!-- Coverage Item (Full Width Row) -->
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-white/10 md:col-span-2 flex flex-col justify-between">
+                                <div class="flex items-center justify-between gap-1 mb-1">
+                                    <span class="text-slate-300 font-semibold text-xs">📡 電波照射覆蓋範圍:</span>
+                                    <span id="text-coverage" class="font-extrabold text-sky-300 text-xs shrink-0">較小</span>
+                                </div>
+                                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                                    <div id="bar-coverage" class="bg-sky-400 h-full rounded-full transition-all duration-300" style="width: 25%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Orbit Period Item (Full Width Row) -->
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-white/10 md:col-span-2 flex flex-col justify-between">
+                                <div class="flex items-center justify-between gap-1 mb-1">
+                                    <span class="text-slate-300 font-semibold text-xs">🔄 繞地球一圈時間 (軌道週期):</span>
+                                    <span id="detail-period" class="font-extrabold text-amber-300 text-xs shrink-0">約 90 分鐘 (1.5 小時)</span>
+                                </div>
+                                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                                    <div id="bar-period" class="bg-amber-400 h-full rounded-full transition-all duration-300" style="width: 10%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Round-Trip Latency Item (Full Width Row) -->
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-white/10 md:col-span-2 flex flex-col justify-between">
+                                <div class="flex items-center justify-between gap-1 mb-1">
+                                    <span class="text-slate-300 font-semibold text-xs">💬 發送與接收訊息來回時間 (延遲):</span>
+                                    <span id="text-latency" class="font-extrabold text-pink-400 text-xs shrink-0">約 0.02 秒</span>
+                                </div>
+                                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden mb-1">
+                                    <div id="bar-latency" class="bg-pink-400 h-full rounded-full transition-all duration-300" style="width: 15%"></div>
+                                </div>
+                                <p id="detail-latency-desc" class="text-xs text-slate-300 leading-tight font-medium">
+                                    幾乎即時，完全感覺不到卡頓。
+                                </p>
+                            </div>
+
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-white/10">
+                                <span class="text-slate-300 font-semibold block mb-0.5">🌍 覆蓋全球所需衛星數量:</span>
+                                <span id="detail-constellation" class="font-extrabold text-white text-xs block truncate">幾百至幾千顆衛星 (例如 Starlink)</span>
+                            </div>
+
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-white/10">
+                                <span class="text-slate-300 font-semibold block mb-0.5">🚀 日常生活主要用途:</span>
+                                <span id="detail-uses" class="font-extrabold text-white text-xs block truncate">太空站、氣象及地球觀測衛星、通訊衛星（寬頻網路）</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi-Satellite Comparison Panel (Shown when ALL is active) -->
+                <div class="glass-panel p-3 rounded-2xl flex-col justify-between border-t-2 border-amber-400 hidden absolute inset-0 w-full h-full overflow-y-auto" id="compare-info-panel">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                🌐 全軌道照射範圍與週期對比
+                            </span>
+                            <span class="text-xs text-slate-300 font-semibold">同時觀察三種軌道特徵</span>
+                        </div>
+
+                        <h2 class="text-base md:text-lg font-black text-white mb-1.5">低、中、高軌道電波覆蓋與運行週期總對比</h2>
+                        
+                        <div class="space-y-1.5 text-xs">
+                            <!-- LEO Row -->
+                            <div class="bg-sky-950/60 border border-sky-500/40 rounded-xl p-2 flex items-center justify-between gap-2">
+                                <div class="w-20 shrink-0">
+                                    <span class="font-black text-sky-300 block text-xs">低軌道 (LEO)</span>
+                                    <span class="text-[10px] text-slate-400">160 - 2,000 km</span>
+                                </div>
+                                <div class="flex-1 text-slate-200 text-[11px] space-y-0.5">
+                                    <div><strong class="text-sky-300">照射範圍:</strong> 區域 (較小)</div>
+                                    <div><strong class="text-sky-300">繞圈時間:</strong> 約 90 分鐘</div>
+                                    <div><strong class="text-sky-300">訊號延遲:</strong> 最低 (~0.02秒)</div>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <span class="bg-sky-500/20 text-sky-300 text-[10px] font-bold px-1.5 py-0.5 rounded-lg border border-sky-400/30">數千顆</span>
+                                </div>
+                            </div>
+
+                            <!-- MEO Row -->
+                            <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-2 flex items-center justify-between gap-2">
+                                <div class="w-20 shrink-0">
+                                    <span class="font-black text-emerald-300 block text-xs">中軌道 (MEO)</span>
+                                    <span class="text-[10px] text-slate-400">約 2,000 - 35,786 km</span>
+                                </div>
+                                <div class="flex-1 text-slate-200 text-[11px] space-y-0.5">
+                                    <div><strong class="text-emerald-300">照射範圍:</strong> 中等 (大陸/洲)</div>
+                                    <div><strong class="text-emerald-300">繞圈時間:</strong> 約 12 小時</div>
+                                    <div><strong class="text-emerald-300">訊號延遲:</strong> 適中 (~0.1秒)</div>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <span class="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded-lg border border-emerald-400/30">約24顆</span>
+                                </div>
+                            </div>
+
+                            <!-- GEO Row -->
+                            <div class="bg-purple-950/60 border border-purple-500/40 rounded-xl p-2 flex items-center justify-between gap-2">
+                                <div class="w-20 shrink-0">
+                                    <span class="font-black text-purple-300 block text-xs">高軌道 (HEO/GEO)</span>
+                                    <span class="text-[10px] text-slate-400">約 35,786 km</span>
+                                </div>
+                                <div class="flex-1 text-slate-200 text-[11px] space-y-0.5">
+                                    <div><strong class="text-purple-300">照射範圍:</strong> 極廣 (約1/3地球)</div>
+                                    <div><strong class="text-purple-300">繞圈時間:</strong> 約 24 小時 (自轉同步)</div>
+                                    <div><strong class="text-purple-300">訊號延遲:</strong> 最高 (~0.5秒)</div>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <span class="bg-purple-500/20 text-purple-300 text-[10px] font-bold px-1.5 py-0.5 rounded-lg border border-purple-400/30">只需 3 顆</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer Summary comparison -->
+                    <div class="mt-1.5 pt-1.5 border-t border-white/10 text-[11px] text-amber-300 font-semibold flex justify-between items-center shrink-0">
+                        <span>💡 軌道越高的衛星，電波照射範圍越廣，繞地球時間越長，訊號延遲較高！</span>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let selectedSatKey = 'LEO';
+
+        // Satellite Data Configuration with added Orbit Period ratio bar percentages
+        const satData = {
+            LEO: {
+                name: "低軌道 (LEO)",
+                fullTitle: "低軌道衛星",
+                color: "#38bdf8", // Sky Blue
+                coneColor: "rgba(56, 189, 248, 0.35)",
+                altitudeKm: "600 - 2,000 km",
+                speedStr: "飛行速度: 約 7.8 km/s",
+                periodBar: "10%",
+                periodText: "約 90 分鐘 (1.5 小時)",
+                sideDistanceRatio: 0.18,
+                coneAngleDeg: 28,
+                desc: "距離地球最近，訊號傳遞速度極快。但因單一衛星照射範圍較小，需要許多顆衛星組成團隊覆蓋全球。",
+                coverageBar: "25%",
+                coverageText: "較小 (區域)",
+                latencyBar: "15%",
+                latencyText: "約 0.02 秒",
+                latencyDesc: "訊息來回只需約 0.02 秒（幾乎即時，完全感覺不到卡頓）。",
+                constellation: "幾百至幾千顆衛星 (例如 Starlink)",
+                uses: "衛星寬頻網絡、國際太空站 (ISS)"
+            },
+            MEO: {
+                name: "中軌道 (MEO)",
+                fullTitle: "中軌道衛星",
+                color: "#4ade80", // Green
+                coneColor: "rgba(74, 222, 128, 0.30)",
+                altitudeKm: "約 2,000 - 35,786 km",
+                speedStr: "飛行速度: 約 3.9 km/s",
+                periodBar: "50%",
+                periodText: "約 12 小時",
+                sideDistanceRatio: 0.52,
+                coneAngleDeg: 56,
+                desc: "高度介乎低軌道與高軌道之間，兼具適中的照射範圍與傳送速度。最適合用作全球衛星定位與導航。",
+                coverageBar: "60%",
+                coverageText: "中等",
+                latencyBar: "50%",
+                latencyText: "約 0.1 秒",
+                latencyDesc: "訊息來回約需 0.1 秒（輕微延遲，網絡依然順暢）。",
+                constellation: "約 20 至 30 顆衛星 (例如 GPS)",
+                uses: "GPS 導航定位系統、車載導航"
+            },
+            GEO: {
+                name: "高軌道 (HEO / GEO)",
+                fullTitle: "高軌道衛星",
+                color: "#c084fc", // Purple
+                coneColor: "rgba(192, 132, 252, 0.25)",
+                altitudeKm: "約 35,786 km",
+                speedStr: "飛行速度: 約 3.1 km/s",
+                periodBar: "100%",
+                periodText: "24小時 (與自轉同步) ",
+                sideDistanceRatio: 0.88,
+                coneAngleDeg: 102,
+                desc: "離地球最遠！如果繞地球一圈時間為24小時，運行速度與地球自轉一致，從地面看如同靜止空中。只需 3 顆衛星就能照射全世界大部分地區。",
+                coverageBar: "95%",
+                coverageText: "極廣 (約 1/3 地球)",
+                latencyBar: "90%",
+                latencyText: "約 0.5–0.6 秒",
+                latencyDesc: "訊息來回約需 0.5 至 0.6 秒（來回半秒，對話會有明顯停頓感）。",
+                constellation: "只需約 3 顆衛星即可覆蓋全球",
+                uses: "人造衛星電視直播、氣象衛星"
+            }
+        };
+
+        // Satellite floating animation angles & Earth rotation angle
+        let angles = { LEO: 0, MEO: 0.5, GEO: 1.2 };
+        const earthRotation = 1.2; // Fixed Earth longitude angle
+
+        const landmasses = {
+            eurasia: [
+                [70, 10], [72, 30], [70, 70], [73, 110], [70, 170], [60, 170], [55, 160], [55, 140],
+                [42, 130], [38, 118], [32, 122], [22, 114], [21, 108], [10, 105], [1, 104], [10, 98],
+                [22, 90], [8, 77], [23, 68], [25, 55], [12, 44], [30, 32], [31, 35], [36, 36],
+                [41, 28], [38, 24], [41, 15], [43, 6], [36, -5], [43, -9], [48, -4], [54, 5], [58, 6], [62, 5]
+            ],
+            africa: [
+                [37, -10], [37, 10], [33, 33], [28, 34], [12, 43], [11, 51], [0, 42], [-11, 40],
+                [-26, 33], [-34, 26], [-34, 18], [-18, 12], [-5, 12], [5, 2], [5, -10], [15, -17],
+                [21, -17], [32, -9], [37, -10]
+            ],
+            northAmerica: [
+                [70, -170], [71, -140], [75, -90], [60, -60], [45, -60], [42, -70], [30, -80],
+                [25, -80], [25, -97], [18, -95], [15, -90], [10, -83], [15, -90], [20, -105],
+                [32, -117], [48, -125], [60, -140], [60, -165], [70, -170]
+            ],
+            southAmerica: [
+                [12, -73], [10, -62], [0, -50], [-5, -35], [-23, -42], [-40, -60], [-55, -68],
+                [-52, -75], [-18, -70], [-5, -81], [8, -77], [12, -73]
+            ],
+            australia: [
+                [-12, 131], [-12, 136], [-15, 136], [-12, 142], [-25, 153], [-38, 148],
+                [-38, 140], [-32, 132], [-35, 117], [-22, 114], [-14, 126], [-12, 131]
+            ],
+            greenland: [
+                [78, -70], [83, -30], [70, -20], [60, -43], [65, -53], [78, -70]
+            ],
+            japan: [
+                [31, 130], [35, 135], [44, 145], [40, 140], [33, 132], [31, 130]
+            ],
+            uk: [
+                [50, -10], [58, -10], [58, -1], [50, 1], [50, -10]
+            ],
+            madagascar: [
+                [-12, 49], [-25, 44], [-25, 47], [-15, 50], [-12, 49]
+            ],
+            borneo: [
+                [7, 109], [-4, 115], [-1, 119], [4, 118], [7, 109]
+            ],
+            sumatra: [
+                [5, 95], [-6, 105], [-4, 103], [5, 95]
+            ],
+            newGuinea: [
+                [-3, 131], [-8, 141], [-9, 150], [-3, 141], [-3, 131]
+            ],
+            newZealand: [
+                [-34, 172], [-47, 166], [-46, 170], [-37, 178], [-34, 172]
+            ]
+        };
+
+        const polarIcePolygons = [
+            [[70, -180], [70, 180], [90, 180], [90, -180]],
+            [[-62, -180], [-62, 180], [-90, 180], [-90, -180]]
+        ];
+
+        const MW = 720;
+        const MH = 360;
+        const mapCanvas = document.createElement('canvas');
+        mapCanvas.width = MW;
+        mapCanvas.height = MH;
+        const mapCtx = mapCanvas.getContext('2d');
+        let mapData = null;
+
+        function latLonToMap(lat, lon) {
+            return {
+                x: ((lon + 180) / 360) * MW,
+                y: ((90 - lat) / 180) * MH
+            };
+        }
+
+        function drawMapPolygon(ctx, pts) {
+            ctx.beginPath();
+            pts.forEach((p, i) => {
+                const pt = latLonToMap(p[0], p[1]);
+                if (i === 0) ctx.moveTo(pt.x, pt.y);
+                else ctx.lineTo(pt.x, pt.y);
+            });
+            ctx.closePath();
+        }
+
+        function initEarthTexture() {
+            mapCtx.fillStyle = '#0f4c81';
+            mapCtx.fillRect(0, 0, MW, MH);
+
+            mapCtx.strokeStyle = '#0284c7';
+            mapCtx.lineWidth = 7;
+            mapCtx.lineJoin = 'round';
+            Object.values(landmasses).forEach(pts => {
+                drawMapPolygon(mapCtx, pts);
+                mapCtx.stroke();
+            });
+
+            mapCtx.fillStyle = '#22c55e';
+            Object.values(landmasses).forEach(pts => {
+                drawMapPolygon(mapCtx, pts);
+                mapCtx.fill();
+            });
+
+            mapCtx.fillStyle = '#f8fafc';
+            polarIcePolygons.forEach(pts => {
+                drawMapPolygon(mapCtx, pts);
+                mapCtx.fill();
+            });
+
+            mapData = mapCtx.getImageData(0, 0, MW, MH).data;
+        }
+
+        let sphereCanvas = document.createElement('canvas');
+        let sphereCtx = sphereCanvas.getContext('2d');
+
+        function renderEarthSphere(earthDiameter, rotAngle) {
+            const size = Math.floor(earthDiameter);
+            if (sphereCanvas.width !== size || sphereCanvas.height !== size) {
+                sphereCanvas.width = size;
+                sphereCanvas.height = size;
+                sphereCtx = sphereCanvas.getContext('2d');
+            }
+
+            const R = size / 2;
+            const imgData = sphereCtx.createImageData(size, size);
+            const pixels = imgData.data;
+
+            const tilt = 0.35;
+            const cosTilt = Math.cos(tilt);
+            const sinTilt = Math.sin(tilt);
+
+            const nlx = -0.6, nly = -0.3, nlz = 0.74;
+
+            for (let py = 0; py < size; py++) {
+                const dy = (R - py) / R;
+                const dy2 = dy * dy;
+
+                for (let px = 0; px < size; px++) {
+                    const dx = (px - R) / R;
+                    const r2 = dx * dx + dy2;
+
+                    if (r2 > 1.0) continue;
+
+                    const dz = Math.sqrt(Math.max(0, 1.0 - r2));
+
+                    const x1 = dx * cosTilt + dy * sinTilt;
+                    const y1 = -dx * sinTilt + dy * cosTilt;
+                    const z1 = dz;
+
+                    const lat = Math.asin(Math.max(-1, Math.min(1, y1)));
+                    let lon = Math.atan2(x1, z1) + rotAngle;
+
+                    lon = ((lon + Math.PI) % (2 * Math.PI));
+                    if (lon < 0) lon += 2 * Math.PI;
+                    lon -= Math.PI;
+
+                    const u = Math.floor(((lon + Math.PI) / (2 * Math.PI)) * MW) % MW;
+                    const v = Math.floor((0.5 - lat / Math.PI) * MH) % MH;
+
+                    const mapIdx = ((v < 0 ? 0 : v >= MH ? MH - 1 : v) * MW + (u < 0 ? 0 : u >= MW ? MW - 1 : u)) * 4;
+                    const srcR = mapData[mapIdx];
+                    const srcG = mapData[mapIdx + 1];
+                    const srcB = mapData[mapIdx + 2];
+
+                    let dot = dx * nlx + dy * nly + dz * nlz;
+                    dot = Math.max(0.08, dot);
+
+                    let specular = 0;
+                    if (srcB > srcG && srcB > srcR) {
+                        const rz = 2 * dot * dz - nlz;
+                        specular = Math.pow(Math.max(0, rz), 18) * 110;
+                    }
+
+                    const rim = Math.pow(1.0 - dz, 3.5) * 70;
+
+                    const outR = Math.min(255, srcR * (dot * 0.95 + 0.15) + specular * 0.4);
+                    const outG = Math.min(255, srcG * (dot * 0.95 + 0.15) + specular * 0.4 + rim * 0.35);
+                    const outB = Math.min(255, srcB * (dot * 0.95 + 0.20) + specular * 0.85 + rim);
+
+                    const dstIdx = (py * size + px) * 4;
+                    pixels[dstIdx] = outR;
+                    pixels[dstIdx + 1] = outG;
+                    pixels[dstIdx + 2] = outB;
+                    pixels[dstIdx + 3] = 255;
+                }
+            }
+
+            sphereCtx.putImageData(imgData, 0, 0);
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function selectSatellite(key) {
+            selectedSatKey = key;
+
+            const singlePanel = document.getElementById('single-info-panel');
+            const comparePanel = document.getElementById('compare-info-panel');
+            const cardAll = document.getElementById('card-all');
+
+            if (key === 'ALL') {
+                singlePanel.classList.add('hidden');
+                singlePanel.classList.remove('flex');
+                comparePanel.classList.remove('hidden');
+                comparePanel.classList.add('flex');
+
+                cardAll.className = `w-full py-2 px-3 rounded-xl border-2 text-center transition-all duration-200 bg-amber-500/20 border-amber-400 text-amber-300 shadow-xl ring-2 ring-amber-400/30 flex items-center justify-center gap-2 shrink-0`;
+
+                ['LEO', 'MEO', 'GEO'].forEach(k => {
+                    const card = document.getElementById(`card-${k.toLowerCase()}`);
+                    card.className = `p-2.5 rounded-xl border-2 text-left transition-all duration-200 bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-600`;
+                });
+            } else {
+                singlePanel.classList.remove('hidden');
+                singlePanel.classList.add('flex');
+                comparePanel.classList.add('hidden');
+                comparePanel.classList.remove('flex');
+
+                cardAll.className = `w-full py-2 px-3 rounded-xl border-2 text-center transition-all duration-200 bg-gradient-to-r from-sky-950/80 via-emerald-950/80 to-purple-950/80 border-amber-400/80 text-amber-300 hover:border-amber-400 shadow-lg flex items-center justify-center gap-2 shrink-0`;
+
+                const data = satData[key];
+
+                document.getElementById('detail-title').innerText = data.fullTitle;
+                document.getElementById('detail-desc').innerText = data.desc;
+                document.getElementById('detail-speed').innerText = data.speedStr;
+                
+                document.getElementById('bar-coverage').style.width = data.coverageBar;
+                document.getElementById('bar-coverage').style.backgroundColor = data.color;
+                document.getElementById('text-coverage').innerText = data.coverageText;
+                document.getElementById('text-coverage').style.color = data.color;
+
+                document.getElementById('bar-period').style.width = data.periodBar;
+                document.getElementById('detail-period').innerText = data.periodText;
+
+                document.getElementById('bar-latency').style.width = data.latencyBar;
+                document.getElementById('text-latency').innerText = data.latencyText;
+                document.getElementById('detail-latency-desc').innerText = data.latencyDesc;
+
+                document.getElementById('detail-constellation').innerText = data.constellation;
+                document.getElementById('detail-uses').innerText = data.uses;
+
+                const tag = document.getElementById('detail-tag');
+                tag.innerText = data.name;
+                tag.style.borderColor = data.color;
+                tag.style.color = data.color;
+
+                document.getElementById('single-info-panel').style.borderTopColor = data.color;
+
+                ['LEO', 'MEO', 'GEO'].forEach(k => {
+                    const card = document.getElementById(`card-${k.toLowerCase()}`);
+                    if (k === key) {
+                        card.className = `p-2.5 rounded-xl border-2 text-left transition-all duration-200 bg-slate-900 shadow-lg`;
+                        card.style.borderColor = satData[k].color;
+                    } else {
+                        card.className = `p-2.5 rounded-xl border-2 text-left transition-all duration-200 bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-600`;
+                    }
+                });
+            }
+        }
+
+        function draw() {
+            const width = canvas.getBoundingClientRect().width;
+            const height = canvas.getBoundingClientRect().height;
+
+            if (width <= 0 || height <= 0) {
+                requestAnimationFrame(draw);
+                return;
+            }
+
+            ctx.clearRect(0, 0, width, height);
+
+            angles.LEO += 0.025;
+            angles.MEO += 0.010;
+            angles.GEO += 0.003;
+
+            drawSideView(width, height);
+
+            requestAnimationFrame(draw);
+        }
+
+        function drawSideView(w, h) {
+            const earthRadius = Math.max(10, Math.min(w, h) * 0.52);
+            const earthX = w * 0.98 + earthRadius * 0.25;
+            const earthY = h / 2;
+
+            drawBackgroundStars(w, h);
+
+            // Atmosphere Glow Ring
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(earthX, earthY, earthRadius + 7, 0, Math.PI * 2);
+            const haloGrad = ctx.createRadialGradient(
+                earthX, earthY, earthRadius * 0.95,
+                earthX, earthY, earthRadius + 14
+            );
+            haloGrad.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
+            haloGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.15)');
+            haloGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+            ctx.fillStyle = haloGrad;
+            ctx.fill();
+            ctx.restore();
+
+            // Render 3D Earth Globe
+            renderEarthSphere(earthRadius * 2, earthRotation);
+            ctx.drawImage(
+                sphereCanvas,
+                earthX - earthRadius,
+                earthY - earthRadius,
+                earthRadius * 2,
+                earthRadius * 2
+            );
+
+            // Atmosphere Rim Line
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(earthX, earthY, earthRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.restore();
+
+            // Satellites setup - calculate positions
+            const surfaceX = earthX - earthRadius;
+            const maxAvailableSpan = Math.max(20, surfaceX - 30);
+            const satKeys = ['GEO', 'MEO', 'LEO'];
+            const positions = {};
+
+            satKeys.forEach(key => {
+                const data = satData[key];
+                const distFromSurface = maxAvailableSpan * data.sideDistanceRatio;
+                const satX = surfaceX - distFromSurface;
+                const floatY = Math.sin(angles[key] * 2) * 8;
+                const satY = earthY + floatY;
+
+                positions[key] = { x: satX, y: satY };
+
+                const distFromCenter = Math.max(0.1, earthX - satX);
+                const isSelected = selectedSatKey === 'ALL' || selectedSatKey === key;
+
+                // Dynamically calculate angular span so ALL orbit arcs reach canvas edges
+                const pad = 6;
+                const targetVerticalSpan = Math.min(distFromCenter - 0.5, (h / 2) - pad);
+                const maxAngle = Math.asin(targetVerticalSpan / distFromCenter);
+                
+                // Angle from bottom-left to top-left around Earth center
+                const startAngle = Math.PI - maxAngle;
+                const endAngle = Math.PI + maxAngle;
+
+                // Draw Orbital Path Arc
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(earthX, earthY, distFromCenter, startAngle, endAngle, false);
+                ctx.strokeStyle = data.color;
+                ctx.lineWidth = isSelected ? 2.5 : 1.2;
+                ctx.globalAlpha = isSelected ? 0.9 : 0.35;
+                if (!isSelected) ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.restore();
+
+                // Beam Cones
+                drawBeamCone(satX, satY, earthX, earthY, earthRadius, data, isSelected);
+            });
+
+            // Draw Satellites and Text Labels
+            satKeys.reverse().forEach(key => {
+                const pos = positions[key];
+                const data = satData[key];
+                const isSelected = selectedSatKey === 'ALL' || selectedSatKey === key;
+
+                ctx.save();
+                ctx.font = isSelected ? 'bold 15px sans-serif' : 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                // Dark background outline for crisp contrast
+                ctx.strokeStyle = '#020617';
+                ctx.lineWidth = 3.5;
+                ctx.lineJoin = 'round';
+                ctx.strokeText(data.name.split(' ')[0], pos.x, pos.y - 32);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(data.name.split(' ')[0], pos.x, pos.y - 32);
+                ctx.restore();
+
+                drawSatelliteIcon(pos.x, pos.y, data.color, isSelected);
+            });
+        }
+
+        function drawBeamCone(satX, satY, earthX, earthY, earthR, data, isSelected) {
+            ctx.save();
+
+            const angleToSat = Math.atan2(satY - earthY, satX - earthX);
+            const coverageSpread = (data.coneAngleDeg * Math.PI / 180) / 2;
+
+            const p1Angle = angleToSat + coverageSpread;
+            const p2Angle = angleToSat - coverageSpread;
+
+            const p1X = earthX + earthR * Math.cos(p1Angle);
+            const p1Y = earthY + earthR * Math.sin(p1Angle);
+
+            const p2X = earthX + earthR * Math.cos(p2Angle);
+            const p2Y = earthY + earthR * Math.sin(p2Angle);
+
+            const coneGrad = ctx.createLinearGradient(satX, satY, earthX - earthR, earthY);
+            coneGrad.addColorStop(0, data.coneColor);
+            coneGrad.addColorStop(1, data.color.replace(')', ', 0.05)').replace('rgb', 'rgba'));
+
+            ctx.beginPath();
+            ctx.moveTo(satX, satY);
+            ctx.lineTo(p1X, p1Y);
+            ctx.arc(earthX, earthY, earthR, p1Angle, p2Angle, true);
+            ctx.closePath();
+
+            ctx.fillStyle = isSelected ? coneGrad : data.coneColor.replace('0.35', '0.08').replace('0.30', '0.06').replace('0.25', '0.04');
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(satX, satY);
+            ctx.lineTo(p1X, p1Y);
+            ctx.moveTo(satX, satY);
+            ctx.lineTo(p2X, p2Y);
+            ctx.strokeStyle = data.color;
+            ctx.lineWidth = isSelected ? 2 : 1;
+            ctx.globalAlpha = isSelected ? 0.8 : 0.2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(earthX, earthY, earthR + 2, p1Angle, p2Angle, true);
+            ctx.strokeStyle = data.color;
+            ctx.lineWidth = isSelected ? 5 : 1.5;
+            ctx.globalAlpha = isSelected ? 0.9 : 0.25;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function hexToRgba(hex, alpha) {
+            let c = hex.replace('#', '');
+            if (c.length === 3) c = c.split('').map(x => x + x).join('');
+            const num = parseInt(c, 16);
+            return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+        }
+
+        function drawSatelliteIcon(x, y, color, isSelected, angle = 0) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            const scale = isSelected ? 2.1 : 1.5;
+            ctx.scale(scale, scale);
+
+            if (isSelected) {
+                ctx.beginPath();
+                ctx.arc(0, 0, 22, 0, Math.PI * 2);
+                ctx.fillStyle = hexToRgba(color, 0.20);
+                ctx.fill();
+                
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-5, -5, 10, 10);
+            ctx.strokeStyle = '#020617';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-5, -5, 10, 10);
+
+            ctx.fillStyle = color;
+            ctx.fillRect(-16, -3, 9, 6);
+            ctx.fillRect(7, -3, 9, 6);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(-11.5, -3); ctx.lineTo(-11.5, 3);
+            ctx.moveTo(11.5, -3); ctx.lineTo(11.5, 3);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 0.8;
+            ctx.strokeRect(-16, -3, 9, 6);
+            ctx.strokeRect(7, -3, 9, 6);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#fef08a';
+            ctx.fill();
+            ctx.strokeStyle = '#020617';
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        const stars = Array.from({ length: 65 }, () => ({
+            x: Math.random(),
+            y: Math.random(),
+            size: Math.random() * 1.5 + 0.5,
+            alpha: Math.random() * 0.7 + 0.3
+        }));
+
+        function drawBackgroundStars(w, h) {
+            ctx.save();
+            stars.forEach(s => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+                ctx.fillRect(s.x * w, s.y * h, s.size, s.size);
+            });
+            ctx.restore();
+        }
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const w = rect.width;
+            const h = rect.height;
+
+            const earthRadius = Math.max(10, Math.min(w, h) * 0.52);
+            const earthX = w * 0.98 + earthRadius * 0.25;
+            const earthY = h / 2;
+            const surfaceX = earthX - earthRadius;
+            const maxAvailableSpan = Math.max(20, surfaceX - 30);
+
+            ['LEO', 'MEO', 'GEO'].forEach(key => {
+                const data = satData[key];
+                const distFromSurface = maxAvailableSpan * data.sideDistanceRatio;
+                const satX = surfaceX - distFromSurface;
+                const satY = earthY + Math.sin(angles[key] * 2) * 8;
+
+                if (Math.hypot(clickX - satX, clickY - satY) < 40) {
+                    selectSatellite(key);
+                }
+            });
+        });
+
+        window.onload = function() {
+            initEarthTexture();
+            resizeCanvas();
+            selectSatellite('LEO');
+            draw();
+        };
+    </script>
+</body>
+</html>

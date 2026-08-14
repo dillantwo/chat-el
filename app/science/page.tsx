@@ -28,7 +28,7 @@ const topics: {
     id: "aerospace",
     label: "航天科技",
     labelEn: "Aerospace Technology",
-    description: "跟著「小空」探索衛星應用、國家航天員、太空生活、國家航天成就及太空探索等課題。",
+    description: "透過互動遊戲認識中國航天成就、火星探測與導航衛星，也可以隨時跟「小空」對話探索太空知識。",
     icon: Rocket,
     accent: "#146ef5",
     available: true,

@@ -102,13 +102,13 @@ export async function POST(
     const { messages } = (await req.json()) as { messages: InputMessage[] };
     const inputMessages = messages ?? [];
 
-    // Retrieve topic-specific knowledge from Pinecone (namespace = topic slug)
-    // and inject it into the system prompt. No-op when RAG is not configured.
-    const { chunks, ragTokens } = await retrieveContext(
+    // Retrieve topic-specific knowledge from Pinecone and inject it into the
+    // system prompt. No-op when RAG is not configured for this topic.
+    const { chunks, ragTokens, description } = await retrieveContext(
       topic,
       latestUserText(inputMessages)
     );
-    const augmentedPrompt = buildAugmentedPrompt(systemPrompt, chunks);
+    const augmentedPrompt = buildAugmentedPrompt(systemPrompt, chunks, description);
 
     const session = await getSession().catch(() => null);
     const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4.1";

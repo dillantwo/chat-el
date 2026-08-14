@@ -118,9 +118,6 @@ export default function Home() {
                     <h2 className="mt-1 text-[22px] leading-[1.05] font-semibold tracking-[-0.04em] text-[#080808] sm:text-[26px]">
                       查看學生數據
                     </h2>
-                    <p className="mt-1.5 text-sm leading-6 text-[#5a5a5a]">
-                      各科學生的對話記錄、作文稿、測驗成績與語音博客，集中在一處查看。
-                    </p>
                   </div>
                   <ArrowRight className="size-4 shrink-0 text-[#146ef5] transition-transform duration-200 group-hover:translate-x-1" />
                 </button>

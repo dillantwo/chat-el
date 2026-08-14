@@ -3,8 +3,7 @@ import { streamText } from "ai";
 import type { ModelMessage } from "@ai-sdk/provider-utils";
 import {
   SCIENCE_CIRCUIT_SYSTEM_PROMPT,
-  SCIENCE_AEROSPACE_SYSTEM_PROMPT_ZH,
-  SCIENCE_AEROSPACE_SYSTEM_PROMPT_EN,
+  SCIENCE_AEROSPACE_SYSTEM_PROMPT,
 } from "@/lib/science-prompts";
 import { after } from "next/server";
 import { getSession } from "@/lib/session";
@@ -12,19 +11,14 @@ import { requireTopicApi } from "@/lib/subject-access";
 import { recordTokenUsage } from "@/lib/token-usage";
 import { retrieveContext, buildAugmentedPrompt, latestUserText } from "@/lib/rag";
 
-// A topic either uses one shared prompt (string) or a pair of single-language
-// prompts that are picked based on the language of the latest student message.
-type TopicPrompt = string | { zh: string; en: string };
-
 // Each Science topic shares the same Azure-backed chat pipeline and only
 // differs by its system prompt. Add a new topic by extending this map and
 // creating a matching page that points at /api/science-topic/<topic>.
-const TOPIC_PROMPTS: Record<string, TopicPrompt> = {
+// Every prompt handles both languages itself (it answers in whatever language
+// the student writes in), so the route does not sniff the question language.
+const TOPIC_PROMPTS: Record<string, string> = {
   circuit: SCIENCE_CIRCUIT_SYSTEM_PROMPT,
-  aerospace: {
-    zh: SCIENCE_AEROSPACE_SYSTEM_PROMPT_ZH,
-    en: SCIENCE_AEROSPACE_SYSTEM_PROMPT_EN,
-  },
+  aerospace: SCIENCE_AEROSPACE_SYSTEM_PROMPT,
 };
 
 type InputImage = {
@@ -48,24 +42,6 @@ function parseDataUrl(dataUrl: string) {
     mediaType: match[1],
     data: match[2],
   };
-}
-
-function detectLanguage(text: string): "zh" | "en" {
-  // Aerospace ships a separate prompt per language. Any CJK character means the
-  // student is writing Chinese; otherwise treat the message as English.
-  return /[\u4e00-\u9fff]/.test(text) ? "zh" : "en";
-}
-
-function resolveSystemPrompt(
-  prompt: TopicPrompt,
-  messages: InputMessage[]
-): string {
-  if (typeof prompt === "string") {
-    return prompt;
-  }
-
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  return prompt[detectLanguage(lastUser?.text ?? "")];
 }
 
 function toModelMessages(messages: InputMessage[]): ModelMessage[] {
@@ -111,8 +87,8 @@ export async function POST(
   const endpoint = `/api/science-topic/${topic}`;
 
   try {
-    const topicPrompt = TOPIC_PROMPTS[topic];
-    if (!topicPrompt) {
+    const systemPrompt = TOPIC_PROMPTS[topic];
+    if (!systemPrompt) {
       return new Response(
         JSON.stringify({ error: `Unknown topic: ${topic}` }),
         { status: 404, headers: { "Content-Type": "application/json" } }
@@ -125,15 +101,14 @@ export async function POST(
 
     const { messages } = (await req.json()) as { messages: InputMessage[] };
     const inputMessages = messages ?? [];
-    const systemPrompt = resolveSystemPrompt(topicPrompt, inputMessages);
 
-    // Retrieve topic-specific knowledge from Pinecone (namespace = topic slug)
-    // and inject it into the system prompt. No-op when RAG is not configured.
-    const { chunks, ragTokens } = await retrieveContext(
+    // Retrieve topic-specific knowledge from Pinecone and inject it into the
+    // system prompt. No-op when RAG is not configured for this topic.
+    const { chunks, ragTokens, description } = await retrieveContext(
       topic,
       latestUserText(inputMessages)
     );
-    const augmentedPrompt = buildAugmentedPrompt(systemPrompt, chunks);
+    const augmentedPrompt = buildAugmentedPrompt(systemPrompt, chunks, description);
 
     const session = await getSession().catch(() => null);
     const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4.1";

@@ -38,11 +38,49 @@ const EMBEDDING_DEPLOYMENT =
 // and namespace that hold its knowledge base. Omit `namespace` to use the
 // index's default namespace ("__default__"). A topic that is not listed here
 // has RAG disabled and falls back to prompt-only behaviour.
-type RagSource = { index: string; namespace?: string };
+//
+// `description` states what the store covers. It is prepended to the retrieved
+// chunks so the model knows the scope it is allowed to answer from, which the
+// persona prompts rely on when they say "only answer from the knowledge".
+type RagSource = { index: string; namespace?: string; description?: string };
+
+// 電力及電路 (circuit) — supplied by the content author alongside the index.
+const CIRCUIT_DESCRIPTION =
+  "此資訊適用於學習及遵守電力安全守則，以預防觸電、火災及其他電力相關事故，保障人身及設備安全。";
+
+// 航天科技 (aerospace) — supplied by the content author alongside the index.
+const AEROSPACE_DESCRIPTION = `此信息適用於了解航天技術，包括：
+1. 不同類型衛星及其日常應用
+2. 日常用品中運用太空科技的例子
+3. 其他日常用品中運用太空科技的例子
+4. 國家航天員的事跡及貢獻
+5. 航天員在太空生活的情況
+6. 航天員在太空生活的挑戰
+7. 航天員在太空生活的工作
+8. 成為國家航天員的條件
+9. 航天員在太空生活的危機
+10. 國家航天科技發展
+11. 香港在中國航天科技的付出及貢獻
+12. 國家航天科技發展時序及重要成就
+13. 太空探索帶來的問題
+14. 太空探索的爭議
+15. micro:bit的基本結構及功能
+16. STOP:bit的基本結構及功能
+17. 以makecode編程的方法
+18. 手作空氣火箭
+19. 手作降落傘模型
+20. 關於太空的相關知識
+21. 人類探索太空的目的
+22. 古人與現今科學家進行天文探測
+23. 人類進行太空探索的歷程
+
+以及相關資訊，包括地圖應用程式、公平實驗等。`;
 
 const RAG_SOURCES: Record<string, RagSource> = {
   // Science — 電力及電路. Data lives in the "science" index, default namespace.
-  circuit: { index: "science" },
+  circuit: { index: "science", description: CIRCUIT_DESCRIPTION },
+  // Science — 航天科技. Its own index, default namespace.
+  aerospace: { index: "aerospace26", description: AEROSPACE_DESCRIPTION },
 };
 
 // A single shared client. `Pinecone` is safe to construct once per process.
@@ -88,6 +126,8 @@ export type RetrievalResult = {
   chunks: RetrievedChunk[];
   /** Embedding tokens consumed by this retrieval (0 when RAG was skipped). */
   ragTokens: number;
+  /** What the topic's knowledge base covers, when the source declares it. */
+  description?: string;
 };
 
 /**
@@ -126,7 +166,7 @@ export async function retrieveContext(
         ? String(match.metadata.source)
         : undefined,
     }));
-    return { chunks, ragTokens: tokens };
+    return { chunks, ragTokens: tokens, description: src.description };
   } catch (err) {
     console.error(`[rag] retrieveContext failed for topic "${topic}":`, err);
     return { chunks: [], ragTokens: 0 };
@@ -154,7 +194,8 @@ function extractText(metadata: Record<string, unknown> | undefined): string {
  */
 export function buildAugmentedPrompt(
   basePrompt: string,
-  chunks: RetrievedChunk[]
+  chunks: RetrievedChunk[],
+  description?: string
 ): string {
   if (chunks.length === 0) {
     return basePrompt;
@@ -164,6 +205,8 @@ export function buildAugmentedPrompt(
     .map((c, i) => `[${i + 1}]${c.source ? ` (${c.source})` : ""}\n${c.text}`)
     .join("\n\n");
 
+  const scope = description ? `\n${description}\n` : "";
+
   // This block is the real "knowledge (document stores)" the persona prompts
   // keep referring to. Answer ONLY from it.
   return `${basePrompt}
@@ -171,7 +214,7 @@ export function buildAugmentedPrompt(
 # knowledge (document stores)
 以下是本次提問專屬的資料庫內容。你必須只根據以下內容回答；若以下內容不足以回答，請按角色設定中「超出資料庫範圍」的規則處理，切勿自行編造。
 The following are the retrieved knowledge (document stores) for this question. You must answer ONLY based on the content below.
-
+${scope}
 <knowledge>
 ${knowledge}
 </knowledge>`;
