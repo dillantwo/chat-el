@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import {
   ArrowUp,
   Square,
-  BookOpen,
   Compass,
   Sparkles,
   Mic,
@@ -27,7 +26,6 @@ import rehypeKatex from "rehype-katex";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent } from "@/components/ui/card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
@@ -59,9 +57,6 @@ const taskTemplates: Record<number, (a: string, b: string) => string> = {
   3: (a, b) => `Let us start Task 3. Look at the map. How can I go from the ${a} to the ${b}? Write more than one sentence and use linking words.`,
   4: (a, b) => `Let us start Task 4. Look at the map. How can I go from the ${a} to the ${b}? Write a complete paragraph with a topic sentence and linking words.`,
 };
-
-const TASK_5_PROMPT =
-  "Let us start Task 5. Please: 1) Draw a map of the neighborhood from your home to school. 2) Upload your drawing.";
 
 // The opening message is deterministic, so we write it locally instead of
 // asking the model to generate it. That saves a full LLM round-trip (~4k prompt
@@ -186,7 +181,6 @@ function EnglishDashboardContent() {
   const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
   const [input, setInput] = useState("");
   const [selectedTask, setSelectedTask] = useState<number | null>(null);
-  const [taskPrompt, setTaskPrompt] = useState<string | null>(null);
   const [locationPair, setLocationPair] = useState<LocationPair | null>(null);
   const [chatFiles, setChatFiles] = useState<File[]>([]);
   // Task 5: the map image the student uploaded (shown in the map panel and sent
@@ -295,7 +289,6 @@ function EnglishDashboardContent() {
 
     if (id == null) {
       setSelectedTask(null);
-      setTaskPrompt(null);
       setLocationPair(null);
       selectedTaskRef.current = null;
       locationPairRef.current = null;
@@ -308,9 +301,6 @@ function EnglishDashboardContent() {
     const pair = id === 5 ? null : pickLocationPair(id);
     setSelectedTask(id);
     setLocationPair(pair);
-    setTaskPrompt(
-      id === 5 ? TASK_5_PROMPT : pair ? taskTemplates[id](pair.from, pair.to) : null,
-    );
     // Keep the refs in sync immediately — the effects that mirror them run too
     // late for a send that happens right after this.
     selectedTaskRef.current = id;
@@ -358,9 +348,8 @@ function EnglishDashboardContent() {
       }));
       setMessages(restored);
       setSelectedTask(detail.selectedTask ?? null);
-      // The chosen [A]/[B] live in the saved conversation, so we don't show a
-      // (possibly stale) task prompt card on reload.
-      setTaskPrompt(null);
+      // The chosen [A]/[B] live in the restored conversation itself, so we
+      // don't re-derive a (possibly different) pair here.
       setLocationPair(null);
       // For Task 5, restore the uploaded map from the last user image so the
       // map panel shows the student's own drawing again.
@@ -718,8 +707,9 @@ function EnglishDashboardContent() {
           </div>
         </div>
 
-        {/* Task bar + prompt */}
-        <div className="px-4 py-3 border-b border-[#d8d8d8] space-y-3">
+        {/* Task bar. The task instructions live in the chatbot's opening
+            message, so we don't repeat them here and take space from the map. */}
+        <div className="px-4 py-2 border-b border-[#d8d8d8]">
           {/* Task pills */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-[#ababab]">
@@ -744,20 +734,6 @@ function EnglishDashboardContent() {
               ))}
             </div>
           </div>
-
-          {/* Task prompt card */}
-          {taskPrompt && (
-            <Card className="rounded-[8px] border-2 border-[#146ef5]/30 bg-[#146ef5]/5 ring-0 shadow-md">
-              <CardContent className="flex items-start gap-3 p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-[#146ef5] mt-0.5 shadow-sm">
-                  <BookOpen className="size-4 text-white" />
-                </div>
-                <p className="text-sm font-medium leading-relaxed text-[#080808]">
-                  {taskPrompt}
-                </p>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Interactive map preview */}

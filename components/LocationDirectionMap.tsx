@@ -420,14 +420,30 @@ function ControlButton({
   onPress: () => void;
   style?: React.CSSProperties;
 }) {
+  // On touch devices a tap fires `pointerdown` *and* a follow-up `click`. We
+  // want the immediate feedback of acting on `pointerdown`, so we remember when
+  // a touch handled the press and swallow the click that trails it. Using a
+  // timestamp (rather than a boolean) means the guard heals itself if the
+  // browser ever skips the click, e.g. when the finger slides off the button.
+  const lastTouchPressAt = useRef(0);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse") return; // mouse is handled by onClick
+    lastTouchPressAt.current = event.timeStamp;
+    onPress();
+  };
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // Same tap that we already handled on pointerdown -> ignore.
+    if (event.timeStamp - lastTouchPressAt.current < 700) return;
+    onPress();
+  };
+
   return (
     <button
       type="button"
-      onClick={onPress}
-      onTouchStart={(e) => {
-        e.preventDefault();
-        onPress();
-      }}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       style={{
         // Fill the grid cell and stay square; this makes the size adapt to the
         // side column (and therefore the screen) without ever overflowing.
@@ -446,6 +462,8 @@ function ControlButton({
         justifyContent: "center",
         boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
         WebkitTapHighlightColor: "transparent",
+        // Stops iPadOS double-tap-to-zoom (and its click delay) on the pad.
+        touchAction: "manipulation",
         ...style,
       }}
     >
