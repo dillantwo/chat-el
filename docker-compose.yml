@@ -185,24 +185,14 @@ services:
 volumes:
   mongo-data:
 
-# Pin the project network's subnet instead of letting Docker allocate from its
-# default pool (172.17.0.0/16 for docker0, then 172.18.0.0/16, 172.19.0.0/16 …
-# for compose networks). The default pool sits inside 172.16.0.0/12, which is
-# private address space an institution may also route internally; when that
-# happens containers send LAN-destined traffic to the bridge instead. 10.201.x
-# is chosen over 192.168.x deliberately — the latter is what most office and
-# home routers use, so it is the more likely collision, not the safer choice.
+# No `networks:` block on purpose. The project network's subnet is not pinned
+# here because it comes from the host daemon instead — /etc/docker/daemon.json
+# sets `bip` and `default-address-pools` to 10.x, moving both docker0 and every
+# compose network off Docker's stock 172.16.0.0/12 pool, which collides with
+# institution-routed addresses on this host (traffic to 172.17.x.x was being
+# black-holed into the unused docker0 bridge).
 #
-# /24 is 254 addresses against 5 containers (mongo + 3 app replicas + nginx),
-# with room for a temporary `--scale app=N`. Gateway becomes 10.201.10.1.
-#
-# A running network's subnet cannot be changed, so applying this needs
-# `docker compose down && docker compose up -d` — never `down -v`, which would
-# take mongo-data with it. Nothing in nginx.conf depends on the subnet: it
-# reaches the app by name through Docker's embedded DNS at 127.0.0.11, which
-# lives on the container's own loopback and is unaffected.
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 10.201.10.0/24
+# The consequence to be aware of: this file no longer describes the subnet, so
+# on a host with a stock Docker install it silently lands back on 172.18.0.0/16.
+# If the daemon config is ever lost — a Docker reinstall, a rebuilt host — the
+# collision returns with no error message, only unreachable 172.17.x.x targets.
