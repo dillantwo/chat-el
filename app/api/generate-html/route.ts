@@ -1,5 +1,5 @@
 import { createAzure } from "@ai-sdk/azure";
-import { generateObject } from "ai";
+import { streamObject } from "ai";
 import { z } from "zod";
 import { after } from "next/server";
 import { getSession } from "@/lib/session";
@@ -196,11 +196,30 @@ export async function POST(req: Request) {
       });
     }
 
-    const result = await generateObject({
+    const result = streamObject({
       model: htmlGenProvider(HTML_GEN_DEPLOYMENT),
       system: `你是一位資深前端互動教具工程師，專門為老師製作可直接在瀏覽器中運行的單檔 HTML 學習工具。
 
 請根據老師的要求，生成或更新一個完整、可直接放進 iframe 的 HTML 文件。
+
+最高優先規則（違反這幾條，整份輸出就算不合格）：
+
+A. 先讀懂題目在問什麼，答案絕對不能出現在工具裏。
+   - 動筆之前，先在心裏找出題目的「未知量」——題目問「還有多少頁未閱讀」，未閱讀頁數就是答案；問「剩下多少錢」，剩下的錢就是答案；問「共有多少個」，那個總數就是答案。
+   - 這個未知量的數值**不可以出現在任何地方**：不可以寫在標籤、圖例、標題、tooltip、提示文字、alt、HTML 註解裏，也不可以由 JavaScript 算出來再印到畫面上。
+   - 該位置一律用 \`？\`、\`□\` 或「？頁」這種留空寫法，讓學生自己填或自己想。例：題目問未閱讀頁數，圖例只能寫「未閱讀：？頁」，**絕對不可以**寫「未閱讀 95 頁」。
+   - 圖形的比例可以照真實數值去畫（讓學生看得出多與少），但**只可以畫、不可以寫出那個數字**。
+   - 老師若說「不要顯示算式／步驟／過程」，就不要出現任何算式（例如 \`25 × 3 = 75\`、\`170 - 75 = 95\`）或分步說明；只呈現題目本身已經給出的數字。中間步驟算出來的數值同樣只可以用來畫圖，不可以寫成算式列出來。
+   - 也不要用「提示：把兩個數相減就得到答案」這類等於送答案的引導文字。
+   - 唯一例外：老師明確要求要有答案或參考解答時才可以顯示。
+
+B. 老師說「不要互動」或只要一張「圖」時，就做純靜態的圖。
+   - 老師用「圖」「圖表」「示意圖」「插圖」「圖解」「呈現」「展示」這類字眼，而沒有要求操作、練習、輸入或遊戲，就當成要一張**靜態圖**：不要加按鈕、滑桿、輸入框、拖曳、答案檢查、動畫或任何要學生點擊的控件，也不要加「試試看」「按此」這類提示。
+   - 這時候只需要把題目情境用圖像清楚呈現出來（例如長條圖、比例圖、示意圖），文字越少越好。
+   - 右上角的「全螢幕」按鈕不算互動，可以保留。
+   - 只有當老師確實要求可操作、可練習、可輸入、可調整參數時，才做互動工具。
+
+C. 標題要跟老師要的東西一致：做靜態圖就不要叫「互動圖」「互動工具」。
 
 硬性要求：
 1. 回傳完整 HTML，必須是單一 HTML 文件。
@@ -211,7 +230,7 @@ export async function POST(req: Request) {
    - 字體可用 fonts.googleapis.com 與 fonts.gstatic.com
    除上述白名單網域外，嚴禁任何其他外部 <script src> 或 <link href>；特別嚴禁 polyfill.io、cdn.polyfill.io（這些網域已被入侵，會導致瀏覽器跳出登入視窗）。能用內嵌就內嵌，只有體積較大的常用函式庫才從白名單 CDN 引入，以保持輸出精簡。
 3. 介面要清晰、現代、適合桌面與平板。
-4. 工具需要真的可互動，不能只是一頁靜態說明。
+4. 若老師要的是互動工具，就要真的可互動，不能只是一頁靜態說明；但若老師只要一張圖（見最高優先規則 B），則做純靜態圖，不要硬加互動。
 5. 內容以繁體中文呈現。
 6. 若題意不足，補上最合理的預設值，但仍要讓工具可運作。
 7. 不要輸出 Markdown code fences。
@@ -233,22 +252,100 @@ export async function POST(req: Request) {
         html: z.string().min(1),
       }),
       messages,
+      onError: ({ error }) => {
+        console.error("[generate-html] stream error:", error);
+      },
     });
 
     after(async () => {
-      await recordTokenUsage({
-        session,
-        subject: "math",
-        topic: "tool-generator",
-        modelName: HTML_GEN_DEPLOYMENT,
-        endpoint: "/api/generate-html",
-        usage: result.usage,
-      });
+      try {
+        await recordTokenUsage({
+          session,
+          subject: "math",
+          topic: "tool-generator",
+          modelName: HTML_GEN_DEPLOYMENT,
+          endpoint: "/api/generate-html",
+          usage: await result.usage,
+        });
+      } catch (error) {
+        // A failed generation never produces usage — do not mask the real error.
+        console.error("[generate-html] usage recording skipped:", error);
+      }
     });
 
-    return Response.json({
-      title: result.object.title.trim(),
-      html: ensureHtmlDocument(result.object.html),
+    /**
+     * NDJSON progress stream so the teacher can watch the code being written.
+     * One JSON object per line:
+     *   { type: "title", title }        the tool name, as soon as it is known
+     *   { type: "delta", text }         the next slice of raw HTML (display only)
+     *   { type: "done",  title, html }  the validated + sanitised final document
+     *   { type: "error", error }        generation failed mid-stream
+     *
+     * Only the "done" html is safe to render: it has been through
+     * ensureHtmlDocument (code-fence stripping + external-asset whitelist), so
+     * the deltas must never be fed to the iframe.
+     */
+    const encoder = new TextEncoder();
+    const progressStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (payload: unknown) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+        };
+
+        let sentTitle = "";
+        let sentHtmlLength = 0;
+
+        try {
+          for await (const partial of result.partialObjectStream) {
+            const title = typeof partial.title === "string" ? partial.title : "";
+            if (title && title !== sentTitle) {
+              sentTitle = title;
+              send({ type: "title", title });
+            }
+
+            const html = typeof partial.html === "string" ? partial.html : "";
+            if (html.length > sentHtmlLength) {
+              send({ type: "delta", text: html.slice(sentHtmlLength) });
+              sentHtmlLength = html.length;
+            }
+          }
+
+          const final = await result.object;
+          send({
+            type: "done",
+            title: final.title.trim(),
+            html: ensureHtmlDocument(final.html),
+          });
+        } catch (error) {
+          const err = error as {
+            message?: string;
+            name?: string;
+            statusCode?: number;
+            url?: string;
+            responseBody?: string;
+          };
+          console.error("[generate-html] Error:", {
+            name: err?.name,
+            message: err?.message,
+            statusCode: err?.statusCode,
+            url: err?.url,
+            responseBody: err?.responseBody,
+            deployment: HTML_GEN_DEPLOYMENT,
+          });
+          send({ type: "error", error: err?.message ?? "Unknown error" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(progressStream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        // Stops nginx / other reverse proxies from buffering the whole stream.
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch (error) {
     // Surface as much Azure detail as possible to diagnose 500s (wrong

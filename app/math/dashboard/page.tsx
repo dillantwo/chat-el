@@ -76,6 +76,37 @@ function sanitizeAiToolHtml(html: string | null): string | undefined {
     .replace(/<link\b[^>]*\bhref\s*=\s*(['"])(.*?)\1[^>]*\/?>/gi, (m, _q, href) => (blocked.test(href) ? "" : m));
 }
 
+/** Only the tail of the stream is rendered — a big tool can be tens of thousands of characters. */
+const GEN_CODE_TAIL_CHARS = 8000;
+
+/**
+ * Live feed of the HTML the model is writing. This is display-only text: it is
+ * never mounted as HTML, and the iframe still waits for the sanitised document
+ * the server sends when generation finishes.
+ */
+function GeneratingCodeFeed({ code, className }: { code: string; className?: string }) {
+  const boxRef = useRef<HTMLPreElement>(null);
+
+  // Follow the newest output.
+  useEffect(() => {
+    const el = boxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [code]);
+
+  const tail = code.length > GEN_CODE_TAIL_CHARS ? code.slice(-GEN_CODE_TAIL_CHARS) : code;
+
+  return (
+    <pre
+      ref={boxRef}
+      aria-live="polite"
+      aria-label="AI 正在生成的 HTML 程式碼"
+      className={`overflow-auto whitespace-pre-wrap break-all rounded-[6px] border border-[#e4e4e4] bg-[#fafafa] p-3 text-left font-mono text-[11px] leading-[1.55] text-[#3a3a3a] ${className ?? ""}`}
+    >
+      {tail || "…"}
+    </pre>
+  );
+}
+
 /**
  * Small "element inspector" injected into the preview iframe. The iframe is
  * sandboxed without allow-same-origin, so the parent cannot read its DOM — this
@@ -351,6 +382,10 @@ function MathDashboardContent() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveNameDraft, setSaveNameDraft] = useState("");
   const [isGeneratingAiTool, setIsGeneratingAiTool] = useState(false);
+  /** Raw HTML streamed back while the model writes it — shown as a live code feed. */
+  const [genCode, setGenCode] = useState("");
+  /** The tool name as soon as the model emits it, before the HTML is finished. */
+  const [genTitle, setGenTitle] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<{ markedHtml: string; label: string } | null>(null);
   const aiToolIframeRef = useRef<HTMLIFrameElement>(null);
@@ -1135,6 +1170,8 @@ function MathDashboardContent() {
     targetedEdit?: boolean;
   }) {
     setIsGeneratingAiTool(true);
+    setGenCode("");
+    setGenTitle(null);
 
     try {
       const res = await fetch(`${basePath}/api/generate-html`, {
@@ -1149,7 +1186,7 @@ function MathDashboardContent() {
         }),
       });
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         const detail = await res.json().catch(() => ({}));
         console.error("[generate-html] failed:", {
           status: res.status,
@@ -1160,9 +1197,68 @@ function MathDashboardContent() {
         throw new Error(detail?.error || "Generate HTML failed");
       }
 
-      const json = await res.json();
-      setAiToolHtml(json.html ?? null);
-      setAiToolTitle(json.title ?? null);
+      /**
+       * NDJSON progress stream (see the route). The deltas are only for the live
+       * code feed — the iframe is swapped in from the "done" event, which is the
+       * only HTML the server has sanitised.
+       */
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let code = "";
+      let lastFlush = 0;
+      let finalHtml: string | null = null;
+      let finalTitle: string | null = null;
+      let streamError: string | null = null;
+
+      const flushCode = () => setGenCode(code);
+
+      const handleEvent = (line: string) => {
+        if (!line.trim()) return;
+        let evt: { type?: string; text?: string; title?: string; html?: string; error?: string };
+        try {
+          evt = JSON.parse(line);
+        } catch {
+          return; // partial or malformed line: ignore
+        }
+
+        if (evt.type === "delta" && typeof evt.text === "string") {
+          code += evt.text;
+          // Throttle re-renders: the model emits many small deltas.
+          const now = Date.now();
+          if (now - lastFlush > 80) {
+            lastFlush = now;
+            flushCode();
+          }
+        } else if (evt.type === "title" && typeof evt.title === "string") {
+          setGenTitle(evt.title);
+        } else if (evt.type === "done") {
+          finalHtml = typeof evt.html === "string" ? evt.html : null;
+          finalTitle = typeof evt.title === "string" ? evt.title : null;
+        } else if (evt.type === "error") {
+          streamError = evt.error ?? "Generate HTML failed";
+        }
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline !== -1) {
+          handleEvent(buffer.slice(0, newline));
+          buffer = buffer.slice(newline + 1);
+          newline = buffer.indexOf("\n");
+        }
+      }
+      handleEvent(buffer);
+      flushCode();
+
+      if (streamError) throw new Error(streamError);
+      if (!finalHtml) throw new Error("Generate HTML returned no document");
+
+      setAiToolHtml(finalHtml);
+      setAiToolTitle(finalTitle);
       setHasSavedAiTool(false);
       // A fresh tool replaces any pending element selection.
       setPendingSelection(null);
@@ -1568,7 +1664,7 @@ function MathDashboardContent() {
               <div className="flex items-start justify-between gap-3 border-b border-[#d8d8d8] px-4 py-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[1px] text-[#ababab]">AI generated tool</p>
-                  <p className="text-sm font-semibold text-[#080808]">{aiToolTitle ?? "正在生成互動工具"}</p>
+                  <p className="text-sm font-semibold text-[#080808]">{aiToolTitle ?? genTitle ?? "正在生成互動工具"}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                 {isTeacher && (
@@ -1609,10 +1705,19 @@ function MathDashboardContent() {
                 </div>
               </div>
               {!aiToolHtml ? (
-                /* Initial generation — there is nothing to keep on screen yet. */
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[#5a5a5a]">
-                  <Loader2 className="size-8 animate-spin text-[#146ef5]" />
-                  <span className="text-sm font-medium">AI 正在根據你的要求生成 HTML 工具...</span>
+                /* Initial generation — there is nothing to keep on screen yet, so
+                   show the code as the model writes it. */
+                <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+                  <div className="flex items-center gap-2 text-[#5a5a5a]">
+                    <Loader2 className="size-4 animate-spin text-[#146ef5]" />
+                    <span className="text-sm font-medium">AI 正在根據你的要求生成 HTML 工具...</span>
+                    {genCode.length > 0 && (
+                      <span className="ml-auto text-xs tabular-nums text-[#ababab]">
+                        已生成 {genCode.length.toLocaleString()} 字元
+                      </span>
+                    )}
+                  </div>
+                  <GeneratingCodeFeed code={genCode} className="min-h-0 flex-1" />
                 </div>
               ) : (
                 /* When modifying an existing tool, keep the current HTML rendered
@@ -1635,13 +1740,14 @@ function MathDashboardContent() {
                       {/* Pulsing blue ring around the whole preview */}
                       <div className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-b-[8px] ring-4 ring-inset ring-[#146ef5]/70" />
                       {/* Dimmed backdrop + clear status card */}
-                      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-b-[8px] bg-white/55 backdrop-blur-[2px]">
-                        <div className="flex flex-col items-center gap-3 rounded-[12px] border border-[#146ef5]/30 bg-white px-7 py-5 text-center shadow-[0_8px_30px_rgba(20,110,245,0.18)]">
+                      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-b-[8px] bg-white/55 p-4 backdrop-blur-[2px]">
+                        <div className="pointer-events-auto flex w-full max-w-[560px] flex-col items-center gap-3 rounded-[12px] border border-[#146ef5]/30 bg-white px-7 py-5 text-center shadow-[0_8px_30px_rgba(20,110,245,0.18)]">
                           <Loader2 className="size-9 animate-spin text-[#146ef5]" />
                           <div className="space-y-0.5">
                             <p className="text-sm font-semibold text-[#080808]">AI 正在修改工具中…</p>
                             <p className="text-xs text-[#5a5a5a]">完成後會自動替換，原本的工具會先保留</p>
                           </div>
+                          <GeneratingCodeFeed code={genCode} className="max-h-40 w-full" />
                         </div>
                       </div>
                     </>
