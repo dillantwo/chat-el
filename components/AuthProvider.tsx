@@ -9,7 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { UserRole, Subject } from "@/models/User";
+import { UserRole, Subject, type AuthProvider as AuthProviderKind } from "@/models/User";
 import { basePath } from "@/lib/utils";
 
 export interface AuthUser {
@@ -19,6 +19,8 @@ export interface AuthUser {
   schoolId: string | null;
   schoolName: string | null;
   subjects: Subject[];
+  /** How this session signed in. Decides where logout has to send the browser. */
+  authProvider: AuthProviderKind;
   /**
    * Topics this user may open, as `subject:topic` keys (see lib/topics.ts).
    * Resolved from the database by /api/auth/me, so it reflects what an admin has
@@ -66,8 +68,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   const logout = useCallback(async () => {
-    await fetch(`${basePath}/api/auth/logout`, { method: "POST" });
+    // For an EdConnect session the API answers with the identity provider's
+    // logout URL. It has to be visited as a top-level navigation — a fetch to
+    // hkedcity.net is cross-origin and cannot touch their cookies — and until it
+    // happens the user is out of this app but still signed in at EdCity, so the
+    // login button would walk straight back in with no prompt. On a shared
+    // classroom machine that is the next student landing in this account.
+    let redirectTo: string | null = null;
+
+    try {
+      const res = await fetch(`${basePath}/api/auth/logout`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        redirectTo = typeof data.redirectTo === "string" ? data.redirectTo : null;
+      }
+    } catch {
+      // The session cookie may or may not be gone. Fall through to /login,
+      // where the proxy will sort out whichever state we are in.
+    }
+
     setUser(null);
+
+    if (redirectTo) {
+      // assign, not replace: leaves the app in history so Back is not a dead end.
+      window.location.assign(redirectTo);
+      return;
+    }
+
     router.push("/login");
     router.refresh();
   }, [router]);

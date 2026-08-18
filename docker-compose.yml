@@ -102,6 +102,16 @@ services:
       # (Secure in production). Set to false in .env while the site is HTTP-only,
       # otherwise the browser drops the session cookie and nobody can log in.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE-}
+      # HKEdCity EdConnect SSO. All passed through empty when unset, which leaves
+      # the EdCity login button off (lib/edconnect.ts requires the base URL,
+      # client id and redirect URI to all be present before offering it). These
+      # are read at request time only, so changing them needs a restart of this
+      # service but not an image rebuild — unlike NEXT_PUBLIC_BASE_PATH above.
+      EDCONNECT_BASE_URL: ${EDCONNECT_BASE_URL-}
+      EDCONNECT_CLIENT_ID: ${EDCONNECT_CLIENT_ID-}
+      EDCONNECT_CLIENT_SECRET: ${EDCONNECT_CLIENT_SECRET-}
+      EDCONNECT_REDIRECT_URI: ${EDCONNECT_REDIRECT_URI-}
+      EDCONNECT_ENABLED: ${EDCONNECT_ENABLED-}
     healthcheck:
       test:
         [

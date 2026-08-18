@@ -1,7 +1,7 @@
 import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { UserRole, Subject } from "@/models/User";
+import { UserRole, Subject, type AuthProvider } from "@/models/User";
 
 const SESSION_COOKIE = "session";
 const EXPIRY_DAYS = 7;
@@ -16,6 +16,17 @@ export interface SessionPayload {
   /** School display name (null for admins) */
   schoolName: string | null;
   subjects: Subject[];
+  /**
+   * How this session was authenticated. Carried in the cookie so logout knows
+   * whether to also end the EdConnect session — without it, an SSO user who
+   * logs out here is signed straight back in by the still-live IdP session on
+   * their next click.
+   *
+   * Optional because cookies signed before this field existed stay valid for up
+   * to 7 days; read it through `resolveAuthProvider()`, which treats a missing
+   * value as "local" (the correct answer for every pre-existing session).
+   */
+  authProvider?: AuthProvider;
   expiresAt: Date;
 }
 
@@ -38,7 +49,7 @@ function getEncodedKey(): Uint8Array {
  * remove the override as soon as HTTPS is in place. Unset means "secure in
  * production", which is the right default.
  */
-function useSecureCookie(): boolean {
+export function useSecureCookie(): boolean {
   const flag = process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase();
   if (flag === "false" || flag === "0") return false;
   if (flag === "true" || flag === "1") return true;

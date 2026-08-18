@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import { User, type Subject } from "@/models/User";
-import "@/models/School";
-import { createSession } from "@/lib/session";
+import { User, resolveAuthProvider } from "@/models/User";
+import { establishSession } from "@/lib/auth-session";
 import { hashPassword, isLegacyHash, verifyPassword } from "@/lib/password";
+
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,12 +18,29 @@ export async function POST(req: NextRequest) {
     }
 
     await connectDB();
-    const user = await User.findOne({ username: username.toLowerCase().trim() }).populate(
-      "school",
-      "name code active enabledSubjects"
-    );
+    const user = await User.findOne({ username: username.toLowerCase().trim() });
 
     if (!user) {
+      return NextResponse.json({ error: "用戶名或密碼錯誤" }, { status: 401 });
+    }
+
+    // EdConnect accounts have no password at all, and their username is the
+    // opaque profile_id. Refusing them here — before touching the hash — is
+    // what keeps the two login routes mutually exclusive: whoever knows a
+    // profile_id still cannot turn it into a password login attempt. The
+    // message is deliberately specific, because this is a user pointed at the
+    // wrong button rather than a failed guess.
+    if (resolveAuthProvider(user.authProvider) === "edconnect") {
+      return NextResponse.json(
+        { error: "此帳戶請使用 EdCity 登入" },
+        { status: 401 }
+      );
+    }
+
+    if (!user.hashedPassword) {
+      // A local account with no hash cannot be signed in. Report it as a
+      // credential failure rather than leaking the account's broken state.
+      console.error("[auth/login] local account without a password hash", user.username);
       return NextResponse.json({ error: "用戶名或密碼錯誤" }, { status: 401 });
     }
 
@@ -33,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     // Upgrade bcrypt hashes to scrypt on the way through — this is the only
     // moment the plaintext is available. updateOne rather than user.save() so
-    // the populated `school` path is left alone.
+    // no other path on the document is touched.
     if (isLegacyHash(user.hashedPassword)) {
       try {
         await User.updateOne(
@@ -46,49 +64,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Non-admin users must belong to an active school.
-    const school = user.school as unknown as
-      | {
-          _id: { toString(): string };
-          name: string;
-          active: boolean;
-          enabledSubjects?: Subject[];
-        }
-      | null;
-    if (user.role !== "admin") {
-      if (!school) {
-        return NextResponse.json({ error: "帳戶未綁定學校，請聯絡管理員" }, { status: 403 });
-      }
-      if (!school.active) {
-        return NextResponse.json({ error: "學校已停用，請聯絡管理員" }, { status: 403 });
-      }
+    // School binding, school-active and subject-intersection rules, shared with
+    // the EdConnect callback. Writes the session cookie on success.
+    const result = await establishSession(user);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    // A user can never hold a subject their school does not offer, even if the
-    // grant is still on their document.
-    const subjects =
-      user.role === "admin" || !school
-        ? (user.subjects ?? [])
-        : (user.subjects ?? []).filter((s) => (school.enabledSubjects ?? []).includes(s));
-
-    await createSession({
-      userId: (user._id as { toString(): string }).toString(),
-      username: user.username,
-      role: user.role,
-      displayName: user.displayName,
-      schoolId: school ? school._id.toString() : null,
-      schoolName: school ? school.name : null,
-      subjects,
-    });
-
-    return NextResponse.json({
-      username: user.username,
-      role: user.role,
-      displayName: user.displayName,
-      schoolId: school ? school._id.toString() : null,
-      schoolName: school ? school.name : null,
-      subjects,
-    });
+    return NextResponse.json(result.identity);
   } catch (err) {
     console.error("[auth/login]", err);
     return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });

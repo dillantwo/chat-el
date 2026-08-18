@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSession, deleteSession, getSession } from "@/lib/session";
 import { getAccessibleTopics, getSubjectAccess } from "@/lib/subject-access";
+import { resolveAuthProvider } from "@/models/User";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,11 @@ export async function GET() {
       schoolId: session.schoolId ?? null,
       schoolName: session.schoolName ?? null,
       subjects,
+      // Carried over deliberately. Re-issuing without it would turn an
+      // EdConnect session into a "local" one, and logout would then skip
+      // ending the EdConnect session — leaving the next person on a shared
+      // machine one click from the previous student's account.
+      authProvider: resolveAuthProvider(session.authProvider),
     });
   }
 
@@ -54,6 +60,7 @@ export async function GET() {
     schoolId: session.schoolId ?? null,
     schoolName: session.schoolName ?? null,
     subjects,
+    authProvider: resolveAuthProvider(session.authProvider),
     topics: await getAccessibleTopics(),
   });
 }

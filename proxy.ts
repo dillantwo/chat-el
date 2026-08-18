@@ -4,8 +4,14 @@ import { jwtVerify } from "jose";
 const SESSION_COOKIE = "session";
 const PUBLIC_FILE = /\.[^/]+$/;
 
-// Routes that are accessible without authentication
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health"];
+// Routes that are accessible without authentication.
+//
+// /api/auth/sso covers both legs of the EdConnect OAuth flow. They have to be
+// public for the obvious reason that the user is not signed in yet — the start
+// leg is the first thing an anonymous visitor clicks, and the callback arrives
+// from EdConnect with no session cookie of ours. Guarding them would bounce the
+// round trip to /login and make SSO login impossible.
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/sso", "/api/health"];
 
 // Subject path prefixes – keys must match Subject type values
 const SUBJECT_PREFIXES = ["/math", "/chinese", "/english", "/science", "/humanities"];

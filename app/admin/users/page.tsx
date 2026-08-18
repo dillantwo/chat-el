@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -57,10 +58,21 @@ function classLabel(c: { name: string; academicYear: string }) {
   return `${c.name}（${c.academicYear}）`;
 }
 
+type AuthProviderKind = "local" | "edconnect";
+
+const AUTH_PROVIDER_LABELS: Record<AuthProviderKind, string> = {
+  local: "密碼",
+  edconnect: "EdCity",
+};
+
 interface UserRow {
   id: string;
   username: string;
   displayName: string;
+  /** Which login route may sign this account in. The two are exclusive. */
+  authProvider: AuthProviderKind;
+  /** Readable HKEdCity login name, for SSO accounts whose username is opaque. */
+  edcityLoginId: string | null;
   role: "admin" | "teacher" | "student";
   schoolId: string | null;
   schoolName: string | null;
@@ -107,6 +119,7 @@ export default function UsersPage() {
   const [filterSchool, setFilterSchool] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterClass, setFilterClass] = useState("");
+  const [filterAuthProvider, setFilterAuthProvider] = useState("");
   const [query, setQuery] = useState("");
 
   // dialog
@@ -118,6 +131,8 @@ export default function UsersPage() {
   // form
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [authProvider, setAuthProvider] = useState<AuthProviderKind>("local");
+  const [edcityLoginId, setEdcityLoginId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState<"admin" | "teacher" | "student">("teacher");
   const [schoolId, setSchoolId] = useState("");
@@ -133,13 +148,14 @@ export default function UsersPage() {
       if (filterSchool) params.set("school", filterSchool);
       if (filterRole) params.set("role", filterRole);
       if (filterClass) params.set("class", filterClass);
+      if (filterAuthProvider) params.set("authProvider", filterAuthProvider);
       if (query.trim()) params.set("q", query.trim());
       const res = await fetch(`${basePath}/api/admin/users?${params.toString()}`);
       setUsers(res.ok ? await res.json() : []);
     } finally {
       setLoading(false);
     }
-  }, [filterSchool, filterRole, filterClass, query]);
+  }, [filterSchool, filterRole, filterClass, filterAuthProvider, query]);
 
   useEffect(() => {
     fetch(`${basePath}/api/admin/schools`)
@@ -157,6 +173,7 @@ export default function UsersPage() {
     return () => clearTimeout(t);
   }, [loadUsers]);
 
+  const isSsoForm = authProvider === "edconnect";
   const selectedSchool = schools.find((s) => s.id === schoolId);
   const availableSubjects = selectedSchool?.enabledSubjects ?? [];
   // Only the chosen school's classes can be assigned.
@@ -170,6 +187,10 @@ export default function UsersPage() {
     setEditing(null);
     setUsername("");
     setPassword("");
+    // Follows the filter, so creating from a filtered EdCity list starts on the
+    // same kind of account the administrator is already looking at.
+    setAuthProvider(filterAuthProvider === "edconnect" ? "edconnect" : "local");
+    setEdcityLoginId("");
     setDisplayName("");
     setRole("teacher");
     setSchoolId(filterSchool || "");
@@ -184,6 +205,8 @@ export default function UsersPage() {
     setEditing(u);
     setUsername(u.username);
     setPassword("");
+    setAuthProvider(u.authProvider);
+    setEdcityLoginId(u.edcityLoginId ?? "");
     setDisplayName(u.displayName);
     setRole(u.role);
     setSchoolId(u.schoolId ?? "");
@@ -219,8 +242,12 @@ export default function UsersPage() {
     setError(null);
     try {
       const isEdit = Boolean(editing);
+      const isSso = authProvider === "edconnect";
       const payload: Record<string, unknown> = { displayName };
-      if (password) payload.password = password;
+      // An EdCity account has no password; the API rejects one outright rather
+      // than ignoring it, so never send the field for them.
+      if (password && !isSso) payload.password = password;
+      if (isSso) payload.edcityLoginId = edcityLoginId.trim();
 
       if (role !== "admin") {
         payload.school = schoolId;
@@ -237,6 +264,7 @@ export default function UsersPage() {
       if (!isEdit) {
         payload.username = username;
         payload.role = role;
+        payload.authProvider = authProvider;
       }
 
       const url = isEdit
@@ -279,9 +307,16 @@ export default function UsersPage() {
             為各校老師與學生設定可存取的科目。
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="size-4" /> 新增使用者
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* buttonVariants rather than <Button asChild>: this Button does not
+              render a Slot, so wrapping a Link in it would nest <a> in <button>. */}
+          <Link href="/admin/users/import" className={buttonVariants({ variant: "outline" })}>
+            <Upload className="size-4" /> 批量匯入
+          </Link>
+          <Button onClick={openCreate}>
+            <Plus className="size-4" /> 新增使用者
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -334,10 +369,29 @@ export default function UsersPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={filterAuthProvider}
+          onValueChange={(v) => setFilterAuthProvider(v as string)}
+        >
+          <SelectTrigger className="h-9 w-36">
+            <SelectValue placeholder="全部登入方式">
+              {(v) =>
+                !v
+                  ? "全部登入方式"
+                  : AUTH_PROVIDER_LABELS[v as AuthProviderKind] ?? "全部登入方式"
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">全部登入方式</SelectItem>
+            <SelectItem value="local">密碼</SelectItem>
+            <SelectItem value="edconnect">EdCity</SelectItem>
+          </SelectContent>
+        </Select>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜尋用戶名或姓名"
+          placeholder="搜尋用戶名、姓名或 EdCity 登入名"
           className="h-9 max-w-xs"
         />
       </div>
@@ -357,6 +411,7 @@ export default function UsersPage() {
               <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="px-4">姓名</TableHead>
                 <TableHead className="px-4">用戶名</TableHead>
+                <TableHead className="px-4">登入方式</TableHead>
                 <TableHead className="px-4">角色</TableHead>
                 <TableHead className="px-4">學校</TableHead>
                 <TableHead className="px-4">班級</TableHead>
@@ -369,7 +424,20 @@ export default function UsersPage() {
               {users.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="px-4 py-3 font-medium">{u.displayName}</TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">{u.username}</TableCell>
+                  <TableCell className="px-4 py-3 text-muted-foreground">
+                    {/* An EdCity account's username is an opaque profile_id, so
+                        the readable EdCity login name is shown beneath it when
+                        known — that is the identifier on the school's roster. */}
+                    <span className="block font-mono text-xs">{u.username}</span>
+                    {u.edcityLoginId && (
+                      <span className="mt-0.5 block text-xs">{u.edcityLoginId}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
+                    <Badge variant={u.authProvider === "edconnect" ? "default" : "outline"}>
+                      {AUTH_PROVIDER_LABELS[u.authProvider]}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="px-4 py-3">
                     <Badge variant={u.role === "admin" ? "default" : "secondary"}>
                       {ROLE_LABELS[u.role]}
@@ -438,14 +506,51 @@ export default function UsersPage() {
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>登入方式</Label>
+              <Select
+                value={authProvider}
+                onValueChange={(v) => {
+                  const next = v as AuthProviderKind;
+                  setAuthProvider(next);
+                  setPassword("");
+                  // EdCity cannot reach the cross-school admin role, so move a
+                  // pending "admin" choice somewhere valid rather than letting
+                  // the API reject the save.
+                  if (next === "edconnect" && role === "admin") setRole("student");
+                }}
+                // Immutable after creation: switching an existing account would
+                // change what its username means (a chosen name vs. a
+                // profile_id), and every student record denormalizes it.
+                disabled={Boolean(editing)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(v) => AUTH_PROVIDER_LABELS[v as AuthProviderKind] ?? "選擇登入方式"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local">密碼（本平台帳戶）</SelectItem>
+                  <SelectItem value="edconnect">EdCity（EdConnect SSO）</SelectItem>
+                </SelectContent>
+              </Select>
+              {isSsoForm && (
+                <p className="text-xs text-muted-foreground">
+                  此帳戶只能透過 EdCity 登入，沒有密碼。用戶名必須填 EdConnect 的
+                  profile_id，登入時就是用它來比對。
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>用戶名</Label>
+                <Label>{isSsoForm ? "EdConnect profile_id" : "用戶名"}</Label>
                 <Input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="登入用"
+                  placeholder={isSsoForm ? "例如 TYPNY8NJAOOH" : "登入用"}
                   disabled={Boolean(editing)}
+                  className={isSsoForm ? "font-mono" : undefined}
                 />
               </div>
               <div className="space-y-2">
@@ -454,15 +559,31 @@ export default function UsersPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>{editing ? "重設密碼（留空則不變）" : "密碼"}</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="至少 6 個字元"
-              />
-            </div>
+            {isSsoForm ? (
+              <div className="space-y-2">
+                <Label>EdCity 登入名（選填）</Label>
+                <Input
+                  value={edcityLoginId}
+                  onChange={(e) => setEdcityLoginId(e.target.value)}
+                  placeholder="例如 hke-stud001"
+                />
+                <p className="text-xs text-muted-foreground">
+                  只用於顯示，不參與登入驗證。因為 profile_id 是一串無意義的字元，
+                  這裡填了之後名單和用量報表才認得出是誰。留空的話，使用者首次成功
+                  登入時會自動由 EdCity 補上。
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>{editing ? "重設密碼（留空則不變）" : "密碼"}</Label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="至少 6 個字元"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>角色</Label>
@@ -479,7 +600,8 @@ export default function UsersPage() {
                 <SelectContent>
                   <SelectItem value="teacher">老師</SelectItem>
                   <SelectItem value="student">學生</SelectItem>
-                  <SelectItem value="admin">管理員</SelectItem>
+                  {/* Admin is cross-school and deliberately password-only. */}
+                  {!isSsoForm && <SelectItem value="admin">管理員</SelectItem>}
                 </SelectContent>
               </Select>
             </div>

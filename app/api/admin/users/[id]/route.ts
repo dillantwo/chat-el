@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { hashPassword } from "@/lib/password";
-import { User, ALL_SUBJECTS, type Subject } from "@/models/User";
+import { User, ALL_SUBJECTS, resolveAuthProvider, type Subject } from "@/models/User";
 import { School } from "@/models/School";
 import { requireAdmin } from "@/lib/admin-auth";
 import { resolveClassesForSchool } from "@/lib/class-assignment";
@@ -36,11 +36,31 @@ export async function PATCH(
       user.displayName = body.displayName.trim();
     }
 
+    const isSso = resolveAuthProvider(user.authProvider) === "edconnect";
+
     if (typeof body.password === "string" && body.password) {
+      // An EdConnect account authenticates only through EdConnect. Giving it a
+      // password would create a second way in, and since its username is the
+      // publicly-issued profile_id, that second way in would be a
+      // guessable-username account — refuse rather than silently ignore, so the
+      // caller learns the field had no effect.
+      if (isSso) {
+        return NextResponse.json(
+          { error: "EdCity 帳戶不能設定密碼" },
+          { status: 400 }
+        );
+      }
       if (body.password.length < 6) {
         return NextResponse.json({ error: "密碼至少需要 6 個字元" }, { status: 400 });
       }
       user.hashedPassword = await hashPassword(body.password);
+    }
+
+    // Readable HKEdCity login name. Only meaningful on SSO accounts, and an
+    // empty string clears it.
+    if (isSso && typeof body.edcityLoginId === "string") {
+      const trimmed = body.edcityLoginId.trim();
+      user.edcityLoginId = trimmed || undefined;
     }
 
     // Only teacher/student carry school + subjects + classes.
@@ -95,6 +115,8 @@ export async function PATCH(
     return NextResponse.json({
       id: String(user._id),
       username: user.username,
+      authProvider: resolveAuthProvider(user.authProvider),
+      edcityLoginId: user.edcityLoginId ?? null,
       displayName: user.displayName,
       role: user.role,
       schoolId: user.school ? user.school.toString() : null,
