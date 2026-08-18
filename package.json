@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "gen:icons": "node scripts/generate-app-icons.mjs",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "seed:toolbox": "tsx scripts/seed-toolbox.ts",
     "seed:users": "tsx scripts/seed-users.ts",
