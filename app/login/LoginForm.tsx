@@ -190,9 +190,22 @@ export function LoginForm({ ssoEnabled }: { ssoEnabled: boolean }) {
             as the subject tiles on the home page, and it makes the card read as
             a solid object a child can aim at. */}
         <div className="w-full max-w-[460px] rounded-[16px] border-2 border-[#080808] bg-white p-6 shadow-[8px_8px_0px_#080808] sm:p-8">
+          {/* The logo file is 559x304 with a solid white background, so it needs
+              no clipping on this white card, and even at 56px it is still being
+              downscaled from its native height — no softening. Intrinsic width
+              and height are declared so the card does not jump while it loads. */}
           <div className="flex items-center gap-3">
-            <img src={logoSrc} alt="" className="h-10 w-auto object-contain" />
-            <p className="text-[15px] font-semibold leading-5 text-[#363636]">
+            <img
+              src={logoSrc}
+              alt=""
+              width={559}
+              height={304}
+              className="h-12 w-auto object-contain sm:h-14"
+            />
+            {/* Reads as the product's name, so it is set near-black and bold
+                rather than as grey supporting text. It stays well under the 30px
+                歡迎回來 heading, so the order of importance is unchanged. */}
+            <p className="text-[17px] font-bold leading-[1.3] tracking-[-0.01em] text-[#080808] sm:text-[18px]">
               AI for Subject Learning
             </p>
           </div>
