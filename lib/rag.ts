@@ -76,11 +76,34 @@ const AEROSPACE_DESCRIPTION = `此信息適用於了解航天技術，包括：
 
 以及相關資訊，包括地圖應用程式、公平實驗等。`;
 
+// 水資源 (water resources) — 人文科「4.2 地球是我家」→「4.2.1 地球與國家資源」。
+// Scope of the "water" index, mirroring the topics the persona prompt lists.
+const WATER_DESCRIPTION = `此資訊適用於小學人文科「水資源」及「國家安全」課題，包括：
+1. 人與水的關係
+2. 水的用途
+3. 水的三態
+4. 水循環的過程
+5. 地球的水資源及蘊藏量
+6. 珍貴的食水
+7. 全球水資源分佈
+8. 氣候變化對水資源的影響
+9. 水污染的原因及影響
+10. 香港主要水資源（本地集水、水塘、地下水、雨水收集系統）
+11. 香港 1963 年旱災及制水
+12. 飲水思源—東江水（東深供水工程）及其對香港的重要性
+13. 其他地區（如新加坡）的水資源管理及新生水、海水淡化等技術
+14. 節約用水及保護水資源的日常行動
+15. 水資源與國家安全（資源安全）的關係`;
+
 const RAG_SOURCES: Record<string, RagSource> = {
   // Science — 電力及電路. Data lives in the "science" index, default namespace.
   circuit: { index: "science", description: CIRCUIT_DESCRIPTION },
   // Science — 航天科技. Its own index, default namespace.
   aerospace: { index: "aerospace26", description: AEROSPACE_DESCRIPTION },
+  // Humanities — 水資源. The "water" index, default namespace. The persona in
+  // lib/humanities-prompts.ts keeps referring to the knowledge (document
+  // stores) of "water"; this is that store.
+  "water-resources": { index: "water", description: WATER_DESCRIPTION },
 };
 
 // A single shared client. `Pinecone` is safe to construct once per process.

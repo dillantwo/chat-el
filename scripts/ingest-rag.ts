@@ -14,12 +14,14 @@
  *
  * IMPORTANT — the index this writes to must match the one the app reads.
  * At query time the index name is NOT taken from PINECONE_INDEX: lib/rag.ts
- * hardcodes it per topic in RAG_SOURCES, which currently holds two entries,
- * `circuit -> index "science"` and `aerospace -> index "aerospace26"`. So
- * ingesting with the default PINECONE_INDEX ("ai-qef-knowledge") produces
- * vectors nothing ever queries, and the remaining topic folders above have no
- * RAG wired up at all. To make circuit work: PINECONE_INDEX=science; for
- * aerospace: PINECONE_INDEX=aerospace26. To add a topic, add it to RAG_SOURCES.
+ * hardcodes it per topic in RAG_SOURCES, which currently holds
+ * `circuit -> index "science"`, `aerospace -> index "aerospace26"` and
+ * `water-resources -> index "water"`. So ingesting with the default
+ * PINECONE_INDEX ("ai-qef-knowledge") produces vectors nothing ever queries,
+ * and the remaining topic folders above have no RAG wired up at all. To make
+ * circuit work: PINECONE_INDEX=science; for aerospace:
+ * PINECONE_INDEX=aerospace26; for water-resources: PINECONE_INDEX=water.
+ * To add a topic, add it to RAG_SOURCES.
  *
  * NOTE — this script upserts into a namespace named after the sub-folder, while
  * RAG_SOURCES currently reads the *default* namespace for both topics (neither
