@@ -4,10 +4,25 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * In-app redirects for the SSO routes.
  *
- * Built from `req.nextUrl.clone()` rather than `new URL(path, req.url)` because
- * NextURL tracks NEXT_PUBLIC_BASE_PATH: cloning keeps the prefix and re-adds it
- * on serialization, so these keep working when the app is served under a
- * sub-path. proxy.ts builds its /login redirects the same way.
+ * The Location header is a path, never an absolute URL, because inside the
+ * container `req.nextUrl` does not carry this app's public origin. Next builds
+ * the request URL from the hostname and port the server was started with
+ * (server/next-server.ts `attachRequestMeta`: `${protocol}://${fetchHostname}:${port}`),
+ * which in the Docker image is HOSTNAME=0.0.0.0 and PORT=3000 — only the scheme
+ * comes from the request, via X-Forwarded-Proto. Redirecting to that URL sends
+ * the browser to https://0.0.0.0:3000/login and ERR_ADDRESS_INVALID.
+ *
+ * proxy.ts can get away with `NextResponse.redirect(req.nextUrl.clone())`
+ * because Next rewrites a middleware Location to a relative one whenever its
+ * host matches the request's (server/web/adapter.ts, `getRelativeURL`). Route
+ * handler responses are passed through untouched, so the ones here have to be
+ * relative to begin with. Browsers resolve a relative Location against the URL
+ * they actually requested — the public one — so this works behind any proxy and
+ * without trusting a forwarded host header.
+ *
+ * NextURL is still used to build the target: it tracks NEXT_PUBLIC_BASE_PATH and
+ * re-adds the prefix on serialization, so these keep working when the app is
+ * served under a sub-path.
  */
 
 /** Error codes the login page can translate. Kept in one place on purpose. */
@@ -29,6 +44,23 @@ export type SsoErrorCode =
   /** The account's school is disabled. */
   | "sso_school_disabled";
 
+/**
+ * 307, matching what NextResponse.redirect() emits by default. Both legs of the
+ * flow are GETs, so method preservation is not the point; consistency is.
+ */
+const REDIRECT_STATUS = 307;
+
+/**
+ * Serialize a NextURL down to `path?query`, dropping the (internal) origin.
+ *
+ * Goes through `toString()` rather than reading `.pathname` so that basePath is
+ * applied — the getter returns the pathname without it.
+ */
+function pathAndQuery(url: URL): string {
+  const { pathname, search } = new URL(url.toString());
+  return `${pathname}${search}`;
+}
+
 export function redirectToLogin(
   req: NextRequest,
   error: SsoErrorCode,
@@ -41,7 +73,10 @@ export function redirectToLogin(
   for (const [key, value] of Object.entries(extra ?? {})) {
     url.searchParams.set(key, value);
   }
-  return NextResponse.redirect(url);
+  return new NextResponse(null, {
+    status: REDIRECT_STATUS,
+    headers: { Location: pathAndQuery(url) },
+  });
 }
 
 /** Redirect to an already-validated in-app path (see safeInternalPath). */
@@ -51,5 +86,8 @@ export function redirectToApp(req: NextRequest, path: string): NextResponse {
   const [pathname, query = ""] = path.split("?", 2);
   url.pathname = pathname;
   if (query) url.search = `?${query}`;
-  return NextResponse.redirect(url);
+  return new NextResponse(null, {
+    status: REDIRECT_STATUS,
+    headers: { Location: pathAndQuery(url) },
+  });
 }
