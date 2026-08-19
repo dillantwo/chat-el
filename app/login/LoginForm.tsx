@@ -94,7 +94,7 @@ function ProfileIdHint({ value }: { value: string }) {
 
   return (
     <span className="mt-2 flex flex-wrap items-center gap-2">
-      <span>請把這個號碼給老師：</span>
+      <span>EdCity 帳戶：</span>
       <code className="select-all rounded-[6px] bg-white px-2 py-1 font-mono text-[14px] text-[#080808]">
         {value}
       </code>
@@ -135,10 +135,27 @@ export function LoginForm({ ssoEnabled }: { ssoEnabled: boolean }) {
   const unprovisionedRef =
     ssoErrorCode === "sso_not_provisioned" ? searchParams.get("ref") : null;
 
+  // Failures where the answer is "not this EdCity account". Retrying with the
+  // same one cannot succeed, and EdConnect is an SSO — with its session still
+  // live, authorize signs the same person straight back in without prompting, so
+  // the button would appear to do nothing and land on this error again. `renew`
+  // makes the start route end the EdConnect session first.
+  //
+  // The transient codes (sso_state, sso_no_code, sso_failed) are deliberately
+  // absent: there the account is fine and the flow broke, so plain retry is the
+  // right move and logging the user out of every other EdCity service is not.
+  const needsRenew =
+    ssoErrorCode !== null &&
+    ["sso_not_provisioned", "sso_no_school", "sso_school_disabled", "sso_denied"].includes(
+      ssoErrorCode
+    );
+
   // A top-level navigation, not a fetch: the browser has to be handed to
   // EdConnect and brought back, and an XHR would follow the redirect internally
   // and land EdConnect's login page HTML in a JSON parser.
-  const ssoHref = `${basePath}/api/auth/sso/edconnect/start?from=${encodeURIComponent(from)}`;
+  const ssoHref =
+    `${basePath}/api/auth/sso/edconnect/start?from=${encodeURIComponent(from)}` +
+    (needsRenew ? "&renew=1" : "");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -263,10 +280,17 @@ export function LoginForm({ ssoEnabled }: { ssoEnabled: boolean }) {
               className="mt-6 rounded-[12px] bg-[#eef4ff] p-4"
             >
               <h2 id="sso-heading" className="text-[16px] font-semibold text-[#080808]">
-                有 EdCity 帳戶嗎？
+                {needsRenew ? "想用另一個 EdCity 帳戶？" : "有 EdCity 帳戶嗎？"}
               </h2>
+              {/* When the last attempt failed on identity, the button no longer
+                  does what the child just saw it do: it leaves EdCity first and
+                  asks for the account again. Saying so avoids the reading that
+                  the button is broken — which is exactly how it looks when
+                  EdConnect's session makes the round trip invisible. */}
               <p className="mt-1 text-[15px] leading-6 text-[#4d4d4d]">
-                按一下下面的按鈕就可以進入。
+                {needsRenew
+                  ? "按一下下面的按鈕，會先離開 EdCity，然後請你重新輸入 EdCity 帳戶。"
+                  : "按一下下面的按鈕就可以進入。"}
               </p>
 
               {/* The supplied EdConnect artwork is already a finished button:

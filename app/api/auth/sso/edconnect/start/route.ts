@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildAuthorizeUrl, getEdConnectConfig, isEdConnectEnabled } from "@/lib/edconnect";
+import {
+  appOrigin,
+  buildAuthorizeUrl,
+  buildLogoutUrl,
+  getEdConnectConfig,
+  isEdConnectEnabled,
+} from "@/lib/edconnect";
 import { STATE_COOKIE, issueState, safeInternalPath, stateCookieOptions } from "@/lib/sso-state";
 import { redirectToLogin } from "@/lib/sso-redirect";
+import { basePath } from "@/lib/utils";
 
 // Mongoose is not touched here, but node:crypto is, and the whole flow must stay
 // on one runtime so the state cookie is written and read by the same stack.
@@ -27,8 +34,40 @@ export async function GET(req: NextRequest) {
   // back, since the value makes a round trip through a third party.
   const from = safeInternalPath(req.nextUrl.searchParams.get("from")) ?? "/";
 
+  /**
+   * `?renew=1` — end the EdConnect session before starting, so the user is asked
+   * who they are instead of being signed in again as whoever last used the
+   * browser.
+   *
+   * Needed because EdConnect is an SSO: with a live CAS session, authorize does
+   * not prompt, it answers immediately with a code for the same profile_id. A
+   * login that failed on *identity* (the account is not provisioned here, or its
+   * school is disabled) therefore repeats forever — the button appears to do
+   * nothing, because the round trip is invisible and lands on the same error.
+   *
+   * The documented logout endpoint is the only lever we have: EdConnect exposes
+   * no `prompt=login` / `renew` parameter on authorize (spec v1.6, OAuth 2.0
+   * Integration), so the session has to be torn down rather than bypassed. The
+   * cost is that it also ends the user's session with other EdCity services in
+   * this browser, which is why the login page only asks for this after an
+   * identity failure and not on every login.
+   */
+  const renew = req.nextUrl.searchParams.get("renew") === "1";
+
   try {
     const config = getEdConnectConfig();
+
+    if (renew) {
+      // Comes back here without `renew`, so the second pass proceeds to
+      // authorize — with no CAS session left to reuse, EdConnect shows its login
+      // form. Absolute because it leaves our origin: EdConnect echoes it back.
+      const back = new URL(
+        `${appOrigin(config)}${basePath}/api/auth/sso/edconnect/start`
+      );
+      back.searchParams.set("from", from);
+      return NextResponse.redirect(buildLogoutUrl(config, back.toString()));
+    }
+
     const { state, token } = await issueState(from);
 
     const res = NextResponse.redirect(buildAuthorizeUrl(config, state));
