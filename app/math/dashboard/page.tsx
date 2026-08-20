@@ -253,7 +253,245 @@ const FULLSCREEN_SHIM = `<script data-mathai-fsshim>
 })();
 </script>`;
 
-/** Inject the inspector + fullscreen shim just before </body> (or </html>) for preview. */
+/**
+ * Bar-chart sizing repair, injected into the preview iframe.
+ *
+ * Both a percentage height (`height: 60%`) and flex distribution (`flex-grow`)
+ * need the containing block's height to be *definite*. Generated tools keep
+ * sizing the plot area with `min-height` alone, which leaves `height: auto` —
+ * so the percentage is treated as `auto` and flex has nothing to distribute.
+ * Every bar collapses to its content height (zero, they are empty divs) and the
+ * tool renders as a tall empty box with hairline bars sitting on the axis.
+ *
+ * Prompt instructions alone did not stop this reliably, so the repair is done
+ * deterministically here:
+ *   - A container given a `min-height` but no explicit height, whose children
+ *     depend on a definite height, gets one: the larger of its min-height and
+ *     its current content height, so its rendered size does not change.
+ *   - A wrapper that collapsed to zero inside a parent that does have height
+ *     (a bar column that never got to stretch) is stretched to fit it.
+ *   - Each bar's *authored* percentage is then resolved against the measured
+ *     parent and written back in pixels.
+ *
+ * On a chart that already rendered correctly every step recomputes the value it
+ * already had, so this is a no-op rather than a second opinion on the layout.
+ * What it cannot repair is a tool that decided the bar value is literally 0 —
+ * that one is on the generation prompt (see rule 14 in the generate-html route).
+ */
+const CHART_SIZING_FIX = `<script data-mathai-chartfix>
+(function(){
+  if (window.__mathaiChartFix) return;
+  window.__mathaiChartFix = true;
+
+  var bars = [];        // elements whose authored height is a percentage
+  var fixed = [];       // containers we gave an explicit height to
+  var busy = false;
+
+  function remember(el, pct){
+    if (!isFinite(pct) || pct <= 0) return;
+    if (typeof el.__mathaiPctH !== 'number') bars.push(el);
+    el.__mathaiPctH = pct;
+  }
+
+  /* Note: now that browsers support CSS nesting, a plain CSSStyleRule also
+     exposes an (empty) cssRules list — so a style rule must be handled *and*
+     descended into, never treated as either/or. */
+  function walkRules(rules, fn){
+    for (var i = 0; i < rules.length; i++){
+      var r = rules[i];
+      if (r.style && r.selectorText) fn(r);
+      if (r.cssRules && r.cssRules.length) walkRules(r.cssRules, fn);
+    }
+  }
+  function eachStyleRule(fn){
+    var sheets = document.styleSheets;
+    for (var i = 0; i < sheets.length; i++){
+      var rules = null;
+      try { rules = sheets[i].cssRules; } catch(e){ continue; }
+      if (rules) walkRules(rules, fn);
+    }
+  }
+
+  /* Record which elements the author gave a height to, and which of those
+     heights are percentages. Stylesheet rules first, inline styles second, so
+     inline wins as the cascade dictates. Our own writes are tagged so they are
+     never mistaken for an authored height on a later pass. */
+  function scan(){
+    eachStyleRule(function(rule){
+      var h = rule.style.height;
+      if (!h || h === 'auto') return; // 'auto' is exactly the indefinite case we repair
+      var list;
+      try { list = document.querySelectorAll(rule.selectorText); } catch(e){ return; }
+      for (var i = 0; i < list.length; i++){
+        list[i].__mathaiAuthoredH = true;
+        if (h.indexOf('%') !== -1) remember(list[i], parseFloat(h));
+      }
+    });
+    var inline = document.querySelectorAll('[style]');
+    for (var j = 0; j < inline.length; j++){
+      var el = inline[j], ih = el.style.height;
+      if (!ih || ih === 'auto') continue;
+      if (el.__mathaiOurs) continue; // a height this script wrote
+      el.__mathaiAuthoredH = true;
+      if (ih.indexOf('%') !== -1) remember(el, parseFloat(ih));
+    }
+  }
+
+  /* True when at least one child can only size itself against a definite height. */
+  function dependsOnDefiniteHeight(el){
+    var kids = el.children;
+    for (var i = 0; i < kids.length; i++){
+      if (typeof kids[i].__mathaiPctH === 'number') return true;
+      if ((parseFloat(getComputedStyle(kids[i]).flexGrow) || 0) > 0) return true;
+    }
+    return false;
+  }
+
+  function needsDefiniteHeight(el){
+    if (el.__mathaiAuthoredH) return false;
+    var cs = getComputedStyle(el);
+    if (cs.display === 'none') return false;
+    var min = parseFloat(cs.minHeight);
+    if (!(min > 0)) return false; // 'auto' / 0: the author never asked for a size
+    return dependsOnDefiniteHeight(el);
+  }
+
+  function docOrder(a, b){
+    var rel = a.compareDocumentPosition(b);
+    if (rel & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+    if (rel & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    return 0;
+  }
+
+  function apply(){
+    if (busy) return;
+    busy = true;
+
+    /* Phase 1 — undo our own writes. The pixel heights we set feed back into a
+       container's auto height, so measuring without resetting would let sizes
+       creep on every pass. Resetting makes each run start from the same state
+       and therefore produce the same result. */
+    var i, el;
+    for (i = 0; i < bars.length; i++){
+      if (bars[i].isConnected) bars[i].style.height = bars[i].__mathaiPctH + '%';
+    }
+    for (i = 0; i < fixed.length; i++) fixed[i].style.height = '';
+    fixed.length = 0;
+    void document.documentElement.offsetHeight; // reflow before measuring
+
+    /* Phase 2 — give collapsing containers a definite height, outermost first
+       so a repaired parent has settled before its descendants are measured.
+       max(min-height, content) keeps the rendered size exactly as it was. */
+    var all = document.querySelectorAll('*');
+    for (i = 0; i < all.length; i++){
+      el = all[i];
+      if (!needsDefiniteHeight(el)) continue;
+      var want = Math.max(parseFloat(getComputedStyle(el).minHeight) || 0, el.scrollHeight);
+      if (!(want > 0)) continue;
+      el.__mathaiOurs = true;
+      el.style.height = want + 'px';
+      fixed.push(el);
+    }
+    void document.documentElement.offsetHeight;
+
+    /* Phases 3 and 4 run twice: repairing an outer wrapper can hand an inner one
+       the height it was missing, and vice versa. Two passes settle the nesting
+       depths these tools actually produce. */
+    for (var pass = 0; pass < 2; pass++){
+      stretchCollapsedWrappers();
+      void document.documentElement.offsetHeight;
+      resolvePercentages();
+      void document.documentElement.offsetHeight;
+    }
+
+    busy = false;
+  }
+
+  function contentHeight(el){
+    var cs = getComputedStyle(el);
+    if (cs.display === 'none') return 0;
+    return el.clientHeight
+      - (parseFloat(cs.paddingTop) || 0)
+      - (parseFloat(cs.paddingBottom) || 0);
+  }
+
+  /*
+   * Phase 3 — a bar column that collapsed to nothing inside a parent that does
+   * have height. Happens when the column is a flex item that does not stretch
+   * (parent uses align-items:flex-end) while its own children rely on flex-grow.
+   * The signature is deliberately narrow: no authored height, effectively zero
+   * tall, sizeable parent, and children that need a definite height.
+   */
+  function stretchCollapsedWrappers(){
+    var all = document.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++){
+      var el = all[i];
+      if (el.__mathaiAuthoredH || el.children.length === 0) continue;
+      if (el.clientHeight >= 8) continue;
+      var parent = el.parentElement;
+      if (!parent) continue;
+      var basis = contentHeight(parent);
+      if (!(basis >= 40)) continue;
+      if (!dependsOnDefiniteHeight(el)) continue;
+      el.__mathaiOurs = true;
+      el.style.height = basis + 'px';
+      if (fixed.indexOf(el) === -1) fixed.push(el);
+    }
+  }
+
+  /* Phase 4 — resolve each bar's percentage against its measured parent. */
+  function resolvePercentages(){
+    bars.sort(docOrder);
+    for (var i = 0; i < bars.length; i++){
+      var el = bars[i];
+      if (!el.isConnected || !el.parentElement) continue;
+      var basis = contentHeight(el.parentElement);
+      if (!(basis > 0)) continue; // parent still has no height: nothing to resolve against
+      var px = basis * el.__mathaiPctH / 100;
+      if (px > 0){
+        el.__mathaiOurs = true;
+        el.style.height = px + 'px';
+      }
+    }
+  }
+
+  function run(){ scan(); apply(); }
+
+  function settle(){
+    run();
+    requestAnimationFrame(function(){
+      run();
+      requestAnimationFrame(function(){
+        run();
+        /* Tools that derive bar heights from a measured container often measure
+           before layout and fonts have settled and bake in tiny pixel values.
+           One late resize event gives those render functions a chance to
+           recompute against the real size. */
+        try { window.dispatchEvent(new Event('resize')); } catch(e){}
+        setTimeout(run, 250);
+      });
+    });
+  }
+
+  if (document.readyState === 'complete') settle();
+  else window.addEventListener('load', settle);
+  document.addEventListener('DOMContentLoaded', run);
+
+  var pending = 0;
+  function schedule(){
+    if (pending) return;
+    pending = setTimeout(function(){ pending = 0; run(); }, 120);
+  }
+  window.addEventListener('resize', schedule);
+  /* Only childList is observed: our repair writes the style attribute, so
+     watching attributes would retrigger this observer from our own changes. */
+  try {
+    new MutationObserver(function(){ if (!busy) schedule(); })
+      .observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  } catch(e){}
+})();
+</script>`;
+
 /** One hop of the structural route the iframe inspector posts back. */
 interface InspectorPathStep {
   i: number;
@@ -311,9 +549,14 @@ function markTargetInPristineHtml(
   return { markedHtml: `<!doctype html>\n${root.outerHTML}`, exact };
 }
 
+/**
+ * Add the preview-only shims to a tool document. These are injected at render
+ * time and never saved, so the stored HTML stays exactly as the model wrote it
+ * and a later targeted edit never sees them in `currentHtml`.
+ */
 function injectInspector(html: string | undefined): string | undefined {
   if (!html) return undefined;
-  const scripts = `${FULLSCREEN_SHIM}${INSPECTOR_SCRIPT}`;
+  const scripts = `${FULLSCREEN_SHIM}${CHART_SIZING_FIX}${INSPECTOR_SCRIPT}`;
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${scripts}</body>`);
   if (/<\/html>/i.test(html)) return html.replace(/<\/html>/i, `${scripts}</html>`);
   return html + scripts;
