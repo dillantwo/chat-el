@@ -44,6 +44,7 @@ import {
 import { useToolbox, type ToolFromDB } from "@/contexts/ToolboxContext";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useVoiceInput } from "@/lib/use-voice-input";
 import { DefaultChatTransport } from "ai";
 import { VolumeChatPanel } from "@/components/VolumeChatPanel";
 import { ClockChatPanel } from "@/components/ClockChatPanel";
@@ -400,9 +401,7 @@ function MathDashboardContent() {
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasSentInitial = useRef(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isListening, setIsListening] = useState(false);
   const [chatFiles, setChatFiles] = useState<File[]>([]);
 
   // Question-input (placeholder area) state — used when no question is set yet
@@ -410,7 +409,6 @@ function MathDashboardContent() {
   const [questionFiles, setQuestionFiles] = useState<FileList | null>(null);
   const [isClassifying, setIsClassifying] = useState(false);
   const [questionPreviewSrc, setQuestionPreviewSrc] = useState<string | null>(null);
-  const [isQuestionListening, setIsQuestionListening] = useState(false);
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
   const [hasUserQuestion, setHasUserQuestion] = useState(false);
   const hasUserQuestionRef = useRef(false);
@@ -428,7 +426,6 @@ function MathDashboardContent() {
   });
   const questionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const questionFileInputRef = useRef<HTMLInputElement>(null);
-  const questionRecognitionRef = useRef<SpeechRecognition | null>(null);
 
   const isLoading = status === "submitted" || status === "streaming";
   const canSend = (!!input.trim() || chatFiles.length > 0) && !isLoading && !isGeneratingAiTool;
@@ -437,6 +434,55 @@ function MathDashboardContent() {
   const hideChatForTool = selectedTool === "journey-graph";
   const tools = toolboxConfig?.tools ?? [];
   const typeLabel = toolboxConfig?.label ?? type;
+
+  // Both mics are declared up here because the reset/load handlers below have to
+  // stop dictation before they clear the boxes.
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    // Chinese doesn't separate words with spaces.
+    separator: "",
+    getBaseText: () => input,
+    onTranscript: setInput,
+  });
+
+  // Typing while the mic is live: hand the edit to the recogniser as the new
+  // baseline, otherwise the next result would revert it.
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (isListening) rebaseDictation(value);
+    },
+    [isListening, rebaseDictation]
+  );
+
+  // The question box doubles as the "加入題目" and the "AI生成圖解" prompt,
+  // switching only its placeholder on `entryMode`.
+  const {
+    isListening: isQuestionListening,
+    error: questionVoiceError,
+    stop: stopQuestionListening,
+    toggle: toggleQuestionVoice,
+    rebase: rebaseQuestionDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    separator: "",
+    getBaseText: () => questionInput,
+    onTranscript: setQuestionInput,
+  });
+
+  const handleQuestionInputChange = useCallback(
+    (value: string) => {
+      setQuestionInput(value);
+      if (isQuestionListening) rebaseQuestionDictation(value);
+    },
+    [isQuestionListening, rebaseQuestionDictation]
+  );
 
   function isPreviewUrlForSelectedTool(url: string | null, toolKey: string | null) {
     if (!url || !toolKey) return false;
@@ -481,11 +527,14 @@ function MathDashboardContent() {
 
     setCurrentChatId(createMathChatId());
     setMessagesRef.current?.([]);
+    // The input is about to be cleared, so a live mic would write the old text
+    // back on its next result.
+    stopListening();
     setInput("");
     setChatFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setChatVisible(true);
-  }, [selectedTool]);
+  }, [selectedTool, stopListening]);
 
   useEffect(() => {
     entryModeRef.current = entryMode;
@@ -801,44 +850,9 @@ function MathDashboardContent() {
     }
   }, [messages]);
 
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
   useEffect(() => {
     if (hideChatForTool) stopListening();
   }, [hideChatForTool, stopListening]);
-
-  function toggleVoice() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。');
-      return;
-    }
-    if (isListening) { stopListening(); return; }
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = 'zh-HK';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setInput(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }
-
-  useEffect(() => {
-    return () => { recognitionRef.current?.stop(); };
-  }, []);
 
   // Listen for sidebar entry actions.
   // Use refs so the deps array stays stable across renders (useChat's
@@ -878,6 +892,11 @@ function MathDashboardContent() {
   useEffect(() => {
     function resetDashboard(mode: DashboardEntryMode) {
       suppressHistoryAnalysisRef.current = false;
+      // Both boxes are about to be cleared, so any dictation in flight has to
+      // stop: otherwise the next speech result would restore the old text along
+      // with the new words.
+      stopListening();
+      stopQuestionListening();
       try { sessionStorage.removeItem("dashboard-data"); } catch {}
       setDashboardData(null);
       setHasUserQuestion(false);
@@ -929,6 +948,10 @@ function MathDashboardContent() {
 
       setChatVisible(true);
       setIsExtractingParams(false);
+      // Same as resetDashboard: clearing the boxes must not leave a mic running
+      // against the text we just wiped.
+      stopListening();
+      stopQuestionListening();
       setInput("");
       setChatFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1005,6 +1028,9 @@ function MathDashboardContent() {
       const detail = customEvent.detail;
       if (!detail) return;
 
+      // Both boxes get cleared below, so drop any dictation in flight.
+      stopListening();
+      stopQuestionListening();
       try { sessionStorage.removeItem("dashboard-data"); } catch {}
       setDashboardData(null);
       setHasUserQuestion(false);
@@ -1046,7 +1072,7 @@ function MathDashboardContent() {
       window.removeEventListener("dashboard:load-math-chat", handleLoadMathChat);
       window.removeEventListener("dashboard:load-ai-tool", handleLoadAiTool);
     };
-  }, [handleNewChat]);
+  }, [handleNewChat, stopListening, stopQuestionListening]);
 
   useEffect(() => {
     if (selectedTool === "volume-cubes" || selectedTool === "clock-24hrs" || selectedTool === "clock-time-difference") {
@@ -1385,41 +1411,6 @@ function MathDashboardContent() {
 
   // ===== Question-input handlers (placeholder area) =====
   const canSubmitQuestion = !!(questionInput.trim() || questionFiles) && !isClassifying;
-
-  const stopQuestionListening = useCallback(() => {
-    questionRecognitionRef.current?.stop();
-    setIsQuestionListening(false);
-  }, []);
-
-  function toggleQuestionVoice() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。');
-      return;
-    }
-    if (isQuestionListening) { stopQuestionListening(); return; }
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = 'zh-HK';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setQuestionInput(transcript);
-    };
-    recognition.onerror = () => setIsQuestionListening(false);
-    recognition.onend = () => setIsQuestionListening(false);
-    questionRecognitionRef.current = recognition;
-    recognition.start();
-    setIsQuestionListening(true);
-  }
-
-  useEffect(() => {
-    return () => { questionRecognitionRef.current?.stop(); };
-  }, []);
 
   function questionFileToBase64(file: File): Promise<string> {
     return new Promise((resolve) => {
@@ -1832,6 +1823,7 @@ function MathDashboardContent() {
                   <button
                     type="button"
                     onClick={() => {
+                      stopQuestionListening();
                       setIsEditingQuestion(false);
                       setQuestionInput("");
                       setQuestionFiles(null);
@@ -1874,7 +1866,7 @@ function MathDashboardContent() {
                       ? "輸入要求讓 AI 為你生成工具，例如：設計一個可以拖拉分數卡的互動練習（可直接粘貼圖片）"
                       : "輸入數學題目，例如：3/4 + 1/2 = ?（可直接粘貼圖片）"}
                     value={questionInput}
-                    onChange={(e) => setQuestionInput(e.target.value)}
+                    onChange={(e) => handleQuestionInputChange(e.target.value)}
                     onKeyDown={handleQuestionKeyDown}
                     onPaste={handleQuestionPaste}
                     disabled={isClassifying}
@@ -1913,6 +1905,8 @@ function MathDashboardContent() {
                             ? 'border-red-400 text-red-500 hover:border-red-500 hover:text-red-600'
                             : 'border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]'
                         }`}
+                        title={isQuestionListening ? '停止語音輸入' : '語音輸入'}
+                        aria-label={isQuestionListening ? '停止語音輸入' : '語音輸入'}
                       >
                         {isQuestionListening ? (
                           <MicOff className="size-4" />
@@ -1921,8 +1915,13 @@ function MathDashboardContent() {
                         )}
                       </Button>
                       {isQuestionListening && (
-                        <span className="text-[12px] font-medium text-red-500 animate-pulse">
+                        <span aria-live="polite" className="text-[12px] font-medium text-red-500 animate-pulse">
                           聆聽中…
+                        </span>
+                      )}
+                      {!isQuestionListening && questionVoiceError && (
+                        <span role="alert" className="text-[12px] font-medium text-red-500">
+                          {questionVoiceError.message}
                         </span>
                       )}
                     </div>
@@ -2149,7 +2148,7 @@ function MathDashboardContent() {
                   ? "描述要怎麼修改選取的部分...（可直接粘貼圖片）"
                   : entryMode === "ai-tool" ? "針對這個工具繼續提問...（可直接粘貼圖片）" : "繼續提問...（可直接粘貼圖片）"}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 className="min-h-[58px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-3 pt-3 pb-10 text-sm shadow-none focus-visible:ring-0"
@@ -2187,11 +2186,15 @@ function MathDashboardContent() {
                         : 'border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]'
                     }`}
                     title={isListening ? '停止語音輸入' : '語音輸入'}
+                    aria-label={isListening ? '停止語音輸入' : '語音輸入'}
                   >
                     {isListening ? <MicOff className="size-3.5" /> : <Mic className="size-3.5 text-[#5a5a5a]" />}
                   </Button>
                   {isListening && (
-                    <span className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                    <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                  )}
+                  {!isListening && voiceError && (
+                    <span role="alert" className="text-[11px] font-medium text-red-500">{voiceError.message}</span>
                   )}
                 </div>
                 {isLoading ? (

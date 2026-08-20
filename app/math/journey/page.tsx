@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Mic, MicOff, Pause, Play, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { basePath, cn } from "@/lib/utils";
+import { useVoiceInput } from "@/lib/use-voice-input";
 
 type Point = { x: number; y: number };
 type Series = { id: string; label: string; color: string; points: Point[] };
@@ -420,63 +421,43 @@ export default function JourneyGraphPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [review, setReview] = useState<ReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // The answer box dictation started in. Pinned for the whole session so
+  // stepping to another segment mid-sentence can't write into the wrong box.
   const voiceAnswerKeyRef = useRef<string | null>(null);
-  const voiceBaseTextRef = useRef("");
 
   const currentSegment = level?.segments[stepIndex] ?? null;
   const currentAnswerKey = level && currentSegment ? getAnswerKey(level.id, currentSegment.id) : null;
 
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    voiceAnswerKeyRef.current = null;
-    setIsListening(false);
-  }, []);
-
-  useEffect(() => {
-    return () => { recognitionRef.current?.stop(); };
-  }, []);
-
-  function toggleVoiceInput() {
-    if (!currentAnswerKey) return;
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。');
-      return;
-    }
-    if (isListening) { stopListening(); return; }
-
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-
-    const recognition = new SpeechRecognitionCtor();
-    voiceAnswerKeyRef.current = currentAnswerKey;
-    voiceBaseTextRef.current = answers[currentAnswerKey] ?? "";
-    recognition.lang = 'zh-HK';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    // Chinese doesn't separate words with spaces.
+    separator: "",
+    getBaseText: () => (currentAnswerKey ? answers[currentAnswerKey] ?? "" : ""),
+    onStart: () => {
+      voiceAnswerKeyRef.current = currentAnswerKey;
+    },
+    onTranscript: (text) => {
       const answerKey = voiceAnswerKeyRef.current;
       if (!answerKey) return;
-      const baseText = voiceBaseTextRef.current.trim();
-      const nextText = [baseText, transcript.trim()].filter(Boolean).join(baseText ? " " : "");
-      setAnswers((prev) => ({ ...prev, [answerKey]: nextText }));
+      setAnswers((prev) => ({ ...prev, [answerKey]: text }));
       setReview(null);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => {
-      recognitionRef.current = null;
+    },
+    onStop: () => {
       voiceAnswerKeyRef.current = null;
-      setIsListening(false);
-    };
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+    },
+  });
+
+  function toggleVoiceInput() {
+    // Nothing to dictate into before a segment is on screen, but always allow
+    // stopping a session that is already running.
+    if (!isListening && !currentAnswerKey) return;
+    toggleVoice();
   }
 
   function selectLevel(nextLevel: Level) {
@@ -490,6 +471,9 @@ export default function JourneyGraphPage() {
 
   function updateAnswer(value: string) {
     if (!currentAnswerKey) return;
+    // Typing while the mic is live on this same box: hand the edit to the
+    // recogniser as the new baseline, otherwise the next result reverts it.
+    if (voiceAnswerKeyRef.current === currentAnswerKey) rebaseDictation(value);
     setAnswers((prev) => ({ ...prev, [currentAnswerKey]: value }));
     setReview(null);
   }
@@ -630,7 +614,10 @@ export default function JourneyGraphPage() {
               />
               <div className="absolute bottom-3 right-3 flex items-center gap-2">
                 {isListening && (
-                  <span className="text-xs font-medium text-red-500 animate-pulse">聆聽中…</span>
+                  <span aria-live="polite" className="text-xs font-medium text-red-500 animate-pulse">聆聽中…</span>
+                )}
+                {!isListening && voiceError && (
+                  <span role="alert" className="text-xs font-medium text-red-500">{voiceError.message}</span>
                 )}
                 <Button
                   type="button"

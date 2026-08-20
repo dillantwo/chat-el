@@ -9,8 +9,10 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { ArrowUp, ImagePlus, MessageSquare, Mic, MicOff, PanelRight, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useVoiceInput } from "@/lib/use-voice-input";
 import { getMathChatHistoryItem, restoreUiMessages, serializeUiMessages, upsertMathChatHistory } from "@/lib/math-chat-history";
 
 interface SceneCube { x: number; y: number; z: number; color: string }
@@ -87,7 +89,6 @@ export function VolumeChatPanel({
 }) {
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
-  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -96,9 +97,34 @@ export function VolumeChatPanel({
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const sceneRef = useRef<VolumeSceneStateMessage | null>(null);
   const [cubeCount, setCubeCount] = useState(0);
+
+  // Declared above the session-load effect below, which needs to stop dictation
+  // before it clears the input.
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    // Chinese doesn't separate words with spaces.
+    separator: "",
+    getBaseText: () => input,
+    onTranscript: setInput,
+  });
+
+  // Typing while the mic is live: hand the edit to the recogniser as the new
+  // baseline, otherwise the next result would revert it.
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (isListening) rebaseDictation(value);
+    },
+    [isListening, rebaseDictation]
+  );
 
   // Listen for state updates posted from the embedded volume iframe.
   useEffect(() => {
@@ -165,6 +191,9 @@ export function VolumeChatPanel({
       const saved = await getMathChatHistoryItem(sessionId);
       if (cancelled) return;
       setMessages(saved ? restoreUiMessages(saved.messages) : []);
+      // The input is about to be cleared, so a live mic would write the old text
+      // back on its next result.
+      stopListening();
       setInput("");
       setChatFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -173,7 +202,7 @@ export function VolumeChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, setMessages]);
+  }, [sessionId, setMessages, stopListening]);
 
   useEffect(() => {
     if (messages.length === 0 || status === "streaming" || status === "submitted") {
@@ -200,40 +229,6 @@ export function VolumeChatPanel({
     });
   }, [hasUserQuestion, messages, question, sessionId, status, toolUrl, type]);
 
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
-  useEffect(() => {
-    return () => { recognitionRef.current?.stop(); };
-  }, []);
-
-  function toggleVoice() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。');
-      return;
-    }
-    if (isListening) { stopListening(); return; }
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = 'zh-HK';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setInput(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }
 
   function handleChatFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
@@ -399,9 +394,9 @@ export function VolumeChatPanel({
               </div>
             )}
 
-            <textarea
+            <Textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -410,7 +405,6 @@ export function VolumeChatPanel({
               }}
               onPaste={handlePaste}
               placeholder="繼續提問...（可直接粘貼圖片）"
-              rows={2}
               className="min-h-[58px] max-h-[160px] w-full resize-none overflow-y-auto rounded-[8px] border-0 bg-transparent px-3 pt-3 pb-10 text-sm outline-none focus-visible:ring-0"
             />
 
@@ -446,6 +440,7 @@ export function VolumeChatPanel({
                       : "border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]"
                   }`}
                   title={isListening ? "停止語音輸入" : "語音輸入"}
+                  aria-label={isListening ? "停止語音輸入" : "語音輸入"}
                 >
                   {isListening ? (
                     <MicOff className="size-3.5" />
@@ -454,7 +449,14 @@ export function VolumeChatPanel({
                   )}
                 </Button>
                 {isListening && (
-                  <span className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                  <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">
+                    聆聽中…
+                  </span>
+                )}
+                {!isListening && voiceError && (
+                  <span role="alert" className="text-[11px] font-medium text-red-500">
+                    {voiceError.message}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1">

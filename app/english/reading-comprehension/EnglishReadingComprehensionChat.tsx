@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useVoiceInput } from "@/lib/use-voice-input";
 import { VOCAB_ADD_EVENT } from "@/components/VocabBank";
 import {
   READING_ROLES,
@@ -192,7 +193,6 @@ export default function EnglishReadingComprehensionChat({
   const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
-  const [isListening, setIsListening] = useState(false);
   const [currentChatId, setCurrentChatId] = useState(() => createEnglishChatId());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -207,7 +207,6 @@ export default function EnglishReadingComprehensionChat({
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Loading a saved chat must not re-save it (which would bump updatedAt and
   // reorder the shared history list).
@@ -261,9 +260,36 @@ export default function EnglishReadingComprehensionChat({
     });
   }, []);
 
+  // Declared above the reset/load handlers below, which need to stop dictation
+  // before they clear the input.
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseDictation,
+  } = useVoiceInput({
+    lang: "en-US",
+    getBaseText: () => input,
+    onTranscript: setInput,
+  });
+
+  // Typing while the mic is live: hand the edit to the recogniser as the new
+  // baseline, otherwise the next result would revert it.
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (isListening) rebaseDictation(value);
+    },
+    [isListening, rebaseDictation]
+  );
+
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    // The input is about to be cleared, so a live mic would write the old text
+    // back on its next result.
+    stopListening();
     setMessages([]);
     setInput("");
     setChatFiles([]);
@@ -274,7 +300,7 @@ export default function EnglishReadingComprehensionChat({
     setShowPinned(false);
     setStudentRole(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [makeSessionId]);
+  }, [makeSessionId, stopListening]);
 
   useEffect(() => {
     window.addEventListener("dashboard:new-chat", handleNewChat);
@@ -288,6 +314,8 @@ export default function EnglishReadingComprehensionChat({
       if (!detail || detail.topic !== TOPIC_ID) return;
       abortRef.current?.abort();
       abortRef.current = null;
+      // The input gets cleared below, so drop any dictation in flight.
+      stopListening();
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
       const restored: ChatMsg[] = detail.messages.map((m) => ({
@@ -313,7 +341,7 @@ export default function EnglishReadingComprehensionChat({
     }
     window.addEventListener("english-chat:load", onLoadChat);
     return () => window.removeEventListener("english-chat:load", onLoadChat);
-  }, []);
+  }, [stopListening]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -354,41 +382,6 @@ export default function EnglishReadingComprehensionChat({
       container.scrollTop = container.scrollHeight;
     }
   }, [messages]);
-
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
-  function toggleVoice() {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-      alert("Your browser does not support voice input. Please use Chrome or Edge.");
-      return;
-    }
-    if (isListening) { stopListening(); return; }
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "en-US";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setInput(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }
-
-  useEffect(() => {
-    return () => { recognitionRef.current?.stop(); };
-  }, []);
 
   function fileToDataURL(file: File): Promise<string> {
     return new Promise((resolve) => {
@@ -799,7 +792,7 @@ export default function EnglishReadingComprehensionChat({
                   ))}
                 </div>
               )}
-              <Textarea ref={textareaRef} placeholder={hasStarted ? PLACEHOLDER : "Please choose a role and click \u201CStart\u201D"} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste}
+              <Textarea ref={textareaRef} placeholder={hasStarted ? PLACEHOLDER : "Please choose a role and click \u201CStart\u201D"} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste}
                 disabled={!hasStarted}
                 className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0 disabled:cursor-not-allowed" />
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleChatFileChange} className="hidden" />
@@ -811,10 +804,12 @@ export default function EnglishReadingComprehensionChat({
                   </Button>
                   <Button type="button" size="icon-sm" variant="ghost" onClick={toggleVoice} disabled={!hasStarted}
                     className={`rounded-full transition-all disabled:opacity-40 ${isListening ? 'text-red-500 hover:bg-red-50' : 'text-[#5a5a5a] hover:bg-[#f4f4f5]'}`}
-                    title={isListening ? 'Stop voice input' : 'Voice input'}>
+                    title={isListening ? 'Stop voice input' : 'Voice input'}
+                    aria-label={isListening ? 'Stop voice input' : 'Voice input'}>
                     {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                   </Button>
-                  {isListening && <span className="text-[11px] font-medium text-red-500 animate-pulse">Listening…</span>}
+                  {isListening && <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">Listening…</span>}
+                  {!isListening && voiceError && <span role="alert" className="text-[11px] font-medium text-red-500">{voiceError.message}</span>}
                 </div>
                 {isLoading ? (
                   <Button type="button" size="icon-sm" variant="default" className="rounded-full bg-[#146ef5] hover:bg-[#0055d4]" onClick={stop}><Square className="size-3" /></Button>

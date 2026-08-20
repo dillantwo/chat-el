@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useVoiceInput } from "@/lib/use-voice-input";
 import {
   createChineseChatId,
   upsertChineseChatHistory,
@@ -275,7 +276,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
-  const [isListening, setIsListening] = useState(false);
   const [currentChatId, setCurrentChatId] = useState(() => createChineseChatId());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -303,18 +303,15 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   const saveSeqRef = useRef(0);
   // Per-stage voice input for the drafts panel (independent of the chat mic).
   const [listeningStage, setListeningStage] = useState<DraftStage | null>(null);
-  const draftRecognitionRef = useRef<SpeechRecognition | null>(null);
-  // Live dictation buffer. `committed` is everything settled (the text that was
-  // already in the box plus finalised speech), `interim` is the provisional
-  // tail the recogniser is still revising.
-  const draftVoiceRef = useRef<{ stage: DraftStage | null; committed: string; interim: string }>({
-    stage: null,
-    committed: "",
-    interim: "",
-  });
-  // Bumped per dictation session so late events from a stopped recogniser are
-  // ignored instead of clobbering the session that replaced it.
-  const draftVoiceSessionRef = useRef(0);
+  // Which stage the live dictation belongs to. Pinned for the session so
+  // switching stages mid-sentence can't write speech into the wrong box.
+  const draftStageRef = useRef<DraftStage | null>(null);
+  // Deleting the open draft has to drop the mic without the usual flush: the
+  // save is an upsert, so a late one would resurrect the draft.
+  const suppressDraftFlushRef = useRef(false);
+  // Which stage box a dictation error belongs to, so the message shows under
+  // the mic the student actually pressed.
+  const [draftVoiceErrorStage, setDraftVoiceErrorStage] = useState<DraftStage | null>(null);
   const draftVoiceSafetyTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -325,11 +322,81 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Loading a saved chat must not re-save it (which would bump updatedAt and
   // reorder the shared history list).
   const skipSaveRef = useRef(false);
+
+  // Dictation into one of the essay-draft stages. The stage boxes autosave, so
+  // this one persists the committed text (never the provisional tail) and
+  // flushes when the mic stops.
+  const {
+    isSupported: isVoiceSupported,
+    error: draftVoiceError,
+    start: startDraftDictation,
+    stop: finishDraftDictation,
+    getCommittedText: getDraftCommittedText,
+    rebase: rebaseDraftDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    // Dictation begins on a new line under whatever is already written, but once
+    // the student has typed we are mid-sentence and must not add another break.
+    separator: "\n",
+    continuationSeparator: "",
+    getBaseText: () => (draftStageRef.current ? draftsRef.current[draftStageRef.current] : ""),
+    onStart: () => {
+      setListeningStage(draftStageRef.current);
+      setDraftVoiceErrorStage(null);
+      // Long dictations still get a periodic save, so a crash or a closed tab
+      // cannot cost several minutes of speech.
+      draftVoiceSafetyTimer.current = setInterval(() => saveDictationSnapshot(), 15000);
+    },
+    onError: (voiceInputError) => {
+      if (voiceInputError.fatal) setDraftVoiceErrorStage(draftStageRef.current);
+    },
+    onTranscript: (text) => {
+      const stage = draftStageRef.current;
+      if (!stage) return;
+      // Written straight to state without arming the autosave debounce: the
+      // periodic snapshot and the flush on stop are what persist dictation.
+      setDrafts((prev) => ({ ...prev, [stage]: text }));
+    },
+    onStop: () => {
+      if (draftVoiceSafetyTimer.current) {
+        clearInterval(draftVoiceSafetyTimer.current);
+        draftVoiceSafetyTimer.current = null;
+      }
+      draftStageRef.current = null;
+      setListeningStage(null);
+      if (!suppressDraftFlushRef.current) flushDraftSave();
+    },
+  });
+
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseChatDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    // Chinese doesn't separate words with spaces.
+    separator: "",
+    getBaseText: () => input,
+    onTranscript: setInput,
+    // Starting this mic displaces the draft mic via the hook's own one-at-a-time
+    // rule, which also runs the draft's flush-on-stop.
+  });
+
+  // Typing while the mic is live: hand the edit to the recogniser as the new
+  // baseline, otherwise the next result would revert it.
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (isListening) rebaseChatDictation(value);
+    },
+    [isListening, rebaseChatDictation]
+  );
 
   const isLoading = status === "submitted" || status === "streaming";
   const mustSelectFirst =
@@ -458,29 +525,19 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     void saveActiveDraft(id, draftsRef.current, draftTitleRef.current);
   }, [saveActiveDraft]);
 
-  // Tear down a dictation session and persist what was just spoken.
-  const finishDraftDictation = useCallback(() => {
-    if (draftVoiceSafetyTimer.current) {
-      clearInterval(draftVoiceSafetyTimer.current);
-      draftVoiceSafetyTimer.current = null;
-    }
-    const wasDictating = !!draftVoiceRef.current.stage;
-    draftVoiceRef.current = { stage: null, committed: "", interim: "" };
-    draftVoiceSessionRef.current += 1;
-    draftRecognitionRef.current?.stop();
-    draftRecognitionRef.current = null;
-    setListeningStage(null);
-    if (wasDictating) flushDraftSave();
-  }, [flushDraftSave]);
-
-  // Periodic save during a long dictation. It writes `committed` rather than the
-  // on-screen text so a half-recognised word never lands in the database.
+  // Periodic save during a long dictation. It writes the committed text rather
+  // than what is on screen so a half-recognised word never lands in the
+  // database.
   const saveDictationSnapshot = useCallback(() => {
     const id = activeDraftIdRef.current;
-    const { stage, committed } = draftVoiceRef.current;
+    const stage = draftStageRef.current;
     if (!id || !stage) return;
-    void saveActiveDraft(id, { ...draftsRef.current, [stage]: committed }, draftTitleRef.current);
-  }, [saveActiveDraft]);
+    void saveActiveDraft(
+      id,
+      { ...draftsRef.current, [stage]: getDraftCommittedText() },
+      draftTitleRef.current
+    );
+  }, [getDraftCommittedText, saveActiveDraft]);
 
   const scheduleDraftSave = useCallback(
     (stage?: DraftStage) => {
@@ -488,7 +545,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       // times a second. Debouncing on them either spams the API or races with
       // the dictation buffer, so the dictated stage is left to the periodic
       // snapshot and the flush that runs when the mic stops.
-      if (stage && draftVoiceRef.current.stage === stage) return;
+      if (stage && draftStageRef.current === stage) return;
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
       draftSaveTimer.current = setTimeout(() => {
         draftSaveTimer.current = null;
@@ -546,21 +603,14 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   const handleDraftChange = useCallback(
     (stage: DraftStage, value: string) => {
       if (!activeDraftIdRef.current) return;
-      const voice = draftVoiceRef.current;
-      if (voice.stage === stage) {
-        // Typing while the mic is live: adopt what the student now sees as the
-        // new dictation base (minus the provisional tail) so the next speech
-        // result appends to it instead of reverting the edit.
-        voice.committed =
-          voice.interim && value.endsWith(voice.interim)
-            ? value.slice(0, value.length - voice.interim.length)
-            : value;
-        voice.interim = "";
-      }
+      // Typing while the mic is live: adopt what the student now sees as the
+      // new dictation base so the next speech result appends to it instead of
+      // reverting the edit.
+      if (draftStageRef.current === stage) rebaseDraftDictation(value);
       setDrafts((prev) => ({ ...prev, [stage]: value }));
       scheduleDraftSave(stage);
     },
-    [scheduleDraftSave]
+    [rebaseDraftDictation, scheduleDraftSave]
   );
 
   const handleDraftTitleChange = useCallback(
@@ -576,18 +626,12 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       if (activeDraftId === id) {
         // Drop the mic and any queued save first: the save is an upsert, so a
         // late one would resurrect the draft we are deleting.
-        draftVoiceRef.current = { stage: null, committed: "", interim: "" };
-        draftVoiceSessionRef.current += 1;
-        draftRecognitionRef.current?.stop();
-        draftRecognitionRef.current = null;
-        setListeningStage(null);
+        suppressDraftFlushRef.current = true;
+        finishDraftDictation();
+        suppressDraftFlushRef.current = false;
         if (draftSaveTimer.current) {
           clearTimeout(draftSaveTimer.current);
           draftSaveTimer.current = null;
-        }
-        if (draftVoiceSafetyTimer.current) {
-          clearInterval(draftVoiceSafetyTimer.current);
-          draftVoiceSafetyTimer.current = null;
         }
         lastSavedPayloadRef.current = "";
         setActiveDraftId(null);
@@ -599,7 +643,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       await deleteEssayDraft(id);
       await refreshDraftList();
     },
-    [activeDraftId, refreshDraftList]
+    [activeDraftId, finishDraftDictation, refreshDraftList]
   );
 
   // Append text below whatever is already in the chat input (never overwrites).
@@ -624,73 +668,26 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   // Dictate into a specific draft stage, appending to whatever is already there.
   const toggleDraftVoice = useCallback(
     (stage: DraftStage) => {
-      if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-        alert("您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。");
-        return;
-      }
       if (!activeDraftId) return;
       // Toggle off if this stage is already recording; also covers switching to
       // another stage, since only one recogniser may run at a time.
-      const wasDictating = draftVoiceRef.current.stage;
+      // Stop first so toggling the same stage off is the whole action, and so
+      // switching stages flushes the one we are leaving.
+      const wasDictating = draftStageRef.current;
       finishDraftDictation();
-      recognitionRef.current?.stop();
-      setIsListening(false);
       if (wasDictating === stage) return;
-
-      const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognitionCtor) return;
-      const recognition = new SpeechRecognitionCtor();
-      recognition.lang = "zh-HK";
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      const session = draftVoiceSessionRef.current;
-      // Start from the text that is in the box right now, on a new line.
-      const existing = draftsRef.current[stage];
-      draftVoiceRef.current = {
-        stage,
-        committed: existing && !/\s$/.test(existing) ? `${existing}\n` : existing,
-        interim: "",
-      };
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        if (session !== draftVoiceSessionRef.current) return;
-        const voice = draftVoiceRef.current;
-        let finalChunk = "";
-        let interim = "";
-        // Only walk the results this event changed — anything before
-        // `resultIndex` is already folded into `committed`.
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) finalChunk += result[0].transcript;
-          else interim += result[0].transcript;
-        }
-        if (finalChunk) voice.committed += finalChunk;
-        voice.interim = interim;
-        // Write straight to state without arming the autosave debounce:
-        // `committed` already tracks anything typed by hand, so nothing the
-        // student wrote gets overwritten, and the save happens once the mic
-        // stops (plus the periodic snapshot below).
-        setDrafts((prev) => ({ ...prev, [stage]: voice.committed + voice.interim }));
-      };
-      recognition.onerror = () => {
-        if (session === draftVoiceSessionRef.current) finishDraftDictation();
-      };
-      recognition.onend = () => {
-        if (session === draftVoiceSessionRef.current) finishDraftDictation();
-      };
-      draftRecognitionRef.current = recognition;
-      try {
-        recognition.start();
-      } catch {
-        // Mic busy or blocked — leave the editor in a clean, non-listening state.
-        finishDraftDictation();
+      // Let the hook raise the unsupported-browser alert without pinning a
+      // stage that will never be dictated into.
+      if (!isVoiceSupported) {
+        startDraftDictation();
         return;
       }
-      setListeningStage(stage);
-      // Long dictations still get a periodic save, so a crash or a closed tab
-      // cannot cost several minutes of speech.
-      draftVoiceSafetyTimer.current = setInterval(saveDictationSnapshot, 15000);
+      // Set before starting: the hook reads the stage to pick up the text
+      // already in that box.
+      draftStageRef.current = stage;
+      startDraftDictation();
     },
-    [activeDraftId, finishDraftDictation, saveDictationSnapshot]
+    [activeDraftId, finishDraftDictation, isVoiceSupported, startDraftDictation]
   );
 
   // Leaving the editor (panel closed / back to the list): stop dictation and
@@ -704,6 +701,9 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    // The input is about to be cleared, so a live mic would write the old text
+    // back on its next result.
+    stopListening();
     setMessages([]);
     setInput("");
     setChatFiles([]);
@@ -713,7 +713,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     setPinnedIds([]);
     setShowPinned(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [makeSessionId]);
+  }, [makeSessionId, stopListening]);
 
   useEffect(() => {
     window.addEventListener("dashboard:new-chat", handleNewChat);
@@ -727,6 +727,8 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       if (!detail || detail.topic !== topicId) return;
       abortRef.current?.abort();
       abortRef.current = null;
+      // The input gets cleared below, so drop any dictation in flight.
+      stopListening();
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
       const restored: ChatMsg[] = detail.messages.map((m) => ({
@@ -747,7 +749,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     }
     window.addEventListener("chinese-chat:load", onLoadChat);
     return () => window.removeEventListener("chinese-chat:load", onLoadChat);
-  }, [topicId]);
+  }, [topicId, stopListening]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -787,44 +789,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       container.scrollTop = container.scrollHeight;
     }
   }, [messages]);
-
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
-  function toggleVoice() {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-      alert("您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。");
-      return;
-    }
-    if (isListening) { stopListening(); return; }
-    // Only one recognition at a time — stop any running draft mic first, which
-    // also flushes whatever was dictated into the draft.
-    finishDraftDictation();
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "zh-HK";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setInput(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }
-
-  useEffect(() => {
-    return () => { recognitionRef.current?.stop(); };
-  }, []);
 
   function fileToDataURL(file: File): Promise<string> {
     return new Promise((resolve) => {
@@ -1221,7 +1185,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                   ))}
                 </div>
               )}
-              <Textarea ref={textareaRef} placeholder={mustSelectFirst ? "請先在上方選擇一個模式…" : placeholder} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={mustSelectFirst}
+              <Textarea ref={textareaRef} placeholder={mustSelectFirst ? "請先在上方選擇一個模式…" : placeholder} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={mustSelectFirst}
                 className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60" />
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleChatFileChange} className="hidden" />
               <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
@@ -1232,10 +1196,12 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                   </Button>
                   <Button type="button" size="icon-sm" variant="ghost" onClick={toggleVoice} disabled={mustSelectFirst}
                     className={`rounded-full transition-all ${isListening ? 'text-red-500 hover:bg-red-50' : 'text-[#5a5a5a] hover:bg-[#f4f4f5]'}`}
-                    title={isListening ? '停止語音輸入' : '語音輸入'}>
+                    title={isListening ? '停止語音輸入' : '語音輸入'}
+                    aria-label={isListening ? '停止語音輸入' : '語音輸入'}>
                     {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                   </Button>
-                  {isListening && <span className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>}
+                  {isListening && <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>}
+                  {!isListening && voiceError && <span role="alert" className="text-[11px] font-medium text-red-500">{voiceError.message}</span>}
                 </div>
                 {isLoading ? (
                   <Button type="button" size="icon-sm" variant="default" className="rounded-full bg-[#146ef5] hover:bg-[#0055d4]" onClick={stop}><Square className="size-3" /></Button>
@@ -1370,11 +1336,19 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                           onClick={() => toggleDraftVoice(stage.key)}
                           className={`rounded-full transition-all ${listeningStage === stage.key ? "text-red-500 hover:bg-red-50" : "text-[#5a5a5a] hover:bg-[#f4f4f5]"}`}
                           title={listeningStage === stage.key ? "停止語音輸入" : "語音輸入"}
+                          aria-label={
+                            listeningStage === stage.key
+                              ? `停止語音輸入：${stage.label}`
+                              : `語音輸入：${stage.label}`
+                          }
                         >
                           {listeningStage === stage.key ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                         </Button>
                         {listeningStage === stage.key && (
-                          <span className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                          <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                        )}
+                        {draftVoiceErrorStage === stage.key && draftVoiceError && (
+                          <span role="alert" className="text-[11px] font-medium text-red-500">{draftVoiceError.message}</span>
                         )}
                       </div>
                       <Button

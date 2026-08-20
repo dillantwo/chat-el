@@ -29,6 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useVoiceInput } from "@/lib/use-voice-input";
 import {
   createEnglishChatId,
   upsertEnglishChatHistory,
@@ -186,7 +187,6 @@ function EnglishDashboardContent() {
   // Task 5: the map image the student uploaded (shown in the map panel and sent
   // to the chatbot so its questions relate to the student's own drawing).
   const [task5Map, setTask5Map] = useState<ChatImage | null>(null);
-  const [isListening, setIsListening] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
   const [currentChatId, setCurrentChatId] = useState(() => createEnglishChatId());
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -201,7 +201,6 @@ function EnglishDashboardContent() {
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // When a chat is loaded from history we don't want the auto-save effect to
   // re-save it (which would bump updatedAt and re-sort the list to the top).
@@ -238,15 +237,35 @@ function EnglishDashboardContent() {
     }
   }, [messages]);
 
-  useEffect(() => {
-    return () => { recognitionRef.current?.stop(); };
-  }, []);
-
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
     setStatus("idle");
   }, []);
+
+  // Declared above the reset/load handlers below, which need to stop dictation
+  // before they clear the input.
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseDictation,
+  } = useVoiceInput({
+    lang: "en-US",
+    getBaseText: () => input,
+    onTranscript: setInput,
+  });
+
+  // Typing while the mic is live: hand the edit to the recogniser as the new
+  // baseline, otherwise the next result would revert it.
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (isListening) rebaseDictation(value);
+    },
+    [isListening, rebaseDictation]
+  );
 
   const handleCopy = useCallback(async (id: string, text: string) => {
     try {
@@ -277,6 +296,9 @@ function EnglishDashboardContent() {
   // the fixed opening message; with null it clears the task selection too.
   // Shared by the task pills and "New Chat".
   const resetConversationForTask = useCallback((id: number | null) => {
+    // The input is about to be cleared, so a live mic would write the old text
+    // back on its next result.
+    stopListening();
     setInput("");
     setChatFiles([]);
     setTask5Map(null);
@@ -308,7 +330,7 @@ function EnglishDashboardContent() {
     setMessages([
       { id: `a-${Date.now()}`, role: "assistant", text: buildOpeningMessage(id, pair) },
     ]);
-  }, []);
+  }, [stopListening]);
 
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
@@ -335,6 +357,8 @@ function EnglishDashboardContent() {
       if (!detail || detail.topic !== TOPIC_ID) return;
       abortRef.current?.abort();
       abortRef.current = null;
+      // The input gets cleared below, so drop any dictation in flight.
+      stopListening();
       // Loading an existing chat must not trigger a re-save.
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
@@ -372,7 +396,7 @@ function EnglishDashboardContent() {
     }
     window.addEventListener("english-chat:load", onLoadChat);
     return () => window.removeEventListener("english-chat:load", onLoadChat);
-  }, []);
+  }, [stopListening]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -404,37 +428,6 @@ function EnglishDashboardContent() {
       updatedAt: new Date().toISOString(),
     });
   }, [currentChatId, messages, status, selectedTask]);
-
-  function stopListening() {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }
-
-  function toggleVoice() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('Your browser does not support voice input. Please use Chrome or Edge.');
-      return;
-    }
-    if (isListening) { stopListening(); return; }
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setInput(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }
 
   function fileToDataURL(file: File): Promise<string> {
     return new Promise((resolve) => {
@@ -544,7 +537,7 @@ function EnglishDashboardContent() {
   function startTask(id: number) {
     abortRef.current?.abort();
     abortRef.current = null;
-    if (isListening) stopListening();
+    // resetConversationForTask stops dictation itself.
     resetConversationForTask(id);
   }
 
@@ -963,7 +956,7 @@ function EnglishDashboardContent() {
                   ref={textareaRef}
                   placeholder="Type a message, paste images, or use voice input."
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
                   className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0"
@@ -999,11 +992,22 @@ function EnglishDashboardContent() {
                         isListening ? 'text-red-500 hover:bg-red-50' : 'text-[#5a5a5a] hover:bg-[#f4f4f5]'
                       }`}
                       title={isListening ? 'Stop voice input' : 'Voice input'}
+                      aria-label={isListening ? 'Stop voice input' : 'Voice input'}
                     >
                       {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                     </Button>
                     {isListening && (
-                      <span className="text-[11px] font-medium text-red-500 animate-pulse">Listening…</span>
+                      <span
+                        aria-live="polite"
+                        className="text-[11px] font-medium text-red-500 animate-pulse"
+                      >
+                        Listening…
+                      </span>
+                    )}
+                    {!isListening && voiceError && (
+                      <span role="alert" className="text-[11px] font-medium text-red-500">
+                        {voiceError.message}
+                      </span>
                     )}
                   </div>
                   {isLoading ? (

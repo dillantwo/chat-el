@@ -9,8 +9,10 @@ import rehypeKatex from "rehype-katex";
 import { ArrowUp, ImagePlus, MessageSquare, Mic, MicOff, PanelRight, Square, X } from "lucide-react";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useVoiceInput } from "@/lib/use-voice-input";
 import { getMathChatHistoryItem, restoreUiMessages, serializeUiMessages, upsertMathChatHistory } from "@/lib/math-chat-history";
 
 type Clock24HoursState = {
@@ -89,7 +91,6 @@ export function ClockChatPanel({
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
   const [clockState, setClockState] = useState<ClockToolState | null>(null);
-  const [isListening, setIsListening] = useState(false);
   const stateRef = useRef<ClockToolState | null>(null);
   const messageHistoryRef = useRef<Record<ClockToolKey, UIMessage[]>>({
     "clock-24hrs": [],
@@ -104,7 +105,30 @@ export function ClockChatPanel({
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const {
+    isListening,
+    error: voiceError,
+    stop: stopListening,
+    toggle: toggleVoice,
+    rebase: rebaseDictation,
+  } = useVoiceInput({
+    lang: "zh-HK",
+    // Chinese doesn't separate words with spaces.
+    separator: "",
+    getBaseText: () => input,
+    onTranscript: setInput,
+  });
+
+  // Typing while the mic is live: hand the edit to the recogniser as the new
+  // baseline, otherwise the next result would revert it.
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (isListening) rebaseDictation(value);
+    },
+    [isListening, rebaseDictation]
+  );
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -160,6 +184,9 @@ export function ClockChatPanel({
       const saved = await getMathChatHistoryItem(sessionId);
       if (cancelled) return;
       setMessages(saved ? restoreUiMessages(saved.messages) : []);
+      // The input is about to be cleared, so a live mic would write the old text
+      // back on its next result.
+      stopListening();
       setInput("");
       setChatFiles([]);
       if (fileInputRef.current) {
@@ -170,7 +197,7 @@ export function ClockChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, setMessages]);
+  }, [sessionId, setMessages, stopListening]);
 
   useEffect(() => {
     messageHistoryRef.current[activeToolRef.current] = messages;
@@ -220,53 +247,10 @@ export function ClockChatPanel({
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-    if (isListening) {
-      stopListening();
-    }
-  }, [isListening, messages, selectedTool, setMessages]);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
-
-  function stopListening() {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }
-
-  function toggleVoice() {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-      alert("您的瀏覽器不支援語音輸入，請使用 Chrome 或 Edge 瀏覽器。");
-      return;
-    }
-
-    if (isListening) {
-      stopListening();
-      return;
-    }
-
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "zh-HK";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = "";
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0].transcript;
-      }
-      setInput(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }
+    // Switching tools clears the input, so any dictation in flight would be
+    // writing into a box the student is no longer looking at.
+    stopListening();
+  }, [messages, selectedTool, setMessages, stopListening]);
 
   function handleChatFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     if (event.target.files) {
@@ -482,9 +466,9 @@ export function ClockChatPanel({
               </div>
             )}
 
-            <textarea
+            <Textarea
               value={input}
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) => handleInputChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -493,7 +477,6 @@ export function ClockChatPanel({
               }}
               onPaste={handlePaste}
               placeholder="繼續提問...（可直接粘貼圖片）"
-              rows={2}
               className="min-h-[58px] max-h-[160px] w-full resize-none overflow-y-auto rounded-[8px] border-0 bg-transparent px-3 pt-3 pb-10 text-sm outline-none focus-visible:ring-0"
             />
 
@@ -529,6 +512,7 @@ export function ClockChatPanel({
                       : "border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]"
                   }`}
                   title={isListening ? "停止語音輸入" : "語音輸入"}
+                  aria-label={isListening ? "停止語音輸入" : "語音輸入"}
                 >
                   {isListening ? (
                     <MicOff className="size-3.5" />
@@ -537,7 +521,14 @@ export function ClockChatPanel({
                   )}
                 </Button>
                 {isListening && (
-                  <span className="animate-pulse text-[11px] font-medium text-red-500">聆聽中…</span>
+                  <span aria-live="polite" className="animate-pulse text-[11px] font-medium text-red-500">
+                    聆聽中…
+                  </span>
+                )}
+                {!isListening && voiceError && (
+                  <span role="alert" className="text-[11px] font-medium text-red-500">
+                    {voiceError.message}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1">
