@@ -289,10 +289,33 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   const [draftsView, setDraftsView] = useState<"list" | "editor">("list");
   const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Autosave reads the draft through refs, so a queued save always writes the
+  // newest content/title instead of the values captured when it was armed.
+  const draftsRef = useRef<DraftState>(EMPTY_DRAFTS);
+  const draftTitleRef = useRef("");
+  const activeDraftIdRef = useRef<string | null>(null);
+  draftsRef.current = drafts;
+  draftTitleRef.current = draftTitle;
+  activeDraftIdRef.current = activeDraftId;
+  // Skip the round-trip when nothing changed, and ignore the reply of a save
+  // that has been superseded so a slow POST cannot clobber a newer one.
+  const lastSavedPayloadRef = useRef("");
+  const saveSeqRef = useRef(0);
   // Per-stage voice input for the drafts panel (independent of the chat mic).
   const [listeningStage, setListeningStage] = useState<DraftStage | null>(null);
   const draftRecognitionRef = useRef<SpeechRecognition | null>(null);
-  const draftBaseTextRef = useRef<string>("");
+  // Live dictation buffer. `committed` is everything settled (the text that was
+  // already in the box plus finalised speech), `interim` is the provisional
+  // tail the recogniser is still revising.
+  const draftVoiceRef = useRef<{ stage: DraftStage | null; committed: string; interim: string }>({
+    stage: null,
+    committed: "",
+    interim: "",
+  });
+  // Bumped per dictation session so late events from a stopped recogniser are
+  // ignored instead of clobbering the session that replaced it.
+  const draftVoiceSessionRef = useRef(0);
+  const draftVoiceSafetyTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -381,12 +404,16 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     void refreshDraftList();
   }, [enableDrafts, showDrafts, refreshDraftList]);
 
-  // Clean up the pending autosave timer on unmount.
-  useEffect(
-    () => () => {
-      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-    },
-    []
+  const buildDraftPayload = useCallback(
+    (id: string, state: DraftState, title: string) => ({
+      id,
+      topic: topicId,
+      title: title.trim() || deriveDraftTitle(state, "未命名作文稿"),
+      first: state.first,
+      revised: state.revised,
+      final: state.final,
+    }),
+    [topicId, deriveDraftTitle]
   );
 
   const saveActiveDraft = useCallback(
@@ -396,86 +423,181 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
         setDraftSaveState("idle");
         return;
       }
+      const payload = buildDraftPayload(id, state, title);
+      const serialized = JSON.stringify(payload);
+      if (serialized === lastSavedPayloadRef.current) return;
+      lastSavedPayloadRef.current = serialized;
+      const seq = ++saveSeqRef.current;
       setDraftSaveState("saving");
-      const ok = await upsertEssayDraft({
-        id,
-        topic: topicId,
-        title: title.trim() || deriveDraftTitle(state, "未命名作文稿"),
-        first: state.first,
-        revised: state.revised,
-        final: state.final,
-      });
-      setDraftSaveState(ok ? "saved" : "idle");
-      if (ok) {
-        void refreshDraftList();
-        setTimeout(() => setDraftSaveState((p) => (p === "saved" ? "idle" : p)), 1500);
+      const ok = await upsertEssayDraft(payload);
+      // A newer save started while this one was in flight — it owns the UI now.
+      if (seq !== saveSeqRef.current) return;
+      if (!ok) {
+        // Let the same content be retried on the next edit.
+        lastSavedPayloadRef.current = "";
+        setDraftSaveState("idle");
+        return;
       }
+      setDraftSaveState("saved");
+      void refreshDraftList();
+      setTimeout(() => setDraftSaveState((p) => (p === "saved" ? "idle" : p)), 1500);
     },
-    [topicId, deriveDraftTitle, refreshDraftList]
+    [buildDraftPayload, refreshDraftList]
   );
 
+  // Save immediately from the newest state, cancelling any queued save. Used
+  // whenever we are about to lose the editor (switching draft, closing the
+  // panel, unmount) or when dictation stops.
+  const flushDraftSave = useCallback(() => {
+    if (draftSaveTimer.current) {
+      clearTimeout(draftSaveTimer.current);
+      draftSaveTimer.current = null;
+    }
+    const id = activeDraftIdRef.current;
+    if (!id) return;
+    void saveActiveDraft(id, draftsRef.current, draftTitleRef.current);
+  }, [saveActiveDraft]);
+
+  // Tear down a dictation session and persist what was just spoken.
+  const finishDraftDictation = useCallback(() => {
+    if (draftVoiceSafetyTimer.current) {
+      clearInterval(draftVoiceSafetyTimer.current);
+      draftVoiceSafetyTimer.current = null;
+    }
+    const wasDictating = !!draftVoiceRef.current.stage;
+    draftVoiceRef.current = { stage: null, committed: "", interim: "" };
+    draftVoiceSessionRef.current += 1;
+    draftRecognitionRef.current?.stop();
+    draftRecognitionRef.current = null;
+    setListeningStage(null);
+    if (wasDictating) flushDraftSave();
+  }, [flushDraftSave]);
+
+  // Periodic save during a long dictation. It writes `committed` rather than the
+  // on-screen text so a half-recognised word never lands in the database.
+  const saveDictationSnapshot = useCallback(() => {
+    const id = activeDraftIdRef.current;
+    const { stage, committed } = draftVoiceRef.current;
+    if (!id || !stage) return;
+    void saveActiveDraft(id, { ...draftsRef.current, [stage]: committed }, draftTitleRef.current);
+  }, [saveActiveDraft]);
+
   const scheduleDraftSave = useCallback(
-    (id: string, state: DraftState, title: string) => {
+    (stage?: DraftStage) => {
+      // While the mic is live, interim results rewrite that textarea several
+      // times a second. Debouncing on them either spams the API or races with
+      // the dictation buffer, so the dictated stage is left to the periodic
+      // snapshot and the flush that runs when the mic stops.
+      if (stage && draftVoiceRef.current.stage === stage) return;
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-      draftSaveTimer.current = setTimeout(() => void saveActiveDraft(id, state, title), 800);
+      draftSaveTimer.current = setTimeout(() => {
+        draftSaveTimer.current = null;
+        const id = activeDraftIdRef.current;
+        if (!id) return;
+        void saveActiveDraft(id, draftsRef.current, draftTitleRef.current);
+      }, 800);
     },
     [saveActiveDraft]
   );
 
+  // Flush a pending save on unmount instead of dropping it.
+  const flushOnUnmountRef = useRef(flushDraftSave);
+  flushOnUnmountRef.current = flushDraftSave;
+  useEffect(
+    () => () => {
+      if (draftVoiceSafetyTimer.current) clearInterval(draftVoiceSafetyTimer.current);
+      flushOnUnmountRef.current();
+    },
+    []
+  );
+
   const startNewDraft = useCallback(() => {
-    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-    draftRecognitionRef.current?.stop();
-    setListeningStage(null);
+    // Persist the draft we are leaving rather than discarding its queued save.
+    finishDraftDictation();
+    flushDraftSave();
+    lastSavedPayloadRef.current = "";
     setActiveDraftId(createEssayDraftId());
     setDrafts(EMPTY_DRAFTS);
     setDraftTitle("");
     setDraftSaveState("idle");
     setDraftsView("editor");
-  }, []);
+  }, [finishDraftDictation, flushDraftSave]);
 
-  const openDraft = useCallback(async (id: string) => {
-    const item = await getEssayDraft(id);
-    if (!item) return;
-    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-    draftRecognitionRef.current?.stop();
-    setListeningStage(null);
-    setActiveDraftId(item.id);
-    setDrafts({ first: item.first, revised: item.revised, final: item.final });
-    setDraftTitle(item.title === "未命名作文稿" ? "" : item.title);
-    setDraftSaveState("idle");
-    setDraftsView("editor");
-  }, []);
+  const openDraft = useCallback(
+    async (id: string) => {
+      finishDraftDictation();
+      flushDraftSave();
+      const item = await getEssayDraft(id);
+      if (!item) return;
+      const loaded: DraftState = { first: item.first, revised: item.revised, final: item.final };
+      const title = item.title === "未命名作文稿" ? "" : item.title;
+      // Remember what we loaded so a flush cannot re-save identical content and
+      // needlessly bump updatedAt (which reorders the draft list).
+      lastSavedPayloadRef.current = JSON.stringify(buildDraftPayload(item.id, loaded, title));
+      setActiveDraftId(item.id);
+      setDrafts(loaded);
+      setDraftTitle(title);
+      setDraftSaveState("idle");
+      setDraftsView("editor");
+    },
+    [buildDraftPayload, finishDraftDictation, flushDraftSave]
+  );
 
   const handleDraftChange = useCallback(
     (stage: DraftStage, value: string) => {
-      if (!activeDraftId) return;
-      setDrafts((prev) => {
-        const next = { ...prev, [stage]: value };
-        scheduleDraftSave(activeDraftId, next, draftTitle);
-        return next;
-      });
+      if (!activeDraftIdRef.current) return;
+      const voice = draftVoiceRef.current;
+      if (voice.stage === stage) {
+        // Typing while the mic is live: adopt what the student now sees as the
+        // new dictation base (minus the provisional tail) so the next speech
+        // result appends to it instead of reverting the edit.
+        voice.committed =
+          voice.interim && value.endsWith(voice.interim)
+            ? value.slice(0, value.length - voice.interim.length)
+            : value;
+        voice.interim = "";
+      }
+      setDrafts((prev) => ({ ...prev, [stage]: value }));
+      scheduleDraftSave(stage);
     },
-    [activeDraftId, draftTitle, scheduleDraftSave]
+    [scheduleDraftSave]
   );
 
   const handleDraftTitleChange = useCallback(
     (value: string) => {
       setDraftTitle(value);
-      if (activeDraftId) scheduleDraftSave(activeDraftId, drafts, value);
+      scheduleDraftSave();
     },
-    [activeDraftId, drafts, scheduleDraftSave]
+    [scheduleDraftSave]
   );
 
   const handleDeleteDraft = useCallback(
     async (id: string) => {
-      await deleteEssayDraft(id);
-      await refreshDraftList();
       if (activeDraftId === id) {
+        // Drop the mic and any queued save first: the save is an upsert, so a
+        // late one would resurrect the draft we are deleting.
+        draftVoiceRef.current = { stage: null, committed: "", interim: "" };
+        draftVoiceSessionRef.current += 1;
+        draftRecognitionRef.current?.stop();
+        draftRecognitionRef.current = null;
+        setListeningStage(null);
+        if (draftSaveTimer.current) {
+          clearTimeout(draftSaveTimer.current);
+          draftSaveTimer.current = null;
+        }
+        if (draftVoiceSafetyTimer.current) {
+          clearInterval(draftVoiceSafetyTimer.current);
+          draftVoiceSafetyTimer.current = null;
+        }
+        lastSavedPayloadRef.current = "";
         setActiveDraftId(null);
         setDrafts(EMPTY_DRAFTS);
         setDraftTitle("");
+        setDraftSaveState("idle");
         setDraftsView("list");
       }
+      await deleteEssayDraft(id);
+      await refreshDraftList();
     },
     [activeDraftId, refreshDraftList]
   );
@@ -499,12 +621,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     [drafts]
   );
 
-  const stopDraftListening = useCallback(() => {
-    draftRecognitionRef.current?.stop();
-    draftRecognitionRef.current = null;
-    setListeningStage(null);
-  }, []);
-
   // Dictate into a specific draft stage, appending to whatever is already there.
   const toggleDraftVoice = useCallback(
     (stage: DraftStage) => {
@@ -513,15 +629,13 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
         return;
       }
       if (!activeDraftId) return;
-      // Toggle off if this stage is already recording.
-      if (listeningStage === stage) {
-        stopDraftListening();
-        return;
-      }
-      // Only one recognition at a time — stop any other running mic.
-      stopDraftListening();
+      // Toggle off if this stage is already recording; also covers switching to
+      // another stage, since only one recogniser may run at a time.
+      const wasDictating = draftVoiceRef.current.stage;
+      finishDraftDictation();
       recognitionRef.current?.stop();
       setIsListening(false);
+      if (wasDictating === stage) return;
 
       const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognitionCtor) return;
@@ -529,35 +643,63 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       recognition.lang = "zh-HK";
       recognition.continuous = true;
       recognition.interimResults = true;
-      // Preserve existing text; append a newline separator when needed.
-      const existing = drafts[stage];
-      draftBaseTextRef.current =
-        existing && !/\s$/.test(existing) ? `${existing}\n` : existing;
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let transcript = "";
-        for (let i = 0; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        handleDraftChange(stage, `${draftBaseTextRef.current}${transcript}`);
+      const session = draftVoiceSessionRef.current;
+      // Start from the text that is in the box right now, on a new line.
+      const existing = draftsRef.current[stage];
+      draftVoiceRef.current = {
+        stage,
+        committed: existing && !/\s$/.test(existing) ? `${existing}\n` : existing,
+        interim: "",
       };
-      recognition.onerror = () => setListeningStage(null);
-      recognition.onend = () => setListeningStage(null);
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        if (session !== draftVoiceSessionRef.current) return;
+        const voice = draftVoiceRef.current;
+        let finalChunk = "";
+        let interim = "";
+        // Only walk the results this event changed — anything before
+        // `resultIndex` is already folded into `committed`.
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) finalChunk += result[0].transcript;
+          else interim += result[0].transcript;
+        }
+        if (finalChunk) voice.committed += finalChunk;
+        voice.interim = interim;
+        // Write straight to state without arming the autosave debounce:
+        // `committed` already tracks anything typed by hand, so nothing the
+        // student wrote gets overwritten, and the save happens once the mic
+        // stops (plus the periodic snapshot below).
+        setDrafts((prev) => ({ ...prev, [stage]: voice.committed + voice.interim }));
+      };
+      recognition.onerror = () => {
+        if (session === draftVoiceSessionRef.current) finishDraftDictation();
+      };
+      recognition.onend = () => {
+        if (session === draftVoiceSessionRef.current) finishDraftDictation();
+      };
       draftRecognitionRef.current = recognition;
-      recognition.start();
+      try {
+        recognition.start();
+      } catch {
+        // Mic busy or blocked — leave the editor in a clean, non-listening state.
+        finishDraftDictation();
+        return;
+      }
       setListeningStage(stage);
+      // Long dictations still get a periodic save, so a crash or a closed tab
+      // cannot cost several minutes of speech.
+      draftVoiceSafetyTimer.current = setInterval(saveDictationSnapshot, 15000);
     },
-    [activeDraftId, listeningStage, drafts, handleDraftChange, stopDraftListening]
+    [activeDraftId, finishDraftDictation, saveDictationSnapshot]
   );
 
-  // Stop draft dictation on unmount.
-  useEffect(() => () => { draftRecognitionRef.current?.stop(); }, []);
-
-  // Stop draft dictation whenever we leave the editor (panel closed / list view).
+  // Leaving the editor (panel closed / back to the list): stop dictation and
+  // persist the last edits instead of dropping the queued save.
   useEffect(() => {
-    if (!showDrafts || draftsView !== "editor") {
-      draftRecognitionRef.current?.stop();
-    }
-  }, [showDrafts, draftsView]);
+    if (showDrafts && draftsView === "editor") return;
+    finishDraftDictation();
+    flushDraftSave();
+  }, [showDrafts, draftsView, finishDraftDictation, flushDraftSave]);
 
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
@@ -657,9 +799,9 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       return;
     }
     if (isListening) { stopListening(); return; }
-    // Only one recognition at a time — stop any running draft mic first.
-    draftRecognitionRef.current?.stop();
-    setListeningStage(null);
+    // Only one recognition at a time — stop any running draft mic first, which
+    // also flushes whatever was dictated into the draft.
+    finishDraftDictation();
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionCtor) return;
     const recognition = new SpeechRecognitionCtor();
