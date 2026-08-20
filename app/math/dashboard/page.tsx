@@ -113,9 +113,15 @@ function GeneratingCodeFeed({ code, className }: { code: string; className?: str
  * sandboxed without allow-same-origin, so the parent cannot read its DOM — this
  * script runs *inside* the iframe and talks to the parent purely via
  * postMessage. When the parent enables select mode, hovering highlights
- * elements and a click tags the chosen element with `data-ai-target`, serializes
- * the full document (minus the inspector's own nodes) and posts it back so the
- * parent can send it to the AI for a targeted edit.
+ * elements and a click posts back a *structural path* to the chosen element
+ * (child indices from <html>, plus tag names for validation) and a human label.
+ *
+ * It deliberately does NOT serialize the live document. The live DOM is the
+ * *hydrated* tree: a tool that builds 8 balloons in JS has those 8 balloons in
+ * the DOM **and** still has the script that creates them. Feeding that snapshot
+ * back to the model as "current HTML" made it return static-8 + generator-script,
+ * which then ran again on reload and produced 16. The parent instead re-applies
+ * the selection onto the pristine model output (see markTargetInPristineHtml).
  */
 const INSPECTOR_SCRIPT = `<script data-mathai-inspector>
 (function(){
@@ -135,11 +141,21 @@ const INSPECTOR_SCRIPT = `<script data-mathai-inspector>
     var txt = (el.textContent||'').trim().replace(/\\s+/g,' ').slice(0,24);
     return '<'+tag+'>'+id+cls+(txt?(' "'+txt+'"'):'');
   }
-  function serialize(){
-    var clone = document.documentElement.cloneNode(true);
-    clone.querySelectorAll('[data-mathai-inspector]').forEach(function(n){ n.remove(); });
-    clone.querySelectorAll('.__mathai_hover').forEach(function(n){ n.classList.remove('__mathai_hover'); });
-    return '<!doctype html>\\n' + clone.outerHTML;
+  /* Structural route to the element, expressed as child indices relative to
+     <html>. The parent replays it against the pristine HTML string. The
+     inspector's own nodes are always appended last (style -> end of <head>,
+     scripts -> end of <body>), so they never shift these indices. */
+  function pathOf(el){
+    var path = [], node = el;
+    while (node && node.parentElement) {
+      var parent = node.parentElement;
+      path.unshift({
+        i: Array.prototype.indexOf.call(parent.children, node),
+        tag: node.tagName ? node.tagName.toLowerCase() : ''
+      });
+      node = parent;
+    }
+    return path;
   }
   function setEnabled(v){
     enabled = v;
@@ -154,12 +170,11 @@ const INSPECTOR_SCRIPT = `<script data-mathai-inspector>
     e.preventDefault(); e.stopPropagation();
     var el = e.target;
     if(!el || el===document.documentElement || el===document.body) return;
-    document.querySelectorAll('[data-ai-target]').forEach(function(n){ n.removeAttribute('data-ai-target'); });
-    el.setAttribute('data-ai-target','1');
     var label = describe(el);
+    var path = pathOf(el);
     clearHover();
     setEnabled(false);
-    parent.postMessage({ source:'math-ai-inspector-tool', type:'selected', markedHtml: serialize(), label: label }, '*');
+    parent.postMessage({ source:'math-ai-inspector-tool', type:'selected', path: path, label: label }, '*');
   }, true);
   window.addEventListener('message', function(e){
     var d = e.data;
@@ -239,6 +254,63 @@ const FULLSCREEN_SHIM = `<script data-mathai-fsshim>
 </script>`;
 
 /** Inject the inspector + fullscreen shim just before </body> (or </html>) for preview. */
+/** One hop of the structural route the iframe inspector posts back. */
+interface InspectorPathStep {
+  i: number;
+  tag: string;
+}
+
+/**
+ * Replay the teacher's click onto the *pristine* tool HTML and tag the matching
+ * element with `data-ai-target`.
+ *
+ * The clicked node may not exist in the pristine source at all — interactive
+ * tools commonly build their content in JavaScript. In that case the walk stops
+ * at the deepest ancestor that does exist (usually the container the script
+ * fills) and `exact` comes back false, so the caller can tell the model to edit
+ * the *generating code* rather than bake the rendered nodes in as static markup.
+ *
+ * Returns null when the selection cannot be narrowed to a real element, which
+ * means the caller should fall back to a normal (non-targeted) edit.
+ */
+function markTargetInPristineHtml(
+  pristineHtml: string,
+  path: InspectorPathStep[]
+): { markedHtml: string; exact: boolean } | null {
+  if (typeof DOMParser === "undefined" || path.length === 0) return null;
+
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(pristineHtml, "text/html");
+  } catch {
+    return null;
+  }
+
+  const root = doc.documentElement;
+  if (!root) return null;
+
+  let node: Element = root;
+  let exact = true;
+  for (const step of path) {
+    const child = node.children[step.i];
+    // A missing child, or a tag mismatch, means the live tree diverged from the
+    // source here (script-inserted nodes). Stop and mark what we have.
+    if (!child || (step.tag && child.tagName.toLowerCase() !== step.tag)) {
+      exact = false;
+      break;
+    }
+    node = child;
+  }
+
+  // <html>/<head>/<body> are the whole document — marking them is not targeted.
+  if (node === root || node === doc.body || node === doc.head) return null;
+
+  doc.querySelectorAll("[data-ai-target]").forEach((n) => n.removeAttribute("data-ai-target"));
+  node.setAttribute("data-ai-target", "1");
+
+  return { markedHtml: `<!doctype html>\n${root.outerHTML}`, exact };
+}
+
 function injectInspector(html: string | undefined): string | undefined {
   if (!html) return undefined;
   const scripts = `${FULLSCREEN_SHIM}${INSPECTOR_SCRIPT}`;
@@ -388,7 +460,13 @@ function MathDashboardContent() {
   /** The tool name as soon as the model emits it, before the HTML is finished. */
   const [genTitle, setGenTitle] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
-  const [pendingSelection, setPendingSelection] = useState<{ markedHtml: string; label: string } | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<{
+    /** Pristine tool HTML with the target tagged, or null if it could not be pinned down. */
+    markedHtml: string | null;
+    label: string;
+    /** True when the clicked node is created by the tool's JavaScript, not by its markup. */
+    dynamic: boolean;
+  } | null>(null);
   const aiToolIframeRef = useRef<HTMLIFrameElement>(null);
   const [isToolFullscreen, setIsToolFullscreen] = useState(false);
   const [isExtractingParams, setIsExtractingParams] = useState(false);
@@ -1126,7 +1204,7 @@ function MathDashboardContent() {
       const d = e.data as {
         source?: string;
         type?: string;
-        markedHtml?: string;
+        path?: InspectorPathStep[];
         label?: string;
         enabled?: boolean;
       };
@@ -1139,8 +1217,21 @@ function MathDashboardContent() {
         return;
       }
       if (d?.source !== "math-ai-inspector-tool") return;
-      if (d.type === "selected" && d.markedHtml) {
-        setPendingSelection({ markedHtml: d.markedHtml, label: d.label || "選取的元素" });
+      if (d.type === "selected" && Array.isArray(d.path)) {
+        // Mark the selection on the pristine source, not on the iframe's
+        // hydrated DOM — see markTargetInPristineHtml. Use the sanitised copy
+        // because that is exactly the document the iframe parsed, so the child
+        // indices line up.
+        const base = sanitizeAiToolHtml(aiToolHtml);
+        const marked = base ? markTargetInPristineHtml(base, d.path) : null;
+        // When the target cannot be pinned down we still keep the label: the
+        // edit degrades to a whole-tool edit that mentions what was clicked,
+        // rather than silently dropping the teacher's click.
+        setPendingSelection({
+          markedHtml: marked?.markedHtml ?? null,
+          label: d.label || "選取的元素",
+          dynamic: marked ? !marked.exact : true,
+        });
         setSelectMode(false);
       } else if (d.type === "mode") {
         setSelectMode(!!d.enabled);
@@ -1148,7 +1239,9 @@ function MathDashboardContent() {
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+    // aiToolHtml is read when resolving a selection, so the listener has to be
+    // re-bound whenever the tool changes.
+  }, [aiToolHtml]);
 
   // Allow leaving pseudo-fullscreen with the Escape key, and keep the iframe's
   // own fullscreen button label in sync by notifying it that we exited.
@@ -1194,6 +1287,8 @@ function MathDashboardContent() {
     currentHtml?: string | null;
     currentTitle?: string | null;
     targetedEdit?: boolean;
+    targetLabel?: string;
+    targetIsDynamic?: boolean;
   }) {
     setIsGeneratingAiTool(true);
     setGenCode("");
@@ -1209,6 +1304,8 @@ function MathDashboardContent() {
           currentHtml: options.currentHtml,
           currentTitle: options.currentTitle,
           targetedEdit: options.targetedEdit,
+          targetLabel: options.targetLabel,
+          targetIsDynamic: options.targetIsDynamic,
         }),
       });
 
@@ -1362,7 +1459,9 @@ function MathDashboardContent() {
         imageData,
         currentHtml: pendingSelection?.markedHtml ?? aiToolHtml,
         currentTitle: aiToolTitle,
-        targetedEdit: !!pendingSelection,
+        targetedEdit: !!pendingSelection?.markedHtml,
+        targetLabel: pendingSelection?.label,
+        targetIsDynamic: pendingSelection?.dynamic,
       });
     }
 
@@ -2108,6 +2207,9 @@ function MathDashboardContent() {
                 <MousePointerClick className="size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate font-medium" title={pendingSelection.label}>
                   將修改：{pendingSelection.label}
+                  {pendingSelection.dynamic && (
+                    <span className="ml-1 font-normal text-[#146ef5]/70">（由程式生成，會改生成邏輯）</span>
+                  )}
                 </span>
                 <button
                   type="button"

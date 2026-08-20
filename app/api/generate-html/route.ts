@@ -122,13 +122,16 @@ export async function POST(req: Request) {
     const denied = await requireTopicApi("math", "ai-problem-solving");
     if (denied) return denied;
 
-    const { prompt, imageData, currentHtml, currentTitle, targetedEdit } = (await req.json()) as {
-      prompt?: string;
-      imageData?: string;
-      currentHtml?: string;
-      currentTitle?: string;
-      targetedEdit?: boolean;
-    };
+    const { prompt, imageData, currentHtml, currentTitle, targetedEdit, targetLabel, targetIsDynamic } =
+      (await req.json()) as {
+        prompt?: string;
+        imageData?: string;
+        currentHtml?: string;
+        currentTitle?: string;
+        targetedEdit?: boolean;
+        targetLabel?: string;
+        targetIsDynamic?: boolean;
+      };
 
     /**
      * Build the user instruction. When `targetedEdit` is set, the supplied
@@ -136,15 +139,27 @@ export async function POST(req: Request) {
      * attribute (added client-side when the teacher clicks an element). We ask
      * the model to confine its changes to that element so unrelated parts of a
      * large tool stay byte-for-byte stable.
+     *
+     * `targetIsDynamic` means the teacher clicked a node that the tool's own
+     * JavaScript created, so it is absent from the source; the marked element is
+     * its nearest static container. Telling the model this is what stops it from
+     * pasting the rendered nodes in as static markup *next to* the code that
+     * generates them, which would double the count on the next render.
      */
     const makeUserText = (p: string) => {
       if (!currentHtml) {
         return `請根據以下要求生成一個可直接執行的互動數學 HTML 工具：${p}`;
       }
       if (targetedEdit) {
-        return `請只修改下面 HTML 中被標記了 data-ai-target 屬性的那一個元素（以及為了滿足要求而必須連帶調整的最小範圍），其餘所有內容務必保持原樣、不要重做。修改要求：${p}。完成後請在輸出中移除 data-ai-target 這個臨時標記屬性。`;
+        const dynamicNote = targetIsDynamic
+          ? `\n\n重要：老師實際點擊的是${targetLabel ? `「${targetLabel}」` : "一個元素"}，但這個節點在原始 HTML 中並不存在——它是由本工具的 JavaScript 在執行時動態生成的。data-ai-target 標記的只是它最接近的靜態容器。請找出負責生成它的 JavaScript（迴圈、模板或 render 函式）並在那裏修改，容器本身在 HTML 中要維持原本的空白狀態。`
+          : "";
+        return `請只修改下面 HTML 中被標記了 data-ai-target 屬性的那一個元素（以及為了滿足要求而必須連帶調整的最小範圍），其餘所有內容務必保持原樣、不要重做。${dynamicNote}\n\n絕對禁止複製既有內容：不可以把由 JavaScript 生成的節點同時寫成靜態 HTML，否則載入後靜態的那份加上腳本再生成的那份會讓數量變成兩倍（例如 8 個變 16 個）。同一批元素只能有「靜態 HTML」或「JavaScript 生成」其中一種來源。\n\n修改要求：${p}。完成後請在輸出中移除 data-ai-target 這個臨時標記屬性。`;
       }
-      return `請根據以下修改要求更新這個互動數學 HTML 工具：${p}`;
+      const clickNote = targetLabel
+        ? `\n\n老師是在畫面上點選了「${targetLabel}」才提出這個要求，請把改動集中在該部分相關的邏輯上，其餘內容保持原樣。`
+        : "";
+      return `請根據以下修改要求更新這個互動數學 HTML 工具：${p}${clickNote}\n\n絕對禁止複製既有內容：同一批重複性元素只能有「靜態 HTML」或「JavaScript 生成」其中一種來源，不可以兩者並存，否則數量會變成兩倍。`;
     };
 
     if (!prompt && !imageData) {
@@ -236,6 +251,7 @@ C. 標題要跟老師要的東西一致：做靜態圖就不要叫「互動圖�
 7. 不要輸出 Markdown code fences。
 8. 如果提供了目前 HTML，代表這次是修改既有工具，不要無故重做成完全不同的工具；優先保留原本可用的互動結構，再按要求調整。
 8b. 若 HTML 中有某個元素帶有 data-ai-target 屬性，代表老師只想修改「那一個元素」相關的部分，請把改動集中在它身上，其餘內容保持原樣；並且務必在最終輸出中移除 data-ai-target 這個臨時屬性。
+8c. 嚴禁內容重複：每一批重複性元素（氣球、方格、卡片、圓點等）只能有單一來源——要麼全部寫死在靜態 HTML 裏、腳本不再生成，要麼容器留空、全部由 JavaScript 生成。兩者不可並存，否則載入後數量會變成兩倍。修改既有工具時，如果原本是由 JavaScript 生成，就只改生成的程式碼（迴圈次數、資料陣列），不要把生成結果另外寫成靜態 HTML；同理，生成函式必須先清空容器（例如 container.innerHTML = ''）再填入，並確保它不會被重複呼叫而累加。
 
 版面與自適應要求（這個工具會被嵌入 iframe，請務必遵守）：
 9. html、body 設為 height:100%、margin:0，並用 box-sizing:border-box；最外層容器用 min-height:100vh，讓內容能填滿 iframe，全螢幕時也能正常撐開、置中。
