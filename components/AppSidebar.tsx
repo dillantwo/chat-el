@@ -419,7 +419,7 @@ export function AppSidebar() {
             }}
           >
             <Sparkles className="size-4" />
-            AI生成工具
+            AI生成圖解
           </Button>
         )}
       </SidebarHeader>
