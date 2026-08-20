@@ -19,7 +19,7 @@ export default function ChineseCharacterPage() {
         promptPresets: [
           {
             label: "書面語",
-            text: "請幫我看看以下作文是否符合書面語寫作規範，如有不正確的，請予以修正，並以表格形式對應。",
+            text: "請幫我看看以下作文是否符合書面語寫作規範，以表格形式對比作文使用的口語詞和提供書面詞。",
           },
           {
             label: "外貌描寫",
