@@ -127,9 +127,6 @@ export default function ScienceAerospaceLandingPage() {
               <h1 className="text-[40px] leading-[1.02] font-semibold tracking-[-0.04em] text-[#080808] sm:text-[52px]">
                 航天科技
               </h1>
-              <p className="max-w-2xl text-sm leading-7 text-[#5a5a5a]">
-                這個主題按年級分成兩部分：小四在「中國航天大冒險」認識國家航天發展的里程碑；小六挑戰「火星探測任務」和「導航衛星尋寶小遊戲」，並用「不同高度軌道的衛星」比較各種軌道的特性。兩個年級都可以隨時與 AI 對話助手「小空」聊天，深入探索你感興趣的問題。
-              </p>
             </section>
 
             {groups.map((group) => (
