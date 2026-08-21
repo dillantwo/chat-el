@@ -575,6 +575,50 @@ export default function FractionDivisionPage() {
       }
     }
 
+    // 數線刻度標註。`currentD` 是目前的分母（每個整數格切幾份），`maxW` 是格數，
+    // `tickLimit` 是最後一個要標註的刻度（以 1/currentD 為單位）：
+    //   被除數長條標到底（currentD * maxW），藍色除數容器只標到自己的長度（P2）。
+    function renderNumberLine(nlWrap: HTMLElement, currentD: number, maxW: number, tickLimit: number) {
+      const tickHtml = (leftPct: number, valHtml: string) =>
+        `<div style="position: absolute; left: ${leftPct}%; top: 0px; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 5;">
+            <div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div>
+            ${valHtml}
+        </div>`;
+      const wholeHtml = (v: number) =>
+        `<span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">${v}</span>`;
+
+      nlWrap.style.display = "flex";
+      nlWrap.classList.add("continuous");
+      nlWrap.innerHTML = "";
+      for (let i = 0; i < maxW; i++) {
+        const nlUnit = document.createElement("div");
+        nlUnit.className = "nl-unit";
+        let labelsHtml = "";
+        for (let k = 0; k < currentD; k++) {
+          if (i * currentD + k > tickLimit) break;
+          const leftPct = (k / currentD) * 100;
+          let valHtml = "";
+          if (k === 0) {
+            valHtml = wholeHtml(i);
+          } else {
+            const fracPart = `<div class="inline-frac" style="font-size:0.85em; color:var(--dark);"><span>${k}</span><div class="line"></div><span>${currentD}</span></div>`;
+            if (i > 0) {
+              valHtml = `<div style="display: flex; align-items: center; justify-content: center;"><span style="font-weight:bold; font-size:1.05rem; margin-right:2px; color:var(--dark);">${i}</span>${fracPart}</div>`;
+            } else {
+              valHtml = fracPart;
+            }
+          }
+          labelsHtml += tickHtml(leftPct, valHtml);
+        }
+        // 終點剛好落在整數刻度上（例如被除數的 1、或容器長度為整數份）時補上右端標註
+        if ((i + 1) * currentD === tickLimit) {
+          labelsHtml += tickHtml(100, wholeHtml(i + 1));
+        }
+        nlUnit.innerHTML = labelsHtml;
+        nlWrap.appendChild(nlUnit);
+      }
+    }
+
     function renderBar(num: number, action = "none", old_s = 1) {
       const vals = getSafeValues();
       const showNL = $i("show-nl-cb")!.checked;
@@ -626,43 +670,9 @@ export default function FractionDivisionPage() {
       }
 
       if (nlWrap) {
-        // 藍色除數（num===2）不顯示數線的數字標註
+        // 藍色除數（num===2）在通分前不顯示數線；通分後由 buildDivisorMold() 依容器長度標註刻度
         if (showNL && num !== 2) {
-          nlWrap.style.display = "flex";
-          nlWrap.classList.add("continuous");
-          nlWrap.innerHTML = "";
-          for (let i = 0; i < maxW; i++) {
-            const nlUnit = document.createElement("div");
-            nlUnit.className = "nl-unit";
-            let labelsHtml = "";
-            const currentD = d * s;
-            for (let k = 0; k < currentD; k++) {
-              const leftPct = (k / currentD) * 100;
-              let valHtml = "";
-              if (k === 0) {
-                valHtml = `<span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">${i}</span>`;
-              } else {
-                const fracPart = `<div class="inline-frac" style="font-size:0.85em; color:var(--dark);"><span>${k}</span><div class="line"></div><span>${currentD}</span></div>`;
-                if (i > 0) {
-                  valHtml = `<div style="display: flex; align-items: center; justify-content: center;"><span style="font-weight:bold; font-size:1.05rem; margin-right:2px; color:var(--dark);">${i}</span>${fracPart}</div>`;
-                } else {
-                  valHtml = fracPart;
-                }
-              }
-              labelsHtml += `<div style="position: absolute; left: ${leftPct}%; top: 0px; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 5;">
-                  <div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div>
-                  ${valHtml}
-              </div>`;
-            }
-            if (i === maxW - 1) {
-              labelsHtml += `<div style="position: absolute; left: 100%; top: 0px; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 5;">
-                  <div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div>
-                  <span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">${i + 1}</span>
-              </div>`;
-            }
-            nlUnit.innerHTML = labelsHtml;
-            nlWrap.appendChild(nlUnit);
-          }
+          renderNumberLine(nlWrap, d * s, maxW, d * s * maxW);
         } else {
           nlWrap.style.display = "none";
           nlWrap.innerHTML = "";
@@ -752,6 +762,18 @@ export default function FractionDivisionPage() {
       }
       moldHtml += `</div>`;
       wrap.innerHTML = moldHtml;
+
+      // 通分後藍色容器也標上刻度（0、1/cd … P2/cd），與上方紅色被除數的數線一致，
+      // 讓學生看得出「一個容器 = 幾個 1/cd」。只標到容器本身的長度，不畫到整條 1。
+      const nlWrap2 = $e("bar2-nl");
+      if (nlWrap2) {
+        if ($i("show-nl-cb")!.checked) {
+          renderNumberLine(nlWrap2, cd, maxW, P2);
+        } else {
+          nlWrap2.style.display = "none";
+          nlWrap2.innerHTML = "";
+        }
+      }
 
       const mold = $e("divisor-mold")!;
       T(() => (mold.style.boxShadow = "0 0 15px 5px rgba(52, 152, 219, 0.6)"), 100);
