@@ -670,8 +670,9 @@ export default function FractionDivisionPage() {
       }
 
       if (nlWrap) {
-        // 藍色除數（num===2）在通分前不顯示數線；通分後由 buildDivisorMold() 依容器長度標註刻度
-        if (showNL && num !== 2) {
+        // 紅色被除數與藍色除數都標到整條的底（0 … 1）；通分後藍色長條變成容器，
+        // 由 buildDivisorMold() 重畫成只標到容器本身的長度。
+        if (showNL) {
           renderNumberLine(nlWrap, d * s, maxW, d * s * maxW);
         } else {
           nlWrap.style.display = "none";
@@ -719,7 +720,8 @@ export default function FractionDivisionPage() {
         if ($i("show-nl-cb")!.checked) {
           const nl1 = $e("bar1-nl");
           if (nl1) nl1.style.display = "flex";
-          // 藍色除數（bar2）不顯示數線
+          const nl2 = $e("bar2-nl");
+          if (nl2) nl2.style.display = "flex";
         }
         $e("drag-instruction")!.innerHTML = `💡 用「擴分／約分」讓兩邊分母相同`;
         $e("bar3-row")!.style.display = "none";
