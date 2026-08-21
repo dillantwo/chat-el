@@ -1996,8 +1996,8 @@ function MathDashboardContent() {
             <div className="mx-auto flex h-full w-full flex-col rounded-[8px] border border-[#d8d8d8] bg-white shadow-[rgba(0,0,0,0)_0px_84px_24px,rgba(0,0,0,0.01)_0px_54px_22px,rgba(0,0,0,0.04)_0px_30px_18px,rgba(0,0,0,0.08)_0px_13px_13px,rgba(0,0,0,0.09)_0px_3px_7px] transition-all">
               <div className="flex items-start justify-between gap-3 border-b border-[#d8d8d8] px-4 py-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[1px] text-[#ababab]">AI generated tool</p>
-                  <p className="text-sm font-semibold text-[#080808]">{aiToolTitle ?? genTitle ?? "正在生成互動工具"}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[1px] text-[#ababab]">AI generated diagram</p>
+                  <p className="text-sm font-semibold text-[#080808]">{aiToolTitle ?? genTitle ?? "正在生成圖解"}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                 {isTeacher && (
@@ -2008,7 +2008,7 @@ function MathDashboardContent() {
                   variant={selectMode ? "default" : "outline"}
                   onClick={toggleSelectMode}
                   disabled={!aiToolHtml || isGeneratingAiTool}
-                  title="選取工具中的某個部分，再用下方對話框描述要怎麼修改"
+                  title="選取圖解中的某個部分，再用下方對話框描述要怎麼修改"
                   className={selectMode
                     ? "rounded-[4px] bg-[#146ef5] text-white hover:bg-[#0055d4]"
                     : "rounded-[4px] border-[#d8d8d8] bg-white text-[#080808] hover:bg-[#f7f7f7]"}
@@ -2066,7 +2066,7 @@ function MathDashboardContent() {
                     className={isToolFullscreen
                       ? "fixed inset-0 z-[2147483647] h-screen w-screen border-0 bg-white"
                       : "h-full min-h-0 w-full rounded-b-[8px]"}
-                    title={aiToolTitle ?? "AI Generated HTML Tool"}
+                    title={aiToolTitle ?? "AI 生成圖解"}
                   />
                   {isGeneratingAiTool && (
                     <>
@@ -2077,8 +2077,8 @@ function MathDashboardContent() {
                         <div className="pointer-events-auto flex w-full max-w-[560px] flex-col items-center gap-3 rounded-[12px] border border-[#146ef5]/30 bg-white px-7 py-5 text-center shadow-[0_8px_30px_rgba(20,110,245,0.18)]">
                           <Loader2 className="size-9 animate-spin text-[#146ef5]" />
                           <div className="space-y-0.5">
-                            <p className="text-sm font-semibold text-[#080808]">AI 正在修改工具中…</p>
-                            <p className="text-xs text-[#5a5a5a]">完成後會自動替換，原本的工具會先保留</p>
+                            <p className="text-sm font-semibold text-[#080808]">AI 正在修改圖解中…</p>
+                            <p className="text-xs text-[#5a5a5a]">完成後會自動替換，原本的圖解會先保留</p>
                           </div>
                           <GeneratingCodeFeed code={genCode} className="max-h-40 w-full" />
                         </div>
@@ -2147,12 +2147,12 @@ function MathDashboardContent() {
                   </div>
                   <p className="text-lg font-semibold text-[#080808]">
                     {entryMode === "ai-tool"
-                      ? "輸入要求讓 AI 為你生成工具"
+                      ? "輸入要求讓 AI 為你生成圖解"
                       : "輸入題目讓 AI 為您解答，或直接從左側工具箱選擇工具開始練習"}
                   </p>
                   <p className="mt-1.5 mb-7 text-sm text-[#5a5a5a]">
                     {entryMode === "ai-tool"
-                      ? "描述你想要的互動工具、玩法或學習目標"
+                      ? "描述你想要的圖解內容、呈現方式或學習目標"
                       : "部分工具可直接使用，無需輸入題目"}
                   </p>
                 </>
@@ -2160,7 +2160,7 @@ function MathDashboardContent() {
               {(question || questionImage) && isEditingQuestion && (
                 <div className="mb-4 flex items-center justify-between w-full max-w-3xl">
                   <p className="text-sm text-[#5a5a5a]">
-                    {entryMode === "ai-tool" ? "輸入新要求可重新生成工具" : "輸入新題目可重新分類"}
+                    {entryMode === "ai-tool" ? "輸入新要求可重新生成圖解" : "輸入新題目可重新分類"}
                   </p>
                   <button
                     type="button"
@@ -2205,7 +2205,7 @@ function MathDashboardContent() {
                   <Textarea
                     ref={questionTextareaRef}
                     placeholder={entryMode === "ai-tool"
-                      ? "輸入要求讓 AI 為你生成工具，例如：設計一個可以拖拉分數卡的互動練習（可直接粘貼圖片）"
+                      ? "輸入要求讓 AI 為你生成圖解，例如：用棒形圖呈現 135 張椅子平均分成 9 排（可直接粘貼圖片）"
                       : "輸入數學題目，例如：3/4 + 1/2 = ?（可直接粘貼圖片）"}
                     value={questionInput}
                     onChange={(e) => handleQuestionInputChange(e.target.value)}
@@ -2491,7 +2491,7 @@ function MathDashboardContent() {
                 ref={textareaRef}
                 placeholder={pendingSelection
                   ? "描述要怎麼修改選取的部分...（可直接粘貼圖片）"
-                  : entryMode === "ai-tool" ? "針對這個工具繼續提問...（可直接粘貼圖片）" : "繼續提問...（可直接粘貼圖片）"}
+                  : entryMode === "ai-tool" ? "針對這個圖解繼續提問...（可直接粘貼圖片）" : "繼續提問...（可直接粘貼圖片）"}
                 value={input}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -2573,14 +2573,14 @@ function MathDashboardContent() {
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>保存工具</DialogTitle>
-            <DialogDescription>請為這個 AI 生成的工具命名，方便日後在工具箱中尋找。</DialogDescription>
+            <DialogTitle>保存圖解</DialogTitle>
+            <DialogDescription>請為這個 AI 生成的圖解命名，方便日後在「圖解生成記錄」中尋找。</DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
             value={saveNameDraft}
             onChange={(e) => setSaveNameDraft(e.target.value)}
-            placeholder="請輸入工具名稱"
+            placeholder="請輸入圖解名稱"
             maxLength={80}
             onKeyDown={(e) => {
               if (e.key === "Enter" && saveNameDraft.trim() && !isSavingAiTool) {

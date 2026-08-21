@@ -619,16 +619,16 @@ export function AppSidebar() {
               }
             >
               <Save className="size-3.5" />
-              工具生成記錄
+              圖解生成記錄
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetHeader className="px-4 pt-4 pb-2">
                 <SheetTitle className="flex items-center gap-2 text-sm">
                   <Save className="size-4" />
-                  工具生成記錄
+                  圖解生成記錄
                 </SheetTitle>
                 <SheetDescription className="text-xs">
-                  {isTeacher ? "已保存的 AI 工具（可分享給學生）" : "老師分享的 AI 工具"}
+                  {isTeacher ? "已保存的 AI 圖解（可分享給學生）" : "老師分享的 AI 圖解"}
                 </SheetDescription>
               </SheetHeader>
               <Separator />
@@ -678,7 +678,7 @@ export function AppSidebar() {
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Save className="size-8 mb-2 opacity-30" />
-                    <p className="text-xs">暫無工具生成記錄</p>
+                    <p className="text-xs">暫無圖解生成記錄</p>
                   </div>
                 )}
               </div>
