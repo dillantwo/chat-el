@@ -303,7 +303,7 @@ export default function PodcastCreatorPage() {
                   Voice Podcast
                 </p>
                 <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[34px]">
-                  創建語音博客 🎙️
+                  創建語音博客 (Podcast)🎙️
                 </h1>
               </div>
             </div>
