@@ -38,7 +38,7 @@ const parts: {
   },
   {
     id: "podcast",
-    label: "創建語音博客",
+    label: "創建語音博客 (Podcast)",
     labelEn: "Voice Podcast",
     description:
       "當一次播客主持人，用你的聲音講述抗戰的故事，錄音會儲存起來，隨時可以重聽。",
