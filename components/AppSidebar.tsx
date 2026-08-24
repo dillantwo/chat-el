@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Box, Clock, LogOut, MessageSquare, Sparkles, Save, Share2, Timer, Trash2, Variable, Zap } from "lucide-react";
+import { Box, Clock, Loader2, LogOut, MessageSquare, Sparkles, Save, Share2, Timer, Trash2, Variable, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -38,6 +38,14 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { basePath } from "@/lib/utils";
 import { deleteMathChatHistoryItem, getMathChatHistory, getMathChatHistoryItem, type MathChatHistorySummary } from "@/lib/math-chat-history";
@@ -57,6 +65,16 @@ interface SavedChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   parts: SavedMessagePart[];
+}
+
+/** One 圖解生成記錄, as returned by GET /api/html-content. */
+interface SavedAiTool {
+  toolKey: string;
+  title: string;
+  html: string;
+  chatMessages: SavedChatMessage[];
+  sharedWithStudents?: boolean;
+  updatedAt?: string;
 }
 
 function ToolItem({
@@ -154,14 +172,11 @@ export function AppSidebar() {
   // against every available tool, not just the current group's `tools`.
   const recommendCandidates = allToolGroups.length > 0 ? allToolGroups.flatMap((g) => g.tools) : tools;
   const recommendedTools = recommendCandidates.filter((t) => recommendedToolKeys.includes(t.key));
-  const [savedAiTools, setSavedAiTools] = useState<Array<{
-    toolKey: string;
-    title: string;
-    html: string;
-    chatMessages: SavedChatMessage[];
-    sharedWithStudents?: boolean;
-    updatedAt?: string;
-  }>>([]);
+  const [savedAiTools, setSavedAiTools] = useState<SavedAiTool[]>([]);
+  /** The 圖解 awaiting delete confirmation; also drives the confirm dialog. */
+  const [pendingDeleteTool, setPendingDeleteTool] = useState<SavedAiTool | null>(null);
+  const [deletingTool, setDeletingTool] = useState(false);
+  const [deleteToolError, setDeleteToolError] = useState<string | null>(null);
   const [mathChatHistory, setMathChatHistory] = useState<MathChatHistorySummary[]>([]);
   const [englishChatHistory, setEnglishChatHistory] = useState<EnglishChatHistorySummary[]>([]);
   const [chineseChatHistory, setChineseChatHistory] = useState<ChineseChatHistorySummary[]>([]);
@@ -214,6 +229,40 @@ export function AppSidebar() {
       fetchSavedAiTools();
     } catch {
       alert("更新分享狀態失敗，請稍後再試。");
+    }
+  }
+
+  function closeDeleteToolDialog() {
+    setPendingDeleteTool(null);
+    setDeleteToolError(null);
+  }
+
+  /**
+   * Delete the 圖解 the confirm dialog is currently asking about.
+   *
+   * The dialog stays open on failure and shows the reason inline, which is the
+   * reason this is a Dialog rather than window.confirm: the record can be
+   * visible to a whole class, so both the warning and the error belong in the
+   * same surface the teacher is already looking at.
+   */
+  async function confirmDeleteSavedAiTool() {
+    const item = pendingDeleteTool;
+    if (!item) return;
+
+    setDeletingTool(true);
+    setDeleteToolError(null);
+    try {
+      const res = await fetch(
+        `${basePath}/api/html-content?toolKey=${encodeURIComponent(item.toolKey)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error("Failed to delete saved AI tool");
+      closeDeleteToolDialog();
+      fetchSavedAiTools();
+    } catch {
+      setDeleteToolError("刪除失敗，請稍後再試。");
+    } finally {
+      setDeletingTool(false);
     }
   }
 
@@ -667,6 +716,21 @@ export function AppSidebar() {
                             <Share2 className="size-3.5" />
                           </Button>
                         )}
+                        {isTeacher && (
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            className="h-7 w-7 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
+                            title="刪除記錄"
+                            onClick={() => {
+                              setDeleteToolError(null);
+                              setPendingDeleteTool(item);
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        )}
                         {!isTeacher && item.sharedWithStudents && (
                           <span className="mt-0.5 inline-flex items-center rounded-[4px] bg-[#146ef5]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#146ef5]">
                             已分享
@@ -682,6 +746,61 @@ export function AppSidebar() {
                   </div>
                 )}
               </div>
+
+              {/*
+                Nested inside the sheet on purpose: base-ui tracks the nesting,
+                so Escape closes only this confirm step and the list stays open
+                behind it.
+              */}
+              <Dialog
+                open={pendingDeleteTool !== null}
+                onOpenChange={(open) => {
+                  // Ignore backdrop / Escape while the request is in flight so
+                  // the teacher cannot lose sight of a delete that may land.
+                  if (!open && !deletingTool) closeDeleteToolDialog();
+                }}
+              >
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>刪除圖解記錄</DialogTitle>
+                    <DialogDescription>此操作無法復原。</DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-2">
+                    <p className="line-clamp-3 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">
+                      {pendingDeleteTool?.title}
+                    </p>
+                    {pendingDeleteTool?.sharedWithStudents && (
+                      <p className="rounded-lg bg-[#fee2e2] px-3 py-2 text-xs text-[#b91c1c]">
+                        此圖解已分享給學生，刪除後他們亦無法再開啟。
+                      </p>
+                    )}
+                    {deleteToolError && (
+                      <p className="text-sm text-destructive">{deleteToolError}</p>
+                    )}
+                  </div>
+
+                  <DialogFooter className="flex-row justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={deletingTool}
+                      onClick={closeDeleteToolDialog}
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={deletingTool}
+                      onClick={() => {
+                        void confirmDeleteSavedAiTool();
+                      }}
+                    >
+                      {deletingTool && <Loader2 className="size-4 animate-spin" />}
+                      刪除
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </SheetContent>
           </Sheet>
         )}

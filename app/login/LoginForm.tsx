@@ -280,7 +280,9 @@ export function LoginForm({ ssoEnabled }: { ssoEnabled: boolean }) {
               className="mt-6 rounded-[12px] bg-[#eef4ff] p-4"
             >
               <h2 id="sso-heading" className="text-[16px] font-semibold text-[#080808]">
-                {needsRenew ? "想用另一個 EdCity 帳戶？" : "有 EdCity 帳戶嗎？"}
+                {needsRenew
+                  ? "想用另一個 EdCity 帳戶？"
+                  : "eLAFP計劃請用EdCity賬戶登入"}
               </h2>
               {/* When the last attempt failed on identity, the button no longer
                   does what the child just saw it do: it leaves EdCity first and
