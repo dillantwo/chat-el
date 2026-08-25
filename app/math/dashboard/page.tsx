@@ -48,7 +48,7 @@ import { useVoiceInput } from "@/lib/use-voice-input";
 import { DefaultChatTransport } from "ai";
 import { VolumeChatPanel } from "@/components/VolumeChatPanel";
 import { ClockChatPanel } from "@/components/ClockChatPanel";
-import { createMathChatId, restoreUiMessages, serializeUiMessages, type MathChatHistoryItem, upsertMathChatHistory } from "@/lib/math-chat-history";
+import { createMathChatId, getMathChatHistoryItem, restoreUiMessages, serializeUiMessages, type MathChatHistoryItem, upsertMathChatHistory } from "@/lib/math-chat-history";
 
 /** Strip $\text{...}$ wrappers so Chinese text renders as plain wrappable text. */
 function stripTextModeLatex(text: string): string {
@@ -629,6 +629,129 @@ interface SavedChatMessage {
   parts: SavedMessagePart[];
 }
 
+type ToolChatKey = "volume-cubes" | "clock-24hrs" | "clock-time-difference";
+
+/**
+ * Everything needed to pick a dashboard session back up. Leaving for /math
+ * unmounts this page *and* the ToolboxProvider above it, so without this the
+ * only survivor was the question text — which is what used to make a return
+ * visit re-ask the question and file a second history record.
+ *
+ * Only pointers are kept here: the transcript is fetched back from
+ * /api/math-chat-history by `chatId`, so the resumed session keeps writing to
+ * the record it started.
+ */
+const DASHBOARD_SESSION_KEY = "dashboard-data";
+/**
+ * The generated diagram's HTML lives under its own key: it is by far the
+ * largest field, so blowing the storage quota on it must not take the rest of
+ * the session down with it.
+ */
+const DASHBOARD_AI_TOOL_HTML_KEY = "dashboard-ai-tool-html";
+
+interface DashboardSession {
+  /** Records written before sessions were resumable carry no version. */
+  v?: 2;
+  type?: string;
+  question?: string;
+  imageData?: string;
+  /**
+   * Separates "this session has no question" (AI-diagram mode) from "written by
+   * an older build", where the presence of the record itself meant a question.
+   */
+  hasQuestion?: boolean;
+  /**
+   * Whether the question was already handed to the model. Without it, an empty
+   * transcript is ambiguous: it means either "New Chat was pressed on purpose"
+   * or "the reply never arrived", and only the second one deserves a re-ask.
+   */
+  asked?: boolean;
+  chatId?: string;
+  entryMode?: DashboardEntryMode;
+  selectedTool?: string | null;
+  /** Stored only while it matches the open tool, so its params survive the trip. */
+  toolUrl?: string | null;
+  /** Cached so resuming doesn't pay for the recommendation call a second time. */
+  recommendedToolKeys?: string[];
+  aiToolKey?: string | null;
+  aiToolTitle?: string | null;
+  aiToolSaved?: boolean;
+  /** The tool panels (volume/clock) restore their own transcript from these. */
+  toolChatSessionIds?: Partial<Record<ToolChatKey, string>>;
+}
+
+function readDashboardSession(): DashboardSession | null {
+  try {
+    const raw = sessionStorage.getItem(DASHBOARD_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DashboardSession | null;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardSession(session: DashboardSession) {
+  try {
+    sessionStorage.setItem(DASHBOARD_SESSION_KEY, JSON.stringify({ ...session, v: 2 }));
+  } catch {
+    // A photographed question is base64 in here and can be megabytes. Losing the
+    // picture on resume is much better than losing the whole session, so retry
+    // without it rather than giving up.
+    try {
+      sessionStorage.setItem(
+        DASHBOARD_SESSION_KEY,
+        JSON.stringify({ ...session, imageData: undefined, v: 2 }),
+      );
+    } catch {}
+  }
+}
+
+function clearDashboardSession() {
+  try {
+    sessionStorage.removeItem(DASHBOARD_SESSION_KEY);
+    sessionStorage.removeItem(DASHBOARD_AI_TOOL_HTML_KEY);
+  } catch {}
+}
+
+function readStoredAiToolHtml(): string | null {
+  try {
+    return sessionStorage.getItem(DASHBOARD_AI_TOOL_HTML_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best effort. A diagram carrying a large embedded data set can outgrow the
+ * quota; dropping the copy is acceptable because a *saved* diagram is fetched
+ * back by toolKey instead, and an unsaved one was never promised to survive.
+ */
+function writeStoredAiToolHtml(html: string | null) {
+  try {
+    if (html) sessionStorage.setItem(DASHBOARD_AI_TOOL_HTML_KEY, html);
+    else sessionStorage.removeItem(DASHBOARD_AI_TOOL_HTML_KEY);
+  } catch {
+    try {
+      sessionStorage.removeItem(DASHBOARD_AI_TOOL_HTML_KEY);
+    } catch {}
+  }
+}
+
+/** Reload a saved diagram that was too big to keep in sessionStorage. */
+async function fetchSavedAiToolHtml(toolKey: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${basePath}/api/html-content?toolKey=${encodeURIComponent(toolKey)}`, {
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { item?: { html?: string } };
+    return json.item?.html ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function MathDashboardPage() {
   return (
     <Suspense>
@@ -650,16 +773,6 @@ function MathDashboardContent() {
   const [dashboardData, setDashboardData] = useState<{ type: string; question: string; imageData?: string } | null>(null);
   const [entryMode, setEntryMode] = useState<DashboardEntryMode>("question");
   const entryModeRef = useRef<DashboardEntryMode>("question");
-
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("dashboard-data");
-      if (raw) {
-        setDashboardData(JSON.parse(raw));
-        setHasUserQuestion(true);
-      }
-    } catch {}
-  }, []);
 
   const type = dashboardData?.type || urlType;
   const question = dashboardData?.question || "";
@@ -740,6 +853,15 @@ function MathDashboardContent() {
   // reorder the history list). Cleared once a genuine new exchange starts.
   const skipSaveRef = useRef(false);
   const restoredToolUrlRef = useRef<string | null>(null);
+  /** True while the previous session's transcript is on its way back. */
+  const [isResumingSession, setIsResumingSession] = useState(false);
+  /**
+   * Snapshots are held back until the resume attempt settles, otherwise the
+   * empty initial state would overwrite the session we are about to restore.
+   */
+  const canPersistRef = useRef(false);
+  /** Tool recommendations carried over from the resumed session. */
+  const restoredRecommendationsRef = useRef<{ question: string; keys: string[] } | null>(null);
   const [toolChatSessionIds, setToolChatSessionIds] = useState<Record<"volume-cubes" | "clock-24hrs" | "clock-time-difference", string>>({
     "volume-cubes": createMathChatId(),
     "clock-24hrs": createMathChatId(),
@@ -749,7 +871,10 @@ function MathDashboardContent() {
   const questionFileInputRef = useRef<HTMLInputElement>(null);
 
   const isLoading = status === "submitted" || status === "streaming";
-  const canSend = (!!input.trim() || chatFiles.length > 0) && !isLoading && !isGeneratingAiTool;
+  // Sending while the previous transcript is still loading would get clobbered
+  // by the restore, so the composer waits it out.
+  const canSend =
+    (!!input.trim() || chatFiles.length > 0) && !isLoading && !isGeneratingAiTool && !isResumingSession;
 
   const selectedTool = toolbox?.selectedTool ?? null;
   const hideChatForTool = selectedTool === "journey-graph";
@@ -896,6 +1021,17 @@ function MathDashboardContent() {
   useEffect(() => {
     if (suppressHistoryAnalysisRef.current) {
       setRecommendedToolKeys([]);
+      setIsAnalyzingTools(false);
+      return;
+    }
+
+    // Resumed session: the ranking for this exact question already came back
+    // once, so reuse it instead of paying for the call again. The ref is kept
+    // (not consumed) because this effect also re-runs while the toolbox config
+    // loads; it is dropped as soon as the question changes.
+    const restoredRecommendations = restoredRecommendationsRef.current;
+    if (restoredRecommendations && restoredRecommendations.question === question) {
+      setRecommendedToolKeys(restoredRecommendations.keys);
       setIsAnalyzingTools(false);
       return;
     }
@@ -1150,8 +1286,115 @@ function MathDashboardContent() {
     };
   }, [selectedTool, question, questionImage, toolPreviewRefreshKey]);
 
+  // Resume the session that was open before the user navigated away. Runs once,
+  // before anything can auto-send: the transcript comes back from the database
+  // by chat id, so returning to the page continues that conversation instead of
+  // asking the model the same question again under a new history record.
+  useEffect(() => {
+    const stored = readDashboardSession();
+    if (!stored) {
+      canPersistRef.current = true;
+      return;
+    }
+
+    const hasQuestion = stored.hasQuestion ?? Boolean(stored.question);
+    const storedQuestion = stored.question ?? "";
+
+    // Put back everything that needs no round trip, so the page doesn't flash
+    // the empty "輸入題目" state on the way in.
+    if (hasQuestion && storedQuestion) {
+      setDashboardData({
+        type: stored.type || "fraction-operations",
+        question: storedQuestion,
+        imageData: stored.imageData,
+      });
+      setHasUserQuestion(true);
+      setIsEditingQuestion(false);
+    }
+    if (stored.entryMode) setEntryMode(stored.entryMode);
+    if (stored.chatId) setCurrentChatId(stored.chatId);
+    if (stored.toolChatSessionIds) {
+      setToolChatSessionIds((prev) => ({ ...prev, ...stored.toolChatSessionIds }));
+    }
+    if (stored.recommendedToolKeys?.length) {
+      restoredRecommendationsRef.current = {
+        question: storedQuestion,
+        keys: stored.recommendedToolKeys,
+      };
+      setRecommendedToolKeys(stored.recommendedToolKeys);
+    }
+    if (stored.selectedTool) {
+      // The tool effect consumes this instead of running the parameter
+      // extraction again, which would be a second needless model call.
+      restoredToolUrlRef.current = stored.toolUrl ?? null;
+      toolbox?.setSelectedTool(stored.selectedTool);
+    }
+
+    const storedHtml = readStoredAiToolHtml();
+    if (storedHtml || stored.aiToolKey) {
+      setAiToolKey(stored.aiToolKey ?? null);
+      setAiToolTitle(stored.aiToolTitle ?? null);
+      setHasSavedAiTool(Boolean(stored.aiToolSaved));
+      setIsEditingQuestion(false);
+      if (storedHtml) setAiToolHtml(storedHtml);
+    }
+
+    // Hold the auto-send effect below while the transcript is in flight.
+    hasSentInitial.current = true;
+    setIsResumingSession(true);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const savedChat = stored.chatId ? await getMathChatHistoryItem(stored.chatId) : null;
+        if (cancelled) return;
+        const savedMessages = savedChat?.messages ?? [];
+
+        // An assistant turn is the proof the exchange really happened, so that
+        // transcript is what comes back.
+        if (savedMessages.some((message) => message.role === "assistant")) {
+          skipSaveRef.current = true; // resuming is not a new exchange
+          restoreMessages(savedMessages);
+        } else {
+          // Otherwise the question is only re-asked when it was never asked, or
+          // when the record shows a user turn that never got answered (the reply
+          // was cut off by the navigation). An empty transcript on a question
+          // that was already asked means 「New Chat」 was pressed on purpose —
+          // asking again there would undo the teacher's own reset. Either way it
+          // stays under the resumed chat id, so it updates that record instead
+          // of filing another one.
+          const alreadyAsked = stored.asked ?? true;
+          const cutOffMidReply = savedMessages.some((message) => message.role === "user");
+          if (hasQuestion && (!alreadyAsked || cutOffMidReply)) {
+            hasSentInitial.current = false;
+          }
+        }
+
+        // A diagram too big for sessionStorage is still in the database.
+        if (!storedHtml && stored.aiToolKey && stored.aiToolSaved) {
+          const html = await fetchSavedAiToolHtml(stored.aiToolKey);
+          if (!cancelled && html) setAiToolHtml(html);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsResumingSession(false);
+          canPersistRef.current = true;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Mount only: this is the session hand-off, not a reaction to state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-send the initial question to get AI response
   useEffect(() => {
+    // Never while resuming: the answer to this question is already on its way
+    // back from the history record.
+    if (isResumingSession) return;
     if ((question || questionImage) && !hasSentInitial.current) {
       hasSentInitial.current = true;
       const files = questionImage
@@ -1159,7 +1402,70 @@ function MathDashboardContent() {
         : undefined;
       sendMessage({ text: question || "（見圖片）", ...(files ? { files } : {}) });
     }
-  }, [question, questionImage, sendMessage]);
+  }, [question, questionImage, sendMessage, isResumingSession]);
+
+  // Snapshot the resumable half of the session on every change. This is the
+  // write side of the restore effect above; it replaces the scattered
+  // sessionStorage writes that used to persist the question alone.
+  useEffect(() => {
+    if (!canPersistRef.current) return;
+
+    const hasSomethingToResume =
+      hasUserQuestion ||
+      messages.length > 0 ||
+      !!aiToolHtml ||
+      !!selectedTool ||
+      entryMode === "ai-tool";
+
+    if (!hasSomethingToResume) {
+      clearDashboardSession();
+      return;
+    }
+
+    writeDashboardSession({
+      type,
+      question: hasUserQuestion ? question : undefined,
+      imageData: hasUserQuestion ? questionImage ?? undefined : undefined,
+      hasQuestion: hasUserQuestion,
+      // Read from the ref rather than mirrored into state on purpose: every
+      // place that flips it also changes state, so this effect always re-runs
+      // right after and records the settled value.
+      asked: hasSentInitial.current,
+      chatId: currentChatId,
+      entryMode,
+      selectedTool,
+      toolUrl: isPreviewUrlForSelectedTool(previewUrl, selectedTool) ? previewUrl : null,
+      recommendedToolKeys,
+      aiToolKey,
+      aiToolTitle,
+      aiToolSaved: hasSavedAiTool,
+      toolChatSessionIds,
+    });
+  }, [
+    aiToolHtml,
+    aiToolKey,
+    aiToolTitle,
+    currentChatId,
+    entryMode,
+    hasSavedAiTool,
+    hasUserQuestion,
+    isResumingSession,
+    messages.length,
+    previewUrl,
+    question,
+    questionImage,
+    recommendedToolKeys,
+    selectedTool,
+    toolChatSessionIds,
+    type,
+  ]);
+
+  // Kept out of the snapshot above so a quota failure on a large diagram can't
+  // cost us the rest of the session.
+  useEffect(() => {
+    if (!canPersistRef.current) return;
+    writeStoredAiToolHtml(aiToolHtml);
+  }, [aiToolHtml, isResumingSession]);
 
   useEffect(() => {
     const container = chatScrollRef.current;
@@ -1218,7 +1524,8 @@ function MathDashboardContent() {
       // with the new words.
       stopListening();
       stopQuestionListening();
-      try { sessionStorage.removeItem("dashboard-data"); } catch {}
+      restoredRecommendationsRef.current = null;
+      clearDashboardSession();
       setDashboardData(null);
       setHasUserQuestion(false);
       setCurrentChatId(createMathChatId());
@@ -1286,14 +1593,7 @@ function MathDashboardContent() {
         const shouldRestoreQuestion = Boolean(detail.hasUserQuestion && detail.question);
         restoredToolUrlRef.current = shouldRestoreQuestion ? detail.toolUrl ?? null : null;
         suppressHistoryAnalysisRef.current = !shouldRestoreQuestion || Boolean(detail.toolUrl);
-        if (shouldRestoreQuestion) {
-          try {
-            sessionStorage.setItem("dashboard-data", JSON.stringify({ type: nextType, question: nextQuestion }));
-          } catch {}
-        } else {
-          try { sessionStorage.removeItem("dashboard-data"); } catch {}
-        }
-
+        restoredRecommendationsRef.current = null;
         setCurrentChatId(detail.id);
         setDashboardData(shouldRestoreQuestion ? { type: nextType, question: nextQuestion } : null);
         setHasUserQuestion(shouldRestoreQuestion);
@@ -1313,13 +1613,7 @@ function MathDashboardContent() {
       const shouldRestoreQuestion = Boolean(detail.hasUserQuestion && detail.question);
       restoredToolUrlRef.current = shouldRestoreQuestion ? detail.toolUrl ?? null : null;
       suppressHistoryAnalysisRef.current = !shouldRestoreQuestion || Boolean(detail.toolUrl);
-      if (shouldRestoreQuestion) {
-        try {
-          sessionStorage.setItem("dashboard-data", JSON.stringify({ type: detail.type ?? "fraction-operations", question: detail.question }));
-        } catch {}
-      } else {
-        try { sessionStorage.removeItem("dashboard-data"); } catch {}
-      }
+      restoredRecommendationsRef.current = null;
       setDashboardData(shouldRestoreQuestion ? { type: detail.type ?? "fraction-operations", question: detail.question! } : null);
       setHasUserQuestion(shouldRestoreQuestion);
       setEntryMode("ai-tool");
@@ -1352,7 +1646,7 @@ function MathDashboardContent() {
       // Both boxes get cleared below, so drop any dictation in flight.
       stopListening();
       stopQuestionListening();
-      try { sessionStorage.removeItem("dashboard-data"); } catch {}
+      restoredRecommendationsRef.current = null;
       setDashboardData(null);
       setHasUserQuestion(false);
       setEntryMode(detail.chatMode === "question" ? "question" : "ai-tool");
@@ -1832,7 +2126,7 @@ function MathDashboardContent() {
           : [];
         const imageData = files[0]?.url;
 
-        try { sessionStorage.removeItem("dashboard-data"); } catch {}
+        restoredRecommendationsRef.current = null;
         setDashboardData(null);
         setHasUserQuestion(false);
         setAiToolHtml(null);
@@ -1881,12 +2175,10 @@ function MathDashboardContent() {
         nextQuestion = json.question || nextQuestion;
       }
 
-      sessionStorage.setItem(
-        "dashboard-data",
-        JSON.stringify({ type: nextType, question: nextQuestion, imageData })
-      );
-
-      // Allow the chat auto-send effect to fire with the new question
+      // Allow the chat auto-send effect to fire with the new question.
+      // Persisting the question (and the chat id that answers it) is left to the
+      // snapshot effect, so the two can never disagree.
+      restoredRecommendationsRef.current = null;
       hasSentInitial.current = false;
       setHasUserQuestion(true);
       setDashboardData({ type: nextType, question: nextQuestion, imageData });
@@ -1896,10 +2188,7 @@ function MathDashboardContent() {
       setIsEditingQuestion(false);
     } catch {
       const fallbackQuestion = questionInput.trim() || "（見圖片）";
-      sessionStorage.setItem(
-        "dashboard-data",
-        JSON.stringify({ type: "fraction-operations", question: fallbackQuestion })
-      );
+      restoredRecommendationsRef.current = null;
       hasSentInitial.current = false;
       setHasUserQuestion(true);
       setDashboardData({ type: "fraction-operations", question: fallbackQuestion });
@@ -2354,6 +2643,12 @@ function MathDashboardContent() {
 
         {/* Chat messages */}
         <div ref={chatScrollRef} onScroll={handleChatScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-4 min-h-0 bg-[linear-gradient(180deg,_rgba(20,110,245,0.03)_0%,_rgba(255,255,255,1)_35%)]">
+          {isResumingSession && messages.length === 0 && (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#5a5a5a]">
+              <Loader2 className="size-4 animate-spin text-[#146ef5]" />
+              正在還原上次的對話…
+            </div>
+          )}
           {messages.map((message) => (
             <div
               key={message.id}

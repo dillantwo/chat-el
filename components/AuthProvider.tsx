@@ -89,6 +89,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(null);
 
+    // Per-tab work state (the math dashboard keeps the open question, its photo
+    // and the generated diagram there so the page can be resumed) outlives the
+    // cookie, so on the shared classroom machine above the next student would
+    // find the previous one's work waiting for them.
+    try {
+      sessionStorage.clear();
+    } catch {
+      // Storage can be unavailable (private mode); nothing to clean up then.
+    }
+
     if (redirectTo) {
       // assign, not replace: leaves the app in history so Back is not a dead end.
       window.location.assign(redirectTo);
