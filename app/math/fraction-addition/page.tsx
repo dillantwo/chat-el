@@ -121,6 +121,12 @@ const STYLES = `
 .fa47-root .abs-thin-line{ position:absolute; top:0; width:var(--grid-thin-width); height:100%; background:var(--grid-thin-color); transform:translateX(-50%); z-index:3; }
 .fa47-root .bar-wrap-container.continuous{ gap:0 !important; }
 .fa47-root .bar-wrap-container.continuous .bar-unit{ width:calc(100% / var(--max-wholes)) !important; border-right:none; border-radius:0; }
+/* 帶分數時整數交界處原本是靠 .bar-unit 自己的 2px 左框畫出來的，
+   比單位內的 3px 分數格線細、而且整條線都落在交界右側（box-sizing:border-box）。
+   這裡把內側左框拿掉，交界線改用跟分數格線同一個 .abs-thick-line 來畫
+   （見 unitEdgesHtml：左右兩個單位各畫一半，合起來就是置中的 3px 粗線），
+   這樣有沒有帶分數，中間線條的粗細與位置都一致。 */
+.fa47-root .bar-wrap-container.continuous .bar-unit:not(:first-child){ border-left:none; }
 .fa47-root .bar-wrap-container.continuous .bar-unit:last-child{ border-right:var(--bar-border-width) solid var(--bar-border-color); border-top-right-radius:4px; border-bottom-right-radius:4px; }
 .fa47-root .bar-wrap-container.continuous .bar-unit:first-child{ border-top-left-radius:4px; border-bottom-left-radius:4px; }
 .fa47-root .nl-wrap-container{ width:100%; display:flex; flex-wrap:nowrap; justify-content:flex-start; align-items:flex-start;
@@ -679,6 +685,19 @@ export default function FractionAdditionPage() {
       }
     }
 
+    /**
+     * 整數單位交界處的分隔線（帶分數才會出現）。
+     * .bar-unit 有 overflow:hidden，所以一條置中的線放在單一單位裡會被裁掉一半；
+     * 這裡在左邊單位的 100% 與右邊單位的 0% 各放一條，各自露出一半，
+     * 拼起來就是一條與單位內分數格線（.abs-thick-line）完全相同的置中粗線。
+     */
+    function unitEdgesHtml(idx: number, total: number) {
+      let html = "";
+      if (idx > 0) html += `<div class="abs-thick-line unit-edge" style="left:0;"></div>`;
+      if (idx < total - 1) html += `<div class="abs-thick-line unit-edge" style="left:100%;"></div>`;
+      return html;
+    }
+
     function applyGridAnimation(
       gridContainer: HTMLElement,
       d: number,
@@ -779,7 +798,7 @@ export default function FractionAdditionPage() {
           for (let i = 0; i < maxW; i++) {
             const unit = document.createElement("div");
             unit.className = "bar-unit";
-            unit.innerHTML = `<div class="bar-fill"></div><div class="bar-grid"></div>`;
+            unit.innerHTML = `<div class="bar-fill"></div><div class="bar-grid"></div>${unitEdgesHtml(i, maxW)}`;
             wrap.appendChild(unit);
           }
         }
@@ -1110,6 +1129,8 @@ export default function FractionAdditionPage() {
         unit.className = "bar-unit";
         unit.style.display = "flex";
         unit.style.flexDirection = "row";
+        // 錯誤示範的長條沒有分數格線，但整數交界仍要看得到（原本靠 .bar-unit 左框）。
+        unit.insertAdjacentHTML("beforeend", unitEdgesHtml(i, maxW));
         wrapError.appendChild(unit);
       }
 
@@ -1228,6 +1249,7 @@ export default function FractionAdditionPage() {
           const grid = document.createElement("div");
           grid.className = "bar-grid";
           unit.appendChild(grid);
+          unit.insertAdjacentHTML("beforeend", unitEdgesHtml(i, maxW));
           wrap3.appendChild(unit);
         }
         const label3 = $e("label3")!;

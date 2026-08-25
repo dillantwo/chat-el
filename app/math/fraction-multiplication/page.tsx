@@ -116,6 +116,12 @@ const STYLES = `
 .fa45-root .abs-thin-line{ position:absolute; top:0; width:var(--grid-thin-width); height:100%; background:var(--grid-thin-color); transform:translateX(-50%); z-index:3; }
 .fa45-root .bar-wrap-container.continuous{ gap:0 !important; }
 .fa45-root .bar-wrap-container.continuous .bar-unit{ width:calc(100% / var(--max-wholes)) !important; border-right:none; border-radius:0; }
+/* 帶分數時整數交界處原本是靠 .bar-unit 自己的 2px 左框畫出來的，
+   比單位內的 3px 分數格線細、而且整條線都落在交界右側（box-sizing:border-box）。
+   這裡把內側左框拿掉，交界線改用跟分數格線同一個 .abs-thick-line 來畫
+   （見 appendUnitEdges：左右兩個單位各畫一半，合起來就是置中的 3px 粗線），
+   這樣有沒有帶分數，中間線條的粗細與位置都一致。 */
+.fa45-root .bar-wrap-container.continuous .bar-unit:not(:first-child){ border-left:none; }
 .fa45-root .bar-wrap-container.continuous .bar-unit:last-child{ border-right:var(--bar-border-width) solid var(--bar-border-color); border-top-right-radius:4px; border-bottom-right-radius:4px; }
 .fa45-root .bar-wrap-container.continuous .bar-unit:first-child{ border-top-left-radius:4px; border-bottom-left-radius:4px; }
 .fa45-root .nl-wrap-container{ width:100%; display:flex; flex-wrap:nowrap; justify-content:flex-start; align-items:flex-start;
@@ -504,6 +510,23 @@ export default function FractionMultiplicationPage() {
       return b ? gcd(b, a % b) : a;
     }
 
+    /**
+     * 整數單位交界處的分隔線（帶分數才會出現）。
+     * .bar-unit 有 overflow:hidden，所以一條置中的線放在單一單位裡會被裁掉一半；
+     * 這裡在左邊單位的 100% 與右邊單位的 0% 各放一條，各自露出一半，
+     * 拼起來就是一條與單位內分數格線（.abs-thick-line）完全相同的置中粗線。
+     */
+    function appendUnitEdges(unit: HTMLElement, idx: number, total: number) {
+      const addEdge = (left: string) => {
+        const edge = document.createElement("div");
+        edge.className = "abs-thick-line unit-edge";
+        edge.style.left = left;
+        unit.appendChild(edge);
+      };
+      if (idx > 0) addEdge("0");
+      if (idx < total - 1) addEdge("100%");
+    }
+
     function renderNumberLine(wrapId: string, maxW: number, d: number) {
       const nlWrap = $e(wrapId);
       if (!nlWrap) return;
@@ -591,6 +614,7 @@ export default function FractionMultiplicationPage() {
           block.style.opacity = "0.85";
           unit.appendChild(block);
         }
+        appendUnitEdges(unit, i, maxW);
         wrap.appendChild(unit);
       }
 
@@ -833,6 +857,8 @@ export default function FractionMultiplicationPage() {
           thickLine.style.left = `${(k / B) * 100}%`;
           unit.appendChild(thickLine);
         }
+
+        appendUnitEdges(unit, i, maxW);
 
         wrap.appendChild(unit);
       }

@@ -116,6 +116,12 @@ const STYLES = `
 .fa48-root .abs-thin-line{ position:absolute; top:0; width:var(--grid-thin-width); height:100%; background:var(--grid-thin-color); transform:translateX(-50%); z-index:3; }
 .fa48-root .bar-wrap-container.continuous{ gap:0 !important; }
 .fa48-root .bar-wrap-container.continuous .bar-unit{ width:calc(100% / var(--max-wholes)) !important; border-right:none; border-radius:0; }
+/* 帶分數時整數交界處原本是靠 .bar-unit 自己的 2px 左框畫出來的，
+   比單位內的 3px 分數格線細、而且整條線都落在交界右側（box-sizing:border-box）。
+   這裡把內側左框拿掉，交界線改用跟分數格線同一個 .abs-thick-line 來畫
+   （見 unitEdgesHtml：左右兩個單位各畫一半，合起來就是置中的 3px 粗線），
+   這樣有沒有帶分數，中間線條的粗細與位置都一致。 */
+.fa48-root .bar-wrap-container.continuous .bar-unit:not(:first-child){ border-left:none; }
 .fa48-root .bar-wrap-container.continuous .bar-unit:last-child{ border-right:var(--bar-border-width) solid var(--bar-border-color); border-top-right-radius:4px; border-bottom-right-radius:4px; }
 .fa48-root .bar-wrap-container.continuous .bar-unit:first-child{ border-top-left-radius:4px; border-bottom-left-radius:4px; }
 .fa48-root .nl-wrap-container{ width:100%; display:flex; flex-wrap:nowrap; justify-content:flex-start; align-items:flex-start;
@@ -558,6 +564,19 @@ export default function FractionSubtractionPage() {
       }
     }
 
+    /**
+     * 整數單位交界處的分隔線（帶分數才會出現）。
+     * .bar-unit 有 overflow:hidden，所以一條置中的線放在單一單位裡會被裁掉一半；
+     * 這裡在左邊單位的 100% 與右邊單位的 0% 各放一條，各自露出一半，
+     * 拼起來就是一條與單位內分數格線（.abs-thick-line）完全相同的置中粗線。
+     */
+    function unitEdgesHtml(idx: number, total: number) {
+      let html = "";
+      if (idx > 0) html += `<div class="abs-thick-line unit-edge" style="left:0;"></div>`;
+      if (idx < total - 1) html += `<div class="abs-thick-line unit-edge" style="left:100%;"></div>`;
+      return html;
+    }
+
     function applyGridAnimation(
       gridContainer: HTMLElement,
       d: number,
@@ -649,7 +668,7 @@ export default function FractionSubtractionPage() {
           for (let i = 0; i < maxW; i++) {
             const unit = document.createElement("div");
             unit.className = "bar-unit";
-            unit.innerHTML = `<div class="bar-fill"></div><div class="bar-grid"></div>`;
+            unit.innerHTML = `<div class="bar-fill"></div><div class="bar-grid"></div>${unitEdgesHtml(i, maxW)}`;
             wrap.appendChild(unit);
           }
         }
@@ -713,7 +732,12 @@ export default function FractionSubtractionPage() {
 
         Array.from(unit.childNodes).forEach((child) => {
           const el = child as HTMLElement;
-          if (el.classList && !el.classList.contains("bar-grid") && !el.classList.contains("bar-fill"))
+          if (
+            el.classList &&
+            !el.classList.contains("bar-grid") &&
+            !el.classList.contains("bar-fill") &&
+            !el.classList.contains("unit-edge")
+          )
             unit.removeChild(child);
         });
         unit.style.display = "flex";
@@ -791,7 +815,7 @@ export default function FractionSubtractionPage() {
         for (let k = 1; k < vals.d1; k++) grids += `<div class="abs-thin-line" style="left:${(k / vals.d1) * 100}%; height: 100%; top: 0;"></div>`;
         for (let k = 1; k < vals.d2; k++) grids += `<div class="abs-thin-line" style="left:${(k / vals.d2) * 100}%; height: 100%; top: 0;"></div>`;
         grids += "</div>";
-        unit.innerHTML = `<div class="bar-fill" style="width: ${pct1}%; background-color: var(--red); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0; z-index: 1;"></div><div class="bar-fill" style="width: ${pct2}%; background-color: var(--blue); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0; z-index: 2;"></div>${grids}`;
+        unit.innerHTML = `<div class="bar-fill" style="width: ${pct1}%; background-color: var(--red); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0; z-index: 1;"></div><div class="bar-fill" style="width: ${pct2}%; background-color: var(--blue); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0; z-index: 2;"></div>${grids}${unitEdgesHtml(i, maxW)}`;
         wrap.appendChild(unit);
 
         const nlUnit = document.createElement("div");
@@ -838,7 +862,7 @@ export default function FractionSubtractionPage() {
         let grids = '<div class="grid-overlay">';
         for (let k = 1; k < cd; k++) grids += `<div class="abs-thin-line" style="left:${(k / cd) * 100}%;"></div>`;
         grids += "</div>";
-        unit.innerHTML = `<div class="bar-fill" style="width: ${pct}%; background-color: var(--red); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0;"></div>${grids}`;
+        unit.innerHTML = `<div class="bar-fill" style="width: ${pct}%; background-color: var(--red); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0;"></div>${grids}${unitEdgesHtml(i, maxW)}`;
         wrap.appendChild(unit);
 
         const nlUnit = document.createElement("div");
@@ -1013,7 +1037,7 @@ export default function FractionSubtractionPage() {
         for (let i = 0; i < maxWholes(); i++) {
           const fillPct =
             i < Math.floor(count / cd) ? 100 : i === Math.floor(count / cd) && count % cd > 0 ? ((count % cd) / cd) * 100 : 0;
-          html += `<div class="bar-unit" style="background: transparent;">${fillPct > 0 ? `<div class="bar-fill" style="width:${fillPct}%; background-color:${color}; opacity: 0.85;"></div>` : ""}<div class="grid-overlay">${Array.from({ length: cd - 1 }, (_, k) => `<div class="abs-thin-line" style="left:${((k + 1) / cd) * 100}%;"></div>`).join("")}</div></div>`;
+          html += `<div class="bar-unit" style="background: transparent;">${fillPct > 0 ? `<div class="bar-fill" style="width:${fillPct}%; background-color:${color}; opacity: 0.85;"></div>` : ""}<div class="grid-overlay">${Array.from({ length: cd - 1 }, (_, k) => `<div class="abs-thin-line" style="left:${((k + 1) / cd) * 100}%;"></div>`).join("")}</div>${unitEdgesHtml(i, maxWholes())}</div>`;
         }
         return html + "</div>";
       };
