@@ -957,16 +957,22 @@ export default function FractionAdditionPage() {
       const vals = getSafeValues();
       const total_n = num === 1 ? vals.total_n1 : vals.total_n2;
       const s = num === 1 ? s1 : s2;
-      const remaining_pieces = total_n * s - movedPieces;
+      const total_pieces = total_n * s;
+      const remaining_pieces = total_pieces - movedPieces;
+      // 已搬到合併結果區的色塊，在原位置留下同色虛線佔位（比照分數相除的 .div-chunk-ghost），
+      // 讓學生看得出「這裡原本有幾份，被搬走了」。
+      const ghostRgba = num === 1 ? "rgba(231, 76, 60, 0.12)" : "rgba(52, 152, 219, 0.12)";
 
       units.forEach((unitEl, uIdx) => {
         const unit = unitEl as HTMLElement;
-        unit.querySelectorAll(".drag-block").forEach((b) => b.remove());
+        unit.querySelectorAll(".drag-block, .merge-ghost").forEach((b) => b.remove());
         const fill = unit.querySelector(".bar-fill") as HTMLElement | null;
         if (fill) fill.style.display = "none";
         unit.style.display = "flex";
         unit.style.flexDirection = "row";
         const pieces_in_this_unit = Math.max(0, Math.min(cd, remaining_pieces - uIdx * cd));
+        const orig_pieces_in_this_unit = Math.max(0, Math.min(cd, total_pieces - uIdx * cd));
+        const ghost_pieces_in_this_unit = Math.max(0, orig_pieces_in_this_unit - pieces_in_this_unit);
         const grid = unit.querySelector(".bar-grid") as HTMLElement | null;
 
         if (pieces_in_this_unit === cd || !isCommonDenomReady) {
@@ -1045,6 +1051,22 @@ export default function FractionAdditionPage() {
             if (grid) unit.insertBefore(block, grid);
             else unit.appendChild(block);
           }
+        }
+        if (ghost_pieces_in_this_unit > 0) {
+          const ghost = document.createElement("div");
+          ghost.className = "merge-ghost";
+          ghost.style.width = `${(ghost_pieces_in_this_unit / cd) * 100}%`;
+          ghost.style.height = "100%";
+          ghost.style.flex = "none";
+          ghost.style.position = "relative";
+          ghost.style.boxSizing = "border-box";
+          ghost.style.border = `2px dashed ${color}`;
+          ghost.style.borderRadius = "4px";
+          ghost.style.backgroundColor = ghostRgba;
+          ghost.style.pointerEvents = "none";
+          ghost.style.zIndex = "1";
+          if (grid) unit.insertBefore(ghost, grid);
+          else unit.appendChild(ghost);
         }
       });
     }
@@ -1366,16 +1388,25 @@ export default function FractionAdditionPage() {
         if (bar3Wrap) bar3Wrap.style.pointerEvents = "none";
         if (errorWrap) errorWrap.style.pointerEvents = "none";
 
+        // 合併完成後保留上方兩條原始長條圖（只留虛線佔位），讓學生仍能對照
+        // 「兩個加數」與「合併結果」；僅鎖住互動，不再淡出隱藏。
         [bar1Row, bar2Row].forEach((row) => {
           if (row) {
             row.classList.remove("fade-in-slow");
             row.style.transition = "opacity 0.8s ease-in-out";
-            row.style.opacity = "0";
+            row.style.opacity = "1";
             row.style.pointerEvents = "none";
-            T(() => (row.style.display = "none"), 800);
           }
         });
       } else {
+        const bar1Row = $e("bar1-row");
+        const bar2Row = $e("bar2-row");
+        [bar1Row, bar2Row].forEach((row) => {
+          if (row) {
+            row.style.opacity = "1";
+            row.style.pointerEvents = "auto";
+          }
+        });
         $e("bar3-wrap")!.style.outline = "3px dashed var(--orange)";
         $e("bottom-answer-zone")!.style.opacity = "0";
         T(() => {
