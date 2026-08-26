@@ -342,6 +342,27 @@ export default function FractionSubtractionPage() {
     let isCommonDenomReady = false;
     let trashedCount = 0;
 
+    // 已丟進垃圾桶的每一步（紅色一份 + 對消掉的藍色一份），從垃圾桶還原時倒著取出。
+    let trashHistory: { red: HTMLElement; blue: HTMLElement }[] = [];
+
+    // 目前正在拖曳的那一份（紅色一份 + 跟著動的藍色一份）
+    // mode: "trash" = 從長條圖丟進垃圾桶；"restore" = 從垃圾桶拉回長條圖
+    let pieceDrag: {
+      mode: "trash" | "restore";
+      cd: number;
+      startX: number;
+      startY: number;
+      moved: boolean;
+      red: HTMLElement | null;
+      blue: HTMLElement | null;
+      redClone: HTMLElement;
+      blueClone: HTMLElement;
+    } | null = null;
+
+    // 飛出 .fa48-root 之後 var(--red)/var(--blue) 就解析不到了，複製品一律用明確色碼。
+    const PIECE_HEX: Record<string, string> = { "1": "#e74c3c", "2": "#3498db" };
+    const pieceHex = (el: HTMLElement) => PIECE_HEX[el.getAttribute("data-num") || "1"] || "#e74c3c";
+
     // tutorial-finger state
     let hintAnimId = 0;
     let idleTimer: number | null = null;
@@ -390,10 +411,8 @@ export default function FractionSubtractionPage() {
 
     function toggleNumberLine() {
       const showNL = $i("show-nl-cb")!.checked;
-      ["bar1", "bar2", "error", "final"].forEach((prefix) => {
-        const nlWrap = $e(
-          prefix === "error" ? "error-nl-wrap" : prefix === "final" ? "final-nl" : `${prefix}-nl`,
-        );
+      ["bar1", "bar2"].forEach((prefix) => {
+        const nlWrap = $e(`${prefix}-nl`);
         if (nlWrap && nlWrap.innerHTML.trim() !== "") {
           if (showNL) {
             nlWrap.style.display = "flex";
@@ -485,11 +504,6 @@ export default function FractionSubtractionPage() {
     }
 
     function onFrac1Click() {
-      const fArea = $e("final-answer-area");
-      if (fArea) {
-        fArea.style.opacity = "0";
-        fArea.style.display = "none";
-      }
       const row = $e("bar1-row")!;
       if (row) {
         row.style.maxHeight = "";
@@ -499,10 +513,12 @@ export default function FractionSubtractionPage() {
         row.style.margin = "";
         row.style.padding = "";
         row.style.transition = "";
+        row.style.pointerEvents = "";
         row.style.display = "flex";
       }
       s1 = 1;
       trashedCount = 0;
+      trashHistory = [];
       renderBar(1, "none");
       row.classList.remove("fade-in-slow");
       void row.offsetWidth;
@@ -512,11 +528,6 @@ export default function FractionSubtractionPage() {
     }
 
     function onFrac2Click() {
-      const fArea = $e("final-answer-area");
-      if (fArea) {
-        fArea.style.opacity = "0";
-        fArea.style.display = "none";
-      }
       const row = $e("bar2-row")!;
       if (row) {
         row.style.maxHeight = "";
@@ -526,10 +537,12 @@ export default function FractionSubtractionPage() {
         row.style.margin = "";
         row.style.padding = "";
         row.style.transition = "";
+        row.style.pointerEvents = "";
         row.style.display = "flex";
       }
       s2 = 1;
       trashedCount = 0;
+      trashHistory = [];
       renderBar(2, "none");
       row.classList.remove("fade-in-slow");
       void row.offsetWidth;
@@ -743,7 +756,17 @@ export default function FractionSubtractionPage() {
         unit.style.display = "flex";
         unit.style.flexDirection = "row";
 
-        if (clamped > 0) {
+        const grid = unit.querySelector(".bar-grid");
+        const addBlock = (block: HTMLElement) => {
+          if (grid) unit.insertBefore(block, grid);
+          else unit.appendChild(block);
+        };
+
+        if (clamped <= 0) return;
+
+        if (!isCommonDenomReady) {
+          // 未通分前只畫一整塊、不開放互動：分母不同時相減沒有意義，
+          // 先讓學生用「擴分/約分」把分母對齊。
           const block = document.createElement("div");
           block.className = "drag-block";
           block.id = `drag-${num}-${uIdx}-whole`;
@@ -751,147 +774,494 @@ export default function FractionSubtractionPage() {
           block.style.height = "100%";
           block.style.backgroundColor = color;
           block.style.opacity = "0.85";
-          if (num === 1) {
-            block.draggable = true;
-            block.style.cursor = "grab";
-          }
           block.style.position = "relative";
           block.style.boxSizing = "border-box";
-          block.style.borderRight = isCommonDenomReady && clamped === cd ? "1px solid rgba(255,255,255,0.4)" : "none";
           block.style.zIndex = "1";
+          block.draggable = false;
+          block.style.cursor = "default";
           block.setAttribute("data-pieces", String(clamped));
+          addBlock(block);
+          return;
+        }
+
+        // 通分後把長條圖切成一份一份的 1/cd，一次只處理一份。
+        for (let i = 0; i < clamped; i++) {
+          const piece = document.createElement("div");
+          piece.className = "drag-block";
+          piece.id = `drag-${num}-${uIdx}-${i}`;
+          piece.style.width = `${100 / cd}%`;
+          piece.style.height = "100%";
+          piece.style.backgroundColor = color;
+          piece.style.opacity = "0.85";
+          piece.style.position = "relative";
+          piece.style.boxSizing = "border-box";
+          piece.style.borderRight = "1px solid rgba(255,255,255,0.4)";
+          piece.style.zIndex = "1";
+          piece.setAttribute("data-pieces", "1");
+          piece.setAttribute("data-idx", String(uIdx * cd + i));
+          piece.setAttribute("data-num", String(num));
 
           if (num === 1) {
-            block.ondragstart = (e: DragEvent) => {
-              e.dataTransfer!.setData("text/plain", block.id);
-              setTimeout(() => (block.style.opacity = "0.4"), 0);
-            };
-            block.ondragend = () => {
-              if (block.draggable) block.style.opacity = "0.85";
-            };
-            block.onclick = () => {
-              if (block.draggable) {
-                if (isCommonDenomReady) trashPieces(block, num, cd);
-                else triggerErrorMerge();
-              }
-            };
+            piece.style.cursor = "grab";
+            piece.style.touchAction = "none";
+            // 蓋掉 .drag-block:active{transform:scale(0.95)}：按下時縮小會讓我們量到錯的起始位置，
+            // 而且 1/cd 的小塊縮一下也不好看，改用拖曳複製品的陰影當按壓回饋。
+            piece.style.transform = "none";
+            piece.onpointerdown = (e: PointerEvent) => beginPieceDrag(e, piece, cd);
+          } else {
+            piece.style.cursor = "default";
           }
-          const grid = unit.querySelector(".bar-grid");
-          if (grid) unit.insertBefore(block, grid);
-          else unit.appendChild(block);
+          addBlock(piece);
         }
       });
     }
 
-    function triggerErrorMerge() {
-      $e("drag-instruction")!.innerHTML = `⚠️ 分母不同，無法直接相減！請先點擊「擴分/約分」尋找公共的分母。`;
-      showErrorMergeBar();
+    // ---------- 一次丟一份：紅色（被減數）與藍色（減數）同時各扣掉一份 ----------
+
+    function livePieces(num: number): HTMLElement[] {
+      const wrap = $e(`bar${num}-wrap`);
+      if (!wrap) return [];
+      return (Array.from(wrap.querySelectorAll(".drag-block")) as HTMLElement[])
+        .filter((el) => el.getAttribute("data-trashed") !== "1")
+        .sort((a, b) => Number(a.getAttribute("data-idx") || 0) - Number(b.getAttribute("data-idx") || 0));
     }
 
-    function showErrorMergeBar() {
-      const errArea = $e("error-merge-area");
-      if (!errArea) return;
-      errArea.style.display = "flex";
-      const wrap = $e("error-bar-wrap")!;
-      const nlWrap = $e("error-nl-wrap")!;
-      const showNL = $i("show-nl-cb")!.checked;
+    const piecesNeeded = () => {
       const vals = getSafeValues();
-      const maxW = maxWholes();
+      return vals.total_n2 * s2;
+    };
 
-      wrap.innerHTML = "";
-      nlWrap.innerHTML = "";
-
-      const errorLabel = $e("error-label");
-      if (errorLabel) {
-        errorLabel.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; gap:5px; flex-wrap:wrap; font-size:1.8rem;">${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}<span style="font-weight:bold; color:var(--dark); font-size:1.8rem;">-</span>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}<span style="font-weight:bold; color:var(--dark); font-size:1.8rem;">?</span></div>`;
-      }
-
-      for (let i = 0; i < maxW; i++) {
-        const unit = document.createElement("div");
-        unit.className = "bar-unit";
-        const pct1 = Math.max(0, Math.min(100, ((vals.total_n1 - i * vals.d1) / vals.d1) * 100));
-        const pct2 = Math.max(0, Math.min(100, ((vals.total_n2 - i * vals.d2) / vals.d2) * 100));
-        let grids = '<div class="grid-overlay">';
-        for (let k = 1; k < vals.d1; k++) grids += `<div class="abs-thin-line" style="left:${(k / vals.d1) * 100}%; height: 100%; top: 0;"></div>`;
-        for (let k = 1; k < vals.d2; k++) grids += `<div class="abs-thin-line" style="left:${(k / vals.d2) * 100}%; height: 100%; top: 0;"></div>`;
-        grids += "</div>";
-        unit.innerHTML = `<div class="bar-fill" style="width: ${pct1}%; background-color: var(--red); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0; z-index: 1;"></div><div class="bar-fill" style="width: ${pct2}%; background-color: var(--blue); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0; z-index: 2;"></div>${grids}${unitEdgesHtml(i, maxW)}`;
-        wrap.appendChild(unit);
-
-        const nlUnit = document.createElement("div");
-        nlUnit.className = "nl-unit";
-        let labelsHtml =
-          i === 0
-            ? `<div style="position: absolute; left: 0%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 5;"><div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div><span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">0</span></div>`
-            : "";
-        labelsHtml += `<div style="position: absolute; left: 100%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 5;"><div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div><span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">${i + 1}</span></div>`;
-
-        const f1 = vals.total_n1 / vals.d1;
-        const f2 = vals.total_n2 / vals.d2;
-        if (f1 > i && f1 <= i + 1)
-          labelsHtml += `<div style="position: absolute; left: ${(f1 - i) * 100}%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 6;"><div style="width: 2px; height: 10px; background: var(--red); margin-bottom: 2px;"></div><div style="transform: scale(0.85); transform-origin: top center; background: rgba(255,255,255,0.85); border-radius: 4px; padding: 2px; white-space:nowrap;">${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}</div></div>`;
-        if (f2 > i && f2 <= i + 1)
-          labelsHtml += `<div style="position: absolute; left: ${(f2 - i) * 100}%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 6;"><div style="width: 2px; height: 10px; background: var(--blue); margin-bottom: 2px;"></div><div style="transform: scale(0.85); transform-origin: top center; background: rgba(255,255,255,0.85); border-radius: 4px; padding: 2px; white-space:nowrap;">${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</div></div>`;
-        nlUnit.innerHTML = labelsHtml;
-        nlWrap.appendChild(nlUnit);
-      }
-
-      wrap.classList.add("continuous");
-      nlWrap.classList.add("continuous");
-      nlWrap.style.display = showNL ? "flex" : "none";
+    // 丟掉的那一份原地改成同色虛線佔位（不移除），長條圖長度與格線位置都不會跑掉。
+    function markPieceAsGhost(piece: HTMLElement, num: number) {
+      piece.setAttribute("data-trashed", "1");
+      piece.classList.add("trash-ghost");
+      piece.onpointerdown = null;
+      piece.onclick = null;
+      piece.draggable = false;
+      piece.style.opacity = "1";
+      piece.style.cursor = "default";
+      piece.style.pointerEvents = "none";
+      piece.style.boxShadow = "none";
+      piece.style.borderRadius = "4px";
+      piece.style.border = `2px dashed ${num === 1 ? "var(--red)" : "var(--blue)"}`;
+      piece.style.backgroundColor = num === 1 ? "rgba(231, 76, 60, 0.12)" : "rgba(52, 152, 219, 0.12)";
     }
 
-    function showFinalAnswerBar() {
-      const vals = getSafeValues();
-      const cd = vals.d1 * s1;
-      const finalParts = vals.total_n1 * s1 - vals.total_n2 * s2;
-      const area = $e("final-answer-area")!;
-      const wrap = $e("final-wrap")!;
-      const nlWrap = $e("final-nl")!;
-      const showNL = $i("show-nl-cb")!.checked;
-      const maxW = maxWholes();
+    // markPieceAsGhost 的反向操作：從垃圾桶拉回來時把虛線佔位變回實心色塊並恢復互動。
+    function unmarkPieceGhost(piece: HTMLElement, num: number, cd: number) {
+      piece.removeAttribute("data-trashed");
+      piece.classList.remove("trash-ghost");
+      piece.style.border = "none";
+      piece.style.borderRight = "1px solid rgba(255,255,255,0.4)";
+      piece.style.borderRadius = "0";
+      piece.style.backgroundColor = num === 1 ? "var(--red)" : "var(--blue)";
+      piece.style.opacity = "0.85";
+      piece.style.boxShadow = "none";
+      piece.style.pointerEvents = "auto";
+      if (num === 1) {
+        piece.style.cursor = "grab";
+        piece.style.touchAction = "none";
+        piece.style.transform = "none";
+        piece.onpointerdown = (e: PointerEvent) => beginPieceDrag(e, piece, cd);
+      } else {
+        piece.style.cursor = "default";
+      }
+    }
 
-      wrap.innerHTML = "";
-      nlWrap.innerHTML = "";
-      $e("final-label")!.innerHTML = `<div style="font-weight:bold; color:var(--dark); font-size:1.1rem; margin-bottom:5px;">剩餘</div>`;
+    function floatingClone(src: HTMLElement, rect: { left: number; top: number; width: number; height: number }) {
+      const clone = src.cloneNode(true) as HTMLElement;
+      clone.removeAttribute("id");
+      clone.classList.add("fa48-fly");
+      clone.style.position = "fixed";
+      clone.style.left = rect.left + "px";
+      clone.style.top = rect.top + "px";
+      clone.style.width = rect.width + "px";
+      clone.style.height = rect.height + "px";
+      clone.style.margin = "0";
+      clone.style.opacity = "1";
+      clone.style.zIndex = "1200";
+      clone.style.pointerEvents = "none";
+      clone.style.transition = "none";
+      clone.style.transform = "translate(0px, 0px)";
+      clone.style.backgroundColor = pieceHex(src);
+      clone.style.borderRight = "none";
+      clone.style.borderRadius = "3px";
+      clone.style.boxShadow = "0 6px 14px rgba(0,0,0,0.3)";
+      document.body.appendChild(clone);
+      return clone;
+    }
 
-      for (let i = 0; i < maxW; i++) {
-        const unit = document.createElement("div");
-        unit.className = "bar-unit";
-        const pct = Math.max(0, Math.min(100, ((finalParts - i * cd) / cd) * 100));
-        let grids = '<div class="grid-overlay">';
-        for (let k = 1; k < cd; k++) grids += `<div class="abs-thin-line" style="left:${(k / cd) * 100}%;"></div>`;
-        grids += "</div>";
-        unit.innerHTML = `<div class="bar-fill" style="width: ${pct}%; background-color: var(--red); opacity: 0.85; height: 100%; top: 0; position: absolute; left: 0;"></div>${grids}${unitEdgesHtml(i, maxW)}`;
-        wrap.appendChild(unit);
+    function flyPieceToTrash(
+      piece: HTMLElement,
+      durationMs: number,
+      rect?: { left: number; top: number; width: number; height: number },
+    ) {
+      const r = rect || piece.getBoundingClientRect();
+      const clone = piece.cloneNode(true) as HTMLElement;
+      clone.removeAttribute("id");
+      clone.style.boxShadow = "none";
+      clone.style.backgroundColor = pieceHex(piece);
+      clone.style.borderRight = "none";
+      clone.style.borderRadius = "3px";
+      clone.style.opacity = "1";
+      animateToTrash(clone, { left: r.left, top: r.top, width: r.width, height: r.height }, true, durationMs);
+    }
 
-        const nlUnit = document.createElement("div");
-        nlUnit.className = "nl-unit";
-        let labelsHtml =
-          i === 0
-            ? `<div style="position: absolute; left: 0%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 5;"><div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div><span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">0</span></div>`
-            : "";
-        labelsHtml += `<div style="position: absolute; left: 100%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 5;"><div style="width: 2px; height: 6px; background: var(--dark); margin-bottom: 2px;"></div><span style="font-weight:bold; font-size:1.1rem; color:var(--dark);">${i + 1}</span></div>`;
-        if (finalParts / cd > i && finalParts / cd <= i + 1) {
-          labelsHtml += `<div style="position: absolute; left: ${(finalParts / cd - i) * 100}%; top: 0px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; z-index: 6;"><div style="width: 2px; height: 10px; background: var(--red); margin-bottom: 2px;"></div><div style="transform: scale(0.85); transform-origin: top center; background: rgba(255,255,255,0.85); border-radius: 4px; padding: 2px; font-weight: bold; color: var(--red);">?</div></div>`;
+    // 把拖曳中的複製品接手交給垃圾桶動畫（先清掉 transform，才不會與 left/top 疊加）。
+    function handOffToTrash(clone: HTMLElement, durationMs: number) {
+      const r = clone.getBoundingClientRect();
+      clone.style.transition = "none";
+      clone.style.transform = "none";
+      clone.style.boxShadow = "none";
+      animateToTrash(clone, { left: r.left, top: r.top, width: r.width, height: r.height }, true, durationMs);
+    }
+
+    function commitOnePiece(
+      cd: number,
+      red: HTMLElement,
+      blue: HTMLElement,
+      durationMs: number,
+      flyers?: { redClone: HTMLElement; blueClone: HTMLElement },
+    ) {
+      if (red.getAttribute("data-trashed") === "1" || blue.getAttribute("data-trashed") === "1") return;
+      if (trashedCount >= piecesNeeded()) return;
+
+      if (flyers) {
+        handOffToTrash(flyers.redClone, durationMs);
+        handOffToTrash(flyers.blueClone, durationMs);
+      } else {
+        flyPieceToTrash(red, durationMs);
+        flyPieceToTrash(blue, durationMs);
+      }
+      markPieceAsGhost(red, 1);
+      markPieceAsGhost(blue, 2);
+
+      trashedCount += 1;
+      trashHistory.push({ red, blue });
+      updateTrashTooltip(cd);
+
+      if (trashedCount === piecesNeeded()) {
+        T(() => {
+          // 動畫還在飛的期間學生可能已經從垃圾桶還原了一份，這時就不該再鎖住並顯示填答區。
+          if (trashedCount !== piecesNeeded()) return;
+          // 相減完成後保留上方兩條原始長條圖（減掉的部分留虛線佔位），讓學生仍能對照
+          // 「被減數／減數」與「剩餘」；僅鎖住互動，不再收合隱藏。
+          [$e("bar1-row"), $e("bar2-row")].forEach((row) => {
+            if (row) {
+              row.style.opacity = "1";
+              row.style.pointerEvents = "none";
+            }
+          });
+          showAnswerZone();
+        }, durationMs + 50);
+      } else {
+        $e("drag-instruction")!.innerHTML = `💡 很好！繼續把被減數的色塊一份一份丟進垃圾桶（減數會同時扣掉一份）。`;
+      }
+    }
+
+    // 把複製品從目前位置飛回指定色塊的位置（垃圾桶 → 長條圖的還原動畫）。
+    function flyCloneToPiece(clone: HTMLElement, target: HTMLElement, durationMs: number) {
+      const from = clone.getBoundingClientRect();
+      const to = target.getBoundingClientRect();
+      clone.style.transition = "none";
+      clone.style.transform = "none";
+      clone.style.left = from.left + "px";
+      clone.style.top = from.top + "px";
+      clone.style.width = from.width + "px";
+      clone.style.height = from.height + "px";
+      clone.style.boxShadow = "none";
+      clone.style.zIndex = "1000";
+      void clone.offsetWidth;
+      clone.style.transition = `all ${durationMs}ms cubic-bezier(0.25, 1, 0.5, 1)`;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!alive) return;
+          clone.style.left = to.left + "px";
+          clone.style.top = to.top + "px";
+          clone.style.width = to.width + "px";
+          clone.style.height = to.height + "px";
+        });
+      });
+      T(() => clone.remove(), durationMs + 50);
+    }
+
+    // 減完之後還想改？把垃圾桶裡的一份拉回（或點回）長條圖，一次還原一步。
+    function restoreOnePiece(
+      cd: number,
+      durationMs: number,
+      flyers?: { redClone: HTMLElement; blueClone: HTMLElement },
+    ) {
+      const entry = trashHistory.pop();
+      if (!entry) {
+        if (flyers) {
+          flyers.redClone.remove();
+          flyers.blueClone.remove();
         }
-        nlUnit.innerHTML = labelsHtml;
-        nlWrap.appendChild(nlUnit);
+        return;
+      }
+      const { red, blue } = entry;
+
+      unmarkPieceGhost(red, 1, cd);
+      unmarkPieceGhost(blue, 2, cd);
+      trashedCount = Math.max(0, trashedCount - 1);
+
+      if (flyers) {
+        flyCloneToPiece(flyers.redClone, red, durationMs);
+        flyCloneToPiece(flyers.blueClone, blue, durationMs);
+      } else {
+        const redClone = floatingClone(red, red.getBoundingClientRect());
+        const blueClone = floatingClone(blue, blue.getBoundingClientRect());
+        // 點擊還原：從垃圾桶那一份的位置慢慢飛回長條圖。
+        const trashRed = lastTrashMiniPiece(1);
+        const trashBlue = lastTrashMiniPiece(2);
+        if (trashRed) placeCloneAt(redClone, trashRed.getBoundingClientRect());
+        if (trashBlue) placeCloneAt(blueClone, trashBlue.getBoundingClientRect());
+        flyCloneToPiece(redClone, red, durationMs);
+        flyCloneToPiece(blueClone, blue, durationMs);
       }
 
-      wrap.classList.add("continuous");
-      nlWrap.classList.add("continuous");
-      nlWrap.style.display = showNL ? "flex" : "none";
-      area.style.display = "flex";
-      T(() => (area.style.opacity = "1"), 50);
+      updateTrashTooltip(cd);
+      exitCompletedState();
     }
 
-    function updateLabelsDuringDrag(cd: number) {
-      const vals = getSafeValues();
-      const rem1 = vals.total_n1 * s1 - trashedCount;
-      if ($e("label1")) $e("label1")!.innerHTML = getDisplayHtml(Math.floor(rem1 / cd), rem1 % cd, cd, "var(--red)");
-      const rem2 = vals.total_n2 * s2 - trashedCount;
-      if ($e("label2")) $e("label2")!.innerHTML = getDisplayHtml(Math.floor(rem2 / cd), rem2 % cd, cd, "var(--blue)");
+    function placeCloneAt(clone: HTMLElement, rect: { left: number; top: number; width: number; height: number }) {
+      clone.style.transition = "none";
+      clone.style.transform = "none";
+      clone.style.left = rect.left + "px";
+      clone.style.top = rect.top + "px";
+      clone.style.width = rect.width + "px";
+      clone.style.height = rect.height + "px";
+    }
+
+    function lastTrashMiniPiece(num: number): HTMLElement | null {
+      const tooltip = $e("trash-content");
+      if (!tooltip) return null;
+      const pieces = Array.from(
+        tooltip.querySelectorAll(`.trash-piece[data-num="${num}"]`),
+      ) as HTMLElement[];
+      return pieces[pieces.length - 1] || null;
+    }
+
+    // 從「減去完畢」退回未完成狀態：解鎖長條圖、收掉填答區、把擴分/約分按鈕放回來。
+    function exitCompletedState() {
+      [$e("bar1-row"), $e("bar2-row")].forEach((row) => {
+        if (row) {
+          row.style.opacity = "1";
+          row.style.pointerEvents = "auto";
+        }
+      });
+      if ($e("tools1")) $e("tools1")!.style.visibility = "visible";
+      if ($e("tools2")) $e("tools2")!.style.visibility = "visible";
+      if ($e("feedback")) $e("feedback")!.style.opacity = "0";
+      const zone = $e("bottom-answer-zone")!;
+      zone.style.opacity = "0";
+      T(() => {
+        if (trashedCount !== piecesNeeded()) zone.style.display = "none";
+      }, 300);
+      $e("drag-instruction")!.innerHTML =
+        trashedCount === 0
+          ? `💡 分母相同了！一次拖一份被減數的色塊丟進垃圾桶（減數會跟著一起扣掉一份），或點擊色塊讓它自己慢慢飛過去。`
+          : `💡 已從垃圾桶還原一份。可以繼續丟，也可以再從垃圾桶拉回來。`;
+    }
+
+    function isOverTrash(x: number, y: number) {
+      const can = $e("trash-can");
+      if (!can) return false;
+      const r = can.getBoundingClientRect();
+      const pad = 60;
+      return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+    }
+
+    // idle=沒在拖 / armed=拖曳中（提示這裡可以丟）/ over=已經在投放範圍內
+    function setTrashDropState(state: "idle" | "armed" | "over") {
+      const can = $e("trash-can");
+      if (!can) return;
+      can.style.transition = "transform 0.15s ease, filter 0.15s ease";
+      can.style.borderRadius = "12px";
+      can.style.outlineOffset = "6px";
+      if (state === "idle") {
+        can.style.transform = "scale(1)";
+        can.style.filter = "none";
+        can.style.outline = "none";
+      } else if (state === "armed") {
+        can.style.transform = "scale(1.05)";
+        can.style.filter = "none";
+        can.style.outline = "3px dashed var(--red)";
+      } else {
+        can.style.transform = "scale(1.25)";
+        can.style.filter = "drop-shadow(0 0 10px rgba(231,76,60,0.8))";
+        can.style.outline = "3px solid var(--red)";
+      }
+    }
+
+    // 還原時的投放目標是上面兩條長條圖。
+    function isOverBars(x: number, y: number) {
+      const pad = 30;
+      return [$e("bar1-wrap"), $e("bar2-wrap")].some((wrap) => {
+        if (!wrap) return false;
+        const r = wrap.getBoundingClientRect();
+        return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+      });
+    }
+
+    function setBarsDropState(state: "idle" | "armed" | "over") {
+      [$e("bar1-wrap"), $e("bar2-wrap")].forEach((wrap) => {
+        if (!wrap) return;
+        wrap.style.transition = "outline-color 0.15s ease";
+        wrap.style.outlineOffset = "4px";
+        wrap.style.borderRadius = "4px";
+        if (state === "idle") wrap.style.outline = "none";
+        else if (state === "armed") wrap.style.outline = "3px dashed var(--orange)";
+        else wrap.style.outline = "3px solid var(--orange)";
+      });
+    }
+
+    function endPieceDrag() {
+      window.removeEventListener("pointermove", onPiecePointerMove);
+      window.removeEventListener("pointerup", onPiecePointerUp);
+      window.removeEventListener("pointercancel", onPiecePointerUp);
+      setTrashDropState("idle");
+      setBarsDropState("idle");
+    }
+
+    function onPiecePointerMove(e: PointerEvent) {
+      const d = pieceDrag;
+      if (!d) return;
+      const dx = e.clientX - d.startX;
+      const dy = e.clientY - d.startY;
+      if (!d.moved && Math.abs(dx) + Math.abs(dy) > 5) d.moved = true;
+      const shift = `translate(${dx}px, ${dy}px)`;
+      d.redClone.style.transform = shift;
+      d.blueClone.style.transform = shift;
+      if (d.mode === "trash") {
+        setTrashDropState(isOverTrash(e.clientX, e.clientY) ? "over" : "armed");
+      } else {
+        setBarsDropState(isOverBars(e.clientX, e.clientY) ? "over" : "armed");
+      }
+    }
+
+    function onPiecePointerUp(e: PointerEvent) {
+      const d = pieceDrag;
+      pieceDrag = null;
+      endPieceDrag();
+      if (!d) return;
+
+      if (d.red) d.red.style.opacity = "0.85";
+      if (d.blue) d.blue.style.opacity = "0.85";
+
+      const dropClones = () => {
+        d.redClone.remove();
+        d.blueClone.remove();
+      };
+      const slideBack = () => {
+        [d.redClone, d.blueClone].forEach((clone) => {
+          clone.style.transition = "transform 0.25s ease-out, opacity 0.25s ease-out";
+          clone.style.transform = "translate(0px, 0px)";
+          clone.style.opacity = "0";
+          T(() => clone.remove(), 300);
+        });
+      };
+
+      if (d.mode === "restore") {
+        if (!d.moved) {
+          // 點擊垃圾桶裡的色塊：慢慢飛回長條圖。
+          dropClones();
+          restoreOnePiece(d.cd, 3000 / currentSpeed);
+        } else if (isOverBars(e.clientX, e.clientY)) {
+          restoreOnePiece(d.cd, 500 / currentSpeed, { redClone: d.redClone, blueClone: d.blueClone });
+        } else {
+          slideBack();
+        }
+        return;
+      }
+
+      if (!d.red || !d.blue) {
+        slideBack();
+        return;
+      }
+
+      if (!d.moved) {
+        // 當成點擊：複製品收掉，改用慢速動畫把色塊送進垃圾桶。
+        dropClones();
+        commitOnePiece(d.cd, d.red, d.blue, 3000 / currentSpeed);
+        return;
+      }
+
+      if (isOverTrash(e.clientX, e.clientY)) {
+        commitOnePiece(d.cd, d.red, d.blue, 500 / currentSpeed, {
+          redClone: d.redClone,
+          blueClone: d.blueClone,
+        });
+        return;
+      }
+
+      // 沒丟進垃圾桶：兩個複製品滑回原位。
+      slideBack();
+    }
+
+    // 從垃圾桶的迷你長條圖往回拖（紅藍兩份一起動，和丟進去時一樣）。
+    function beginRestoreDrag(e: PointerEvent, miniPiece: HTMLElement, cd: number) {
+      if (!isCommonDenomReady || pieceDrag) return;
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      if (trashedCount <= 0 || trashHistory.length === 0) return;
+
+      const miniRed = lastTrashMiniPiece(1);
+      const miniBlue = lastTrashMiniPiece(2);
+      if (!miniRed || !miniBlue) return;
+
+      e.preventDefault();
+      pieceDrag = {
+        mode: "restore",
+        cd,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false,
+        red: null,
+        blue: null,
+        redClone: floatingClone(miniRed, miniRed.getBoundingClientRect()),
+        blueClone: floatingClone(miniBlue, miniBlue.getBoundingClientRect()),
+      };
+      setBarsDropState("armed");
+
+      window.addEventListener("pointermove", onPiecePointerMove);
+      window.addEventListener("pointerup", onPiecePointerUp);
+      window.addEventListener("pointercancel", onPiecePointerUp);
+    }
+
+    function beginPieceDrag(e: PointerEvent, piece: HTMLElement, cd: number) {
+      if (!isCommonDenomReady || pieceDrag) return;
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      if (piece.getAttribute("data-trashed") === "1") return;
+      if (trashedCount >= piecesNeeded()) return;
+
+      // 減數（藍色）從最右邊開始對消，學生只需要選被減數要丟哪一份。
+      const blues = livePieces(2);
+      const blue = blues[blues.length - 1];
+      if (!blue) return;
+
+      e.preventDefault();
+      const redRect = piece.getBoundingClientRect();
+      const blueRect = blue.getBoundingClientRect();
+
+      pieceDrag = {
+        mode: "trash",
+        cd,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false,
+        red: piece,
+        blue,
+        redClone: floatingClone(piece, redRect),
+        blueClone: floatingClone(blue, blueRect),
+      };
+
+      piece.style.opacity = "0.25";
+      blue.style.opacity = "0.25";
+      setTrashDropState("armed");
+
+      window.addEventListener("pointermove", onPiecePointerMove);
+      window.addEventListener("pointerup", onPiecePointerUp);
+      window.addEventListener("pointercancel", onPiecePointerUp);
     }
 
     function animateToTrash(
@@ -929,92 +1299,6 @@ export default function FractionSubtractionPage() {
       T(() => clone.remove(), durationMs + 50);
     }
 
-    function trashPieces(block: HTMLElement, num: number, cd: number) {
-      if (num !== 1) return;
-      const vals = getSafeValues();
-      const p = parseInt(block.getAttribute("data-pieces") || "0");
-      const p_actual = Math.min(p, vals.total_n2 * s2 - trashedCount);
-      if (p_actual <= 0) return;
-
-      const animDuration = 3000 / currentSpeed;
-
-      if (p_actual === p) {
-        animateToTrash(block, null, false, animDuration);
-      } else {
-        const origRect = block.getBoundingClientRect();
-        const remW = origRect.width * (p_actual / p);
-        const remL = origRect.left + origRect.width - remW;
-        block.setAttribute("data-pieces", String(p - p_actual));
-        block.style.width = ((p - p_actual) / cd) * 100 + "%";
-        const tPart = block.cloneNode(true) as HTMLElement;
-        tPart.style.width = (p_actual / cd) * 100 + "%";
-        tPart.style.position = "fixed";
-        tPart.style.left = remL + "px";
-        tPart.style.top = origRect.top + "px";
-        animateToTrash(tPart, { left: remL, top: origRect.top, width: remW, height: origRect.height }, true, animDuration);
-      }
-
-      const bar2Blocks = Array.from(document.querySelectorAll('[id^="drag-2-"]')).reverse() as HTMLElement[];
-      let leftToTrash = p_actual;
-      for (const b2 of bar2Blocks) {
-        if (leftToTrash <= 0) break;
-        if (b2.style.display === "none") continue;
-        const b2_p = parseInt(b2.getAttribute("data-pieces") || "0");
-        if (b2_p <= leftToTrash) {
-          animateToTrash(b2, null, false, animDuration);
-          leftToTrash -= b2_p;
-        } else {
-          const oRect = b2.getBoundingClientRect();
-          const rW = oRect.width * (leftToTrash / b2_p);
-          const rL = oRect.left + oRect.width - rW;
-          b2.setAttribute("data-pieces", String(b2_p - leftToTrash));
-          b2.style.width = ((b2_p - leftToTrash) / cd) * 100 + "%";
-          const b2Temp = b2.cloneNode(true) as HTMLElement;
-          b2Temp.style.width = (leftToTrash / cd) * 100 + "%";
-          b2Temp.style.position = "fixed";
-          b2Temp.style.left = rL + "px";
-          b2Temp.style.top = oRect.top + "px";
-          animateToTrash(b2Temp, { left: rL, top: oRect.top, width: rW, height: oRect.height }, true, animDuration);
-          leftToTrash = 0;
-        }
-      }
-
-      trashedCount += p_actual;
-      updateTrashTooltip(cd);
-      updateLabelsDuringDrag(cd);
-
-      if (trashedCount === vals.total_n2 * s2) {
-        T(() => {
-          const row1 = $e("bar1-row");
-          const row2 = $e("bar2-row");
-          [row1, row2].forEach((row) => {
-            if (row) {
-              row.style.overflow = "hidden";
-              row.style.maxHeight = row.scrollHeight + "px";
-              row.style.transition =
-                "max-height 0.8s cubic-bezier(0.4, 0, 0.2, 1), min-height 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, margin 0.8s ease, padding 0.8s ease";
-            }
-          });
-          void document.body.offsetHeight;
-          [row1, row2].forEach((row) => {
-            if (row) {
-              row.style.opacity = "0";
-              row.style.maxHeight = "0px";
-              row.style.minHeight = "0px";
-              row.style.margin = "0";
-              row.style.padding = "0";
-            }
-          });
-          T(() => {
-            if (row1) row1.style.display = "none";
-            if (row2) row2.style.display = "none";
-            showFinalAnswerBar();
-            showAnswerZone();
-          }, 850);
-        }, animDuration + 50);
-      }
-    }
-
     function updateTrashTooltip(cd: number) {
       const tooltip = $e("trash-content");
       if (!tooltip) return;
@@ -1029,19 +1313,35 @@ export default function FractionSubtractionPage() {
       else if (w > 0) fracHtml = `<b>${w}</b> 個整數 和 <div class="inline-frac"><span>${n}</span><div class="line"></div><span>${cd}</span></div>`;
       else fracHtml = `<div class="inline-frac"><span>${n}</span><div class="line"></div><span>${cd}</span></div>`;
 
-      const genMini = (count: number, color: string) => {
+      // 迷你長條圖切成一份一份，才能被拉回／點回原來的長條圖還原。
+      const genMini = (count: number, num: number) => {
         if (cd <= 0) return "";
+        const color = num === 1 ? "var(--red)" : "var(--blue)";
+        const pieceW = 100 / cd;
         // 這組迷你長條圖不在 .bars-column 內，自行提供橫向捲動，避免整數部分多時被裁切。
         let html =
           '<div class="bar-wrap-container continuous" style="margin-top: 8px; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px;">';
         for (let i = 0; i < maxWholes(); i++) {
-          const fillPct =
-            i < Math.floor(count / cd) ? 100 : i === Math.floor(count / cd) && count % cd > 0 ? ((count % cd) / cd) * 100 : 0;
-          html += `<div class="bar-unit" style="background: transparent;">${fillPct > 0 ? `<div class="bar-fill" style="width:${fillPct}%; background-color:${color}; opacity: 0.85;"></div>` : ""}<div class="grid-overlay">${Array.from({ length: cd - 1 }, (_, k) => `<div class="abs-thin-line" style="left:${((k + 1) / cd) * 100}%;"></div>`).join("")}</div>${unitEdgesHtml(i, maxWholes())}</div>`;
+          html += `<div class="bar-unit" style="background: transparent; display:flex; flex-direction:row;">`;
+          for (let k = 0; k < cd; k++) {
+            const idx = i * cd + k;
+            if (idx < count) {
+              html += `<div class="trash-piece" data-num="${num}" data-trash-idx="${idx}" style="width:${pieceW}%; height:100%; flex:none; background-color:${color}; opacity:0.85; position:relative; box-sizing:border-box; border-right:1px solid rgba(255,255,255,0.4); z-index:1; cursor:grab; touch-action:none; transform:none;"></div>`;
+            } else {
+              html += `<div style="width:${pieceW}%; height:100%; flex:none;"></div>`;
+            }
+          }
+          html += `<div class="grid-overlay">${Array.from({ length: cd - 1 }, (_, k) => `<div class="abs-thin-line" style="left:${((k + 1) / cd) * 100}%;"></div>`).join("")}</div>${unitEdgesHtml(i, maxWholes())}</div>`;
         }
         return html + "</div>";
       };
-      tooltip.innerHTML = `<div style="margin-bottom: 15px;"><div style="padding: 0 15px;"><span style="color:var(--red); font-weight:bold;">被減數 (紅) 已丟棄: ${fracHtml}</span></div>${genMini(trashedCount, "var(--red)")}</div><div><div style="padding: 0 15px;"><span style="color:var(--blue); font-weight:bold;">減數 (藍) 已對消: ${fracHtml}</span></div>${genMini(trashedCount, "var(--blue)")}</div>`;
+      const hint = `<div style="padding: 4px 15px 0; color:#7f8c8d; font-size:0.85rem;">💡 想改答案？把垃圾桶裡的色塊拖回上面的長條圖，或直接點它，就能還原一份。</div>`;
+      tooltip.innerHTML = `<div style="margin-bottom: 15px;"><div style="padding: 0 15px;"><span style="color:var(--red); font-weight:bold;">被減數 (紅) 已丟棄: ${fracHtml}</span></div>${genMini(trashedCount, 1)}</div><div><div style="padding: 0 15px;"><span style="color:var(--blue); font-weight:bold;">減數 (藍) 已對消: ${fracHtml}</span></div>${genMini(trashedCount, 2)}</div>${hint}`;
+
+      tooltip.querySelectorAll(".trash-piece").forEach((el) => {
+        const miniPiece = el as HTMLElement;
+        miniPiece.onpointerdown = (ev: PointerEvent) => beginRestoreDrag(ev, miniPiece, cd);
+      });
     }
 
     function showAnswerZone() {
@@ -1066,44 +1366,29 @@ export default function FractionSubtractionPage() {
 
     function setupSubtraction(cd1: number, cd2: number) {
       if ($e("trash-area")) $e("trash-area")!.style.display = "flex";
+      // 長條圖在這裡整個重畫成滿的，所以垃圾桶的紀錄也一起歸零，
+      // 否則舊的 trashHistory 會指向已經被移除的 DOM 節點。
+      trashedCount = 0;
+      trashHistory = [];
       convertBarToDraggable(1, cd1, "var(--red)");
       convertBarToDraggable(2, cd2, "var(--blue)");
       updateTrashTooltip(cd1);
 
-      const wrap1 = $e("bar1-wrap")!;
-      const wrap2 = $e("bar2-wrap")!;
-      const dragOver = (e: DragEvent) => {
-        e.preventDefault();
-        (e.currentTarget as HTMLElement).style.opacity = "0.7";
-      };
-      const dragLeave = (e: DragEvent) => {
-        (e.currentTarget as HTMLElement).style.opacity = "1";
-      };
+      // 拖放改由色塊自己的 pointer 事件處理（見 beginPieceDrag），投放目標是垃圾桶而不是長條圖，
+      // 所以這裡把長條圖上舊的 HTML5 drag 事件全部清掉。
+      [$e("bar1-wrap"), $e("bar2-wrap")].forEach((wrap) => {
+        if (!wrap) return;
+        wrap.ondragover = null;
+        wrap.ondragleave = null;
+        wrap.ondrop = null;
+        wrap.style.opacity = "1";
+      });
 
-      if (isCommonDenomReady) {
-        wrap2.ondragover = dragOver;
-        wrap2.ondragleave = dragLeave;
-        wrap2.ondrop = (e: DragEvent) => {
-          e.preventDefault();
-          wrap2.style.opacity = "1";
-          const el = $e(e.dataTransfer!.getData("text/plain"));
-          if (el && el.classList.contains("drag-block")) trashPieces(el, 1, cd1);
-        };
-        wrap1.ondragover = null;
-        wrap1.ondrop = null;
-        wrap1.ondragleave = null;
-      } else {
-        const dropErr = (e: DragEvent) => {
-          e.preventDefault();
-          (e.currentTarget as HTMLElement).style.opacity = "1";
-          triggerErrorMerge();
-        };
-        wrap1.ondragover = dragOver;
-        wrap1.ondragleave = dragLeave;
-        wrap1.ondrop = dropErr;
-        wrap2.ondragover = dragOver;
-        wrap2.ondragleave = dragLeave;
-        wrap2.ondrop = dropErr;
+      if (pieceDrag) {
+        pieceDrag.redClone.remove();
+        pieceDrag.blueClone.remove();
+        pieceDrag = null;
+        endPieceDrag();
       }
     }
 
@@ -1125,11 +1410,12 @@ export default function FractionSubtractionPage() {
       T(() => ($e("bottom-answer-zone")!.style.display = "none"), 300);
 
       if (isCommonDenomReady) {
-        $e("drag-instruction")!.innerHTML = `💡 分母相同了！請點擊被減數的色塊，或將它拖入下方「減數長條圖」中扣除！`;
-        $e("label1")!.style.opacity = "0";
-        $e("label2")!.style.opacity = "0";
+        $e("drag-instruction")!.innerHTML = `💡 分母相同了！一次拖一份被減數的色塊丟進垃圾桶（減數會跟著一起扣掉一份），或點擊色塊讓它自己慢慢飛過去。`;
+        // 通分後長條圖仍保留原本長度（丟掉的部分只是變虛線），旁邊的分數標註要跟著留著對照。
+        $e("label1")!.style.opacity = "1";
+        $e("label2")!.style.opacity = "1";
       } else {
-        $e("drag-instruction")!.innerHTML = `💡 試著將兩條長條圖拖拉在一起相減，看看會發生什麼事？（或點擊「擴/約分」讓分母相同）`;
+        $e("drag-instruction")!.innerHTML = `💡 分母不同，還不能相減喔！請先點擊右邊的「擴分/約分」讓兩個分母相同。`;
         $e("label1")!.style.opacity = "1";
         $e("label2")!.style.opacity = "1";
       }
@@ -1154,6 +1440,7 @@ export default function FractionSubtractionPage() {
       bar2Visible = false;
       isCommonDenomReady = false;
       trashedCount = 0;
+      trashHistory = [];
 
       const wpEl = $e("word-problem")!;
       if (currentWordProblemTemplate) {
@@ -1183,16 +1470,6 @@ export default function FractionSubtractionPage() {
             <div id="tools2" style="width:15%; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; visibility:visible;">
                 <button class="tool-btn" onclick="window.__FA48.applyTool(2, 'expand')">➕ 擴分</button><button class="tool-btn" onclick="window.__FA48.applyTool(2, 'simplify')">➖ 約分</button>
             </div>
-        </div>
-        <div id="error-merge-area" style="display:none; position:relative; width:100%; min-height:50px; align-items:center; justify-content:space-between;">
-            <div id="error-label" style="width:15%; text-align:center;"></div>
-            <div class="bars-column"><div id="error-bar-wrap" class="bar-wrap-container"></div><div id="error-nl-wrap" class="nl-wrap-container" style="display:none; margin-top:2px;"></div></div>
-            <div style="width:15%;"></div>
-        </div>
-        <div id="final-answer-area" style="display:none; opacity:0; position:relative; width:100%; min-height:50px; align-items:center; justify-content:space-between; transition: opacity 0.5s;">
-            <div id="final-label" style="width:15%; text-align:center;"></div>
-            <div class="bars-column"><div id="final-wrap" class="bar-wrap-container"></div><div id="final-nl" class="nl-wrap-container" style="display:none; margin-top:2px;"></div></div>
-            <div style="width:15%;"></div>
         </div>
         <div id="trash-area" style="display:none; position:relative; width:100%; min-height:50px; align-items:flex-start; justify-content:space-between; border-top: 2px dashed #ccc; padding-top: 5px;">
             <div style="width:15%; display: flex; flex-direction: column; align-items: center; gap: 5px;"><div id="trash-can" style="font-size: 3rem;">🗑️</div><div style="font-weight:bold; color:var(--dark); font-size:1rem;">垃圾桶</div><button id="toggle-trash-btn" class="tool-btn" style="font-size: 0.85rem; padding: 4px 8px; width: auto;" onclick="window.__FA48.toggleTrashContent()">隱藏內容</button></div>
@@ -1326,9 +1603,8 @@ export default function FractionSubtractionPage() {
       if (!bar1Visible || !bar2Visible) {
         step = 0;
       } else if (!isCommonDenomReady) {
-        const errArea = $e("error-merge-area");
-        if (errArea && errArea.style.display !== "flex") step = 1;
-        else step = 2;
+        // 未通分前唯一該做的事就是擴分/約分，手指直接指向工具按鈕。
+        step = 2;
       } else {
         const ansZone = $e("bottom-answer-zone");
         if (ansZone && ansZone.style.display !== "flex") step = 3;
@@ -1372,10 +1648,11 @@ export default function FractionSubtractionPage() {
           await hintDelay(200, currentAnimId);
           finger.style.transform = "translate(0px, 0px) scale(1)";
           await hintDelay(400, currentAnimId);
-        } else if (step === 1 || step === 3) {
-          const sourceBlocks = Array.from(document.querySelectorAll("#bar1-wrap .drag-block")) as HTMLElement[];
-          const source = sourceBlocks.find((b) => b.style.display !== "none");
-          const dest = $e("bar2-wrap");
+        } else if (step === 3) {
+          // 通分後的正確操作是「拖一份色塊丟進垃圾桶」，手指從最右邊那一份指向垃圾桶。
+          const reds = livePieces(1);
+          const source = reds[reds.length - 1];
+          const dest = $e("trash-can");
           if (!source || !dest) throw new Error("element not found");
           const sRect = source.getBoundingClientRect();
           const dRect = dest.getBoundingClientRect();
@@ -1515,6 +1792,8 @@ export default function FractionSubtractionPage() {
       document.removeEventListener("keydown", resetIdleTimer);
       document.removeEventListener("mouseout", onMouseOut);
       root.removeEventListener("contextmenu", onCtx);
+      pieceDrag = null;
+      endPieceDrag();
       document.getElementById("hint-finger")?.remove();
       document.querySelectorAll(".fa48-fly").forEach((el) => el.remove());
       if (window.__FA48 === api) delete window.__FA48;
