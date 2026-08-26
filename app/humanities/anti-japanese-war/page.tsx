@@ -54,7 +54,10 @@ const parts: {
     description:
       "跟著「🎖️抗戰歷史小嚮導」對話，隨時提問「中國人民抗日戰爭」及「香港保衛戰」的歷史問題。",
     icon: MessageCircle,
-    accent: "#ed52cb",
+    // Purple, not the topic's red: the four cards' colours only exist to tell
+    // the parts apart, and a card wearing the topic colour reads as "the topic"
+    // rather than as one part of it.
+    accent: "#7a3dff",
     href: "/humanities/anti-japanese-war/chat",
     cta: "開始對話",
   },
@@ -69,14 +72,15 @@ export default function HumanitiesAntiJapaneseWarLandingPage() {
 
       <main className="relative flex flex-1 items-start overflow-y-auto overflow-x-hidden bg-[linear-gradient(180deg,_#fffdf8_0%,_#f8f7f4_48%,_#ffffff_100%)] text-[#080808]">
         <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_top,_rgba(20,110,245,0.12),_transparent_42%)]" />
-        <div className="absolute right-0 top-24 h-56 w-56 translate-x-1/4 rounded-full bg-[#ed52cb]/8 blur-3xl" />
+        <div className="absolute right-0 top-24 h-56 w-56 translate-x-1/4 rounded-full bg-[#c1121f]/8 blur-3xl" />
 
         <div className="relative mx-auto flex w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div className="flex w-full flex-col gap-8 py-2">
             <section className="flex flex-col gap-3 px-2 sm:px-0">
               <div
                 className="flex h-12 w-12 items-center justify-center rounded-[4px] text-white shadow-[6px_6px_0px_#080808]"
-                style={{ backgroundColor: "#ed52cb" }}
+                // The topic's own colour, matching its card on 人文科.
+                style={{ backgroundColor: "#c1121f" }}
               >
                 <Swords className="size-5" />
               </div>
