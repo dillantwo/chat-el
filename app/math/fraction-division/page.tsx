@@ -54,6 +54,9 @@ const STYLES = `
   cursor:pointer; font-weight:bold; font-size:0.95rem; box-shadow:0 3px 0 var(--nav-gray); outline:none; transition:0.15s; transform:translateY(0); }
 .fa38-root .lang-btn:active{ box-shadow:0 0 0 var(--nav-gray); transform:translateY(3px); }
 .fa38-root .lang-btn.btn-active-mode{ border-color:#34495e; color:#34495e; box-shadow:0 3px 0 #34495e; }
+.fa38-root .lang-btn.btn-restart{ padding:5px 12px; font-size:0.85rem; border-color:#e67e22; color:#e67e22; box-shadow:0 3px 0 #e67e22; }
+.fa38-root .lang-btn.btn-restart:hover{ background:#e67e22; color:#fff; }
+.fa38-root .lang-btn.btn-restart:active{ box-shadow:0 0 0 #e67e22; transform:translateY(3px); background:#d35400; color:#fff; }
 .fa38-root .lang-btn.btn-random{ border-color:#9b59b6; color:#9b59b6; box-shadow:0 3px 0 #9b59b6; }
 .fa38-root .lang-btn.btn-random:hover{ background:#9b59b6; color:#fff; }
 .fa38-root .lang-btn.btn-random:active{ box-shadow:0 0 0 #9b59b6; transform:translateY(3px); background:#8e44ad; color:#fff; }
@@ -182,6 +185,7 @@ const BODY_HTML = `
   <div class="header">
     <div class="header-left">
       <div class="title-badge">分數相除</div>
+      <button class="lang-btn btn-restart" onclick="window.__FA38.restart()" title="回到這一題的初始狀態，重新開始操作">↺ 重新開始</button>
     </div>
     <div class="header-right">
       <div class="controls-pill">
@@ -263,6 +267,7 @@ type FA38Api = {
   updateUI: () => void;
   autoCheck: () => void;
   applyTool: (num: number, action: string) => void;
+  restart: () => void;
 };
 
 declare global {
@@ -368,6 +373,61 @@ export default function FractionDivisionPage() {
       "有 [FRAC1] 塊披薩，每人 [FRAC2] 塊，可以分給幾人？",
       "有 [FRAC1] 加侖水，每次舀 [FRAC2] 加侖，可以舀幾次？",
     ];
+
+    /**
+     * 「重新開始」要回到的狀態。載入時（套用完 dashboard 傳進來的題目參數之後）拍一次快照，
+     * 之後不論學生怎麼擴分、量測、填答案，甚至按了「隨機出題」，都能回到這一題最初的樣子。
+     * 有帶題目參數就回到那題；沒有就回到輸入框的預設值。
+     */
+    let initialSnapshot: {
+      w1: string;
+      n1: string;
+      d1: string;
+      w2: string;
+      n2: string;
+      d2: string;
+      showWhole: boolean;
+      template: string | null;
+    } | null = null;
+
+    function captureInitialSnapshot() {
+      initialSnapshot = {
+        w1: $i("w1")!.value,
+        n1: $i("n1")!.value,
+        d1: $i("d1")!.value,
+        w2: $i("w2")!.value,
+        n2: $i("n2")!.value,
+        d2: $i("d2")!.value,
+        showWhole: $i("show-whole-cb")!.checked,
+        template: currentWordProblemTemplate,
+      };
+    }
+
+    function restart() {
+      const snap = initialSnapshot;
+      if (!snap) return;
+
+      // 還在飛的紅色色塊會被 re-parent 到 document.body，重建 anim-area 清不掉它們
+      // （比照卸載時的清理），另外把投遞佇列與容器佔用旗標歸零。
+      document.querySelectorAll('[id^="div-chunk-"]').forEach((el) => {
+        if (el.parentElement === document.body) el.remove();
+      });
+      blueMoldBusy = false;
+      divisionDropQueue = [];
+
+      $i("w1")!.value = snap.w1;
+      $i("n1")!.value = snap.n1;
+      $i("d1")!.value = snap.d1;
+      $i("w2")!.value = snap.w2;
+      $i("n2")!.value = snap.n2;
+      $i("d2")!.value = snap.d2;
+      $i("show-whole-cb")!.checked = snap.showWhole;
+      currentWordProblemTemplate = snap.template;
+
+      // toggleWholeNumber 會依 checkbox 顯示/隱藏整數輸入框，最後呼叫 updateUI()，
+      // 由 updateUI() 整個重建 anim-area 並清空答案輸入框與下方填答區。
+      toggleWholeNumber();
+    }
 
     // ---------- controls ----------
     function toggleWholeNumber() {
@@ -1291,6 +1351,7 @@ export default function FractionDivisionPage() {
       updateUI,
       autoCheck,
       applyTool,
+      restart,
     };
     window.__FA38 = api;
 
@@ -1335,6 +1396,8 @@ export default function FractionDivisionPage() {
 
     // window.onload sequence
     applyIncomingParams();
+    // 套用完題目參數後拍快照，「重新開始」就能回到這一題最初的狀態。
+    captureInitialSnapshot();
     updateSpeed();
     toggleWholeNumber();
     updateUI();

@@ -59,6 +59,9 @@ const STYLES = `
   cursor:pointer; font-weight:bold; font-size:0.95rem; box-shadow:0 3px 0 var(--nav-gray); outline:none; transition:0.15s; transform:translateY(0); }
 .fa47-root .lang-btn:active{ box-shadow:0 0 0 var(--nav-gray); transform:translateY(3px); }
 .fa47-root .lang-btn.btn-active-mode{ border-color:#34495e; color:#34495e; box-shadow:0 3px 0 #34495e; }
+.fa47-root .lang-btn.btn-restart{ padding:5px 12px; font-size:0.85rem; border-color:#e67e22; color:#e67e22; box-shadow:0 3px 0 #e67e22; }
+.fa47-root .lang-btn.btn-restart:hover{ background:#e67e22; color:#fff; }
+.fa47-root .lang-btn.btn-restart:active{ box-shadow:0 0 0 #e67e22; transform:translateY(3px); background:#d35400; color:#fff; }
 .fa47-root .lang-btn.btn-random{ border-color:#9b59b6; color:#9b59b6; box-shadow:0 3px 0 #9b59b6; }
 .fa47-root .lang-btn.btn-random:hover{ background:#9b59b6; color:#fff; }
 .fa47-root .lang-btn.btn-random:active{ box-shadow:0 0 0 #9b59b6; transform:translateY(3px); background:#8e44ad; color:#fff; }
@@ -183,6 +186,7 @@ const BODY_HTML = `
   <div class="header">
     <div class="header-left">
       <div class="title-badge">分數相加</div>
+      <button class="lang-btn btn-restart" onclick="window.__FA47.restart()" title="回到這一題的初始狀態，重新開始操作">↺ 重新開始</button>
     </div>
     <div class="header-right">
       <div class="controls-pill">
@@ -264,6 +268,7 @@ type FA47Api = {
   updateUI: () => void;
   autoCheck: () => void;
   applyTool: (num: number, action: string) => void;
+  restart: () => void;
 };
 
 declare global {
@@ -309,7 +314,12 @@ export default function FractionAdditionPage() {
     let barErrorModeValue = 0;
     let moved1 = 0;
     let moved2 = 0;
-    let mergedBlocks: { num: number; pieces: number }[] = [];
+    // 合併結果區的內容：每一筆就是「一份 1/cd」，記錄它來自哪一個加數（1=紅、2=藍）。
+    // 一次拖一整塊進來時會展開成多筆，這樣點擊還原才能一份一份退回去，而不是整塊一起退。
+    let mergedBlocks: { num: number }[] = [];
+    const pushMerged = (num: number, pieces: number) => {
+      for (let i = 0; i < pieces; i++) mergedBlocks.push({ num });
+    };
 
     let inactivityTimer: number | null = null;
     let hoverTimer: number | null = null;
@@ -472,6 +482,55 @@ export default function FractionAdditionPage() {
       "紅彩帶長 [FRAC1] 公尺，藍彩帶長 [FRAC2] 公尺。請問兩條彩帶接在一起共長多少公尺？",
     ];
 
+    /**
+     * 「重新開始」要回到的狀態。載入時（套用完 dashboard 傳進來的題目參數之後）拍一次快照，
+     * 之後不論學生怎麼擴分、合併、填答案，甚至按了「隨機出題」，都能回到這一題最初的樣子。
+     * 有帶題目參數就回到那題；沒有就回到輸入框的預設 1/2 + 1/3。
+     */
+    let initialSnapshot: {
+      w1: string;
+      n1: string;
+      d1: string;
+      w2: string;
+      n2: string;
+      d2: string;
+      showWhole: boolean;
+      template: string | null;
+    } | null = null;
+
+    function captureInitialSnapshot() {
+      initialSnapshot = {
+        w1: $i("w1")!.value,
+        n1: $i("n1")!.value,
+        d1: $i("d1")!.value,
+        w2: $i("w2")!.value,
+        n2: $i("n2")!.value,
+        d2: $i("d2")!.value,
+        showWhole: $i("show-whole-cb")!.checked,
+        template: currentWordProblemTemplate,
+      };
+    }
+
+    function restart() {
+      const snap = initialSnapshot;
+      if (!snap) return;
+
+      $i("w1")!.value = snap.w1;
+      $i("n1")!.value = snap.n1;
+      $i("d1")!.value = snap.d1;
+      $i("w2")!.value = snap.w2;
+      $i("n2")!.value = snap.n2;
+      $i("d2")!.value = snap.d2;
+      $i("show-whole-cb")!.checked = snap.showWhole;
+      currentWordProblemTemplate = snap.template;
+
+      // toggleWholeNumber 會依 checkbox 顯示/隱藏整數輸入框，最後呼叫 updateUI()。
+      // updateUI() 會整個重建 anim-area（兩條 bar、合併結果區都在裡面），所以合併完成時
+      // 上的 pointer-events 鎖會跟著舊節點一起消失，不需要另外解鎖；答案輸入框、回饋訊息、
+      // 下方填答區也都由 updateUI() 一併清空。
+      toggleWholeNumber();
+    }
+
     // ---------- controls ----------
     function toggleWholeNumber() {
       const showWhole = ($i("show-whole-cb") as HTMLInputElement).checked;
@@ -595,6 +654,7 @@ export default function FractionAdditionPage() {
     function onFrac1Click() {
       const row = $e("bar1-row")!;
       row.style.display = "flex";
+      unlockInteractions();
       s1 = 1;
       moved1 = 0;
       moved2 = 0;
@@ -620,6 +680,7 @@ export default function FractionAdditionPage() {
     function onFrac2Click() {
       const row = $e("bar2-row")!;
       row.style.display = "flex";
+      unlockInteractions();
       s2 = 1;
       moved1 = 0;
       moved2 = 0;
@@ -1004,7 +1065,7 @@ export default function FractionAdditionPage() {
               if (isCommonDenomReady) {
                 if (num === 1) moved1 += pieces_in_this_unit;
                 else moved2 += pieces_in_this_unit;
-                mergedBlocks.push({ num, pieces: pieces_in_this_unit });
+                pushMerged(num, pieces_in_this_unit);
                 updateDragDropState(cd);
               } else triggerErrorMerge();
             }
@@ -1043,7 +1104,7 @@ export default function FractionAdditionPage() {
                 if (isCommonDenomReady) {
                   if (num === 1) moved1 += 1;
                   else moved2 += 1;
-                  mergedBlocks.push({ num, pieces: 1 });
+                  pushMerged(num, 1);
                   updateDragDropState(cd);
                 } else triggerErrorMerge();
               }
@@ -1080,51 +1141,38 @@ export default function FractionAdditionPage() {
 
       bar3BlocksCount = moved1 + moved2;
 
-      let currentUnitIdx = 0;
-      let spaceInCurrentUnit = cd;
+      // 一份一份放：mergedBlocks 的第 i 筆就是第 i 份，依序填滿每個整數單位。
+      // 每一份都是獨立的可點擊色塊，點一下只退回那一份（不會整塊一起退回）。
+      mergedBlocks.forEach((mBlock, i) => {
+        const unitIdx = Math.floor(i / cd);
+        if (unitIdx >= units.length) return;
+        const unit = units[unitIdx] as HTMLElement;
+        const grid = unit.querySelector(".bar-grid") as HTMLElement | null;
 
-      for (let i = 0; i < mergedBlocks.length; i++) {
-        const mBlock = mergedBlocks[i];
-        let piecesRemaining = mBlock.pieces;
-        const color = mBlock.num === 1 ? "var(--red)" : "var(--blue)";
+        const block = document.createElement("div");
+        block.className = "drag-block";
+        block.style.width = `${100 / cd}%`;
+        block.style.height = "100%";
+        block.style.backgroundColor = mBlock.num === 1 ? "var(--red)" : "var(--blue)";
+        block.style.opacity = "1";
+        block.style.borderRight = "1px solid rgba(255,255,255,0.2)";
+        block.style.position = "relative";
+        block.style.boxSizing = "border-box";
+        block.style.zIndex = "1";
+        block.style.cursor = "pointer";
+        block.title = "點一下退回原本的長條圖";
 
-        while (piecesRemaining > 0) {
-          if (currentUnitIdx >= units.length) break;
-          const unit = units[currentUnitIdx] as HTMLElement;
-          const grid = unit.querySelector(".bar-grid") as HTMLElement | null;
-          const piecesToPlace = Math.min(piecesRemaining, spaceInCurrentUnit);
+        block.onclick = () => {
+          const removed = mergedBlocks.splice(i, 1)[0];
+          if (!removed) return;
+          if (removed.num === 1) moved1 -= 1;
+          else moved2 -= 1;
+          updateDragDropState(cd);
+        };
 
-          const block = document.createElement("div");
-          block.className = "drag-block";
-          block.style.width = `${(piecesToPlace / cd) * 100}%`;
-          block.style.height = "100%";
-          block.style.backgroundColor = color;
-          block.style.opacity = "1";
-          block.style.borderRight = "1px solid rgba(255,255,255,0.2)";
-          block.style.position = "relative";
-          block.style.boxSizing = "border-box";
-          block.style.zIndex = "1";
-          block.style.cursor = "pointer";
-
-          const targetIndex = i;
-          block.onclick = () => {
-            const removed = mergedBlocks.splice(targetIndex, 1)[0];
-            if (removed.num === 1) moved1 -= removed.pieces;
-            else moved2 -= removed.pieces;
-            updateDragDropState(cd);
-          };
-
-          if (grid) unit.insertBefore(block, grid);
-          else unit.appendChild(block);
-
-          piecesRemaining -= piecesToPlace;
-          spaceInCurrentUnit -= piecesToPlace;
-          if (spaceInCurrentUnit === 0) {
-            currentUnitIdx++;
-            spaceInCurrentUnit = cd;
-          }
-        }
-      }
+        if (grid) unit.insertBefore(block, grid);
+        else unit.appendChild(block);
+      });
 
       renderBar3NumberLine(cd);
       const vals = getSafeValues();
@@ -1304,7 +1352,7 @@ export default function FractionAdditionPage() {
             if (num === 1) moved1 += pieces;
             else if (num === 2) moved2 += pieces;
             else return;
-            mergedBlocks.push({ num, pieces });
+            pushMerged(num, pieces);
             updateDragDropState(cd1);
           } catch (err) {
             console.error("Drop Data Error:", err);
@@ -1351,6 +1399,24 @@ export default function FractionAdditionPage() {
       }
     }
 
+    /**
+     * 解除「合併完成」時上的互動鎖。
+     * 完成時會把 bar1-row / bar2-row（擴分/約分按鈕就在裡面）以及合併結果區、
+     * 錯誤示範區的 pointer-events 關掉，這裡負責一次全部放開。
+     * 重新開始（點上方分數）與退回未完成狀態時都要呼叫，否則按鈕會一直按不動。
+     */
+    function unlockInteractions() {
+      [$e("bar1-row"), $e("bar2-row")].forEach((row) => {
+        if (row) {
+          row.style.opacity = "1";
+          row.style.pointerEvents = "auto";
+        }
+      });
+      [$e("bar3-wrap"), $e("bar-error-wrap")].forEach((wrap) => {
+        if (wrap) wrap.style.pointerEvents = "auto";
+      });
+    }
+
     function checkAllDropped(totalNeeded: number) {
       if (!isCommonDenomReady) return;
 
@@ -1378,14 +1444,15 @@ export default function FractionAdditionPage() {
         }
 
         $e("bot-public-unit")!.innerHTML = `💡 公共分數單位為： <b style="display:inline-flex; align-items:center; vertical-align:middle;">${getFracHtml(1, cd1, "var(--dark)")}</b>`;
-        $e("drag-instruction")!.innerHTML = `💡 太棒了！全部合併完成，請填寫下方最終答案！${hint}`;
+        $e("drag-instruction")!.innerHTML = `💡 太棒了！全部合併完成，請填寫下方最終答案！${hint}<br><span style="font-size:0.9rem; color:var(--dark);">想重新試試？點一下「合併結果」裡的色塊，就能一份一份退回原來的長條圖。</span>`;
 
         const bar1Row = $e("bar1-row");
         const bar2Row = $e("bar2-row");
         const bar3Wrap = $e("bar3-wrap");
         const errorWrap = $e("bar-error-wrap");
 
-        if (bar3Wrap) bar3Wrap.style.pointerEvents = "none";
+        // 合併結果區保持可點擊：學生完成後還是可以一份一份把色塊退回上面的長條圖。
+        if (bar3Wrap) bar3Wrap.style.pointerEvents = "auto";
         if (errorWrap) errorWrap.style.pointerEvents = "none";
 
         // 合併完成後保留上方兩條原始長條圖（只留虛線佔位），讓學生仍能對照
@@ -1399,14 +1466,7 @@ export default function FractionAdditionPage() {
           }
         });
       } else {
-        const bar1Row = $e("bar1-row");
-        const bar2Row = $e("bar2-row");
-        [bar1Row, bar2Row].forEach((row) => {
-          if (row) {
-            row.style.opacity = "1";
-            row.style.pointerEvents = "auto";
-          }
-        });
+        unlockInteractions();
         $e("bar3-wrap")!.style.outline = "3px dashed var(--orange)";
         $e("bottom-answer-zone")!.style.opacity = "0";
         T(() => {
@@ -1635,6 +1695,7 @@ export default function FractionAdditionPage() {
       updateUI,
       autoCheck,
       applyTool,
+      restart,
     };
     window.__FA47 = api;
 
@@ -1725,6 +1786,8 @@ export default function FractionAdditionPage() {
 
     // window.onload sequence
     applyIncomingParams();
+    // 套用完題目參數後拍快照，「重新開始」就能回到這一題最初的狀態。
+    captureInitialSnapshot();
     updateSpeed();
     toggleWholeNumber();
     updateUI();

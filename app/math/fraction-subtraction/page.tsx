@@ -54,6 +54,9 @@ const STYLES = `
   cursor:pointer; font-weight:bold; font-size:0.95rem; box-shadow:0 3px 0 var(--nav-gray); outline:none; transition:0.15s; transform:translateY(0); }
 .fa48-root .lang-btn:active{ box-shadow:0 0 0 var(--nav-gray); transform:translateY(3px); }
 .fa48-root .lang-btn.btn-active-mode{ border-color:#34495e; color:#34495e; box-shadow:0 3px 0 #34495e; }
+.fa48-root .lang-btn.btn-restart{ padding:5px 12px; font-size:0.85rem; border-color:#e67e22; color:#e67e22; box-shadow:0 3px 0 #e67e22; }
+.fa48-root .lang-btn.btn-restart:hover{ background:#e67e22; color:#fff; }
+.fa48-root .lang-btn.btn-restart:active{ box-shadow:0 0 0 #e67e22; transform:translateY(3px); background:#d35400; color:#fff; }
 .fa48-root .lang-btn.btn-random{ border-color:#9b59b6; color:#9b59b6; box-shadow:0 3px 0 #9b59b6; }
 .fa48-root .lang-btn.btn-random:hover{ background:#9b59b6; color:#fff; }
 .fa48-root .lang-btn.btn-random:active{ box-shadow:0 0 0 #9b59b6; transform:translateY(3px); background:#8e44ad; color:#fff; }
@@ -178,6 +181,7 @@ const BODY_HTML = `
   <div class="header">
     <div class="header-left">
       <div class="title-badge">分數相減</div>
+      <button class="lang-btn btn-restart" onclick="window.__FA48.restart()" title="回到這一題的初始狀態，重新開始操作">↺ 重新開始</button>
     </div>
     <div class="header-right">
       <div class="controls-pill">
@@ -260,6 +264,7 @@ type FA48Api = {
   updateUI: () => void;
   autoCheck: () => void;
   applyTool: (num: number, action: string) => void;
+  restart: () => void;
 };
 
 declare global {
@@ -388,6 +393,64 @@ export default function FractionSubtractionPage() {
       "水桶裡原有 [FRAC1] 公升的水，倒出了 [FRAC2] 公升。請問現在水桶裡還剩下多少公升的水？",
       "紅彩帶長 [FRAC1] 公尺，藍彩帶長 [FRAC2] 公尺。請問紅彩帶比藍彩帶長多少公尺？",
     ];
+
+    /**
+     * 「重新開始」要回到的狀態。載入時（套用完 dashboard 傳進來的題目參數之後）拍一次快照，
+     * 之後不論學生怎麼擴分、丟垃圾桶、填答案，甚至按了「隨機出題」，都能回到這一題最初的樣子。
+     * 有帶題目參數就回到那題；沒有就回到輸入框的預設值。
+     */
+    let initialSnapshot: {
+      w1: string;
+      n1: string;
+      d1: string;
+      w2: string;
+      n2: string;
+      d2: string;
+      showWhole: boolean;
+      template: string | null;
+    } | null = null;
+
+    function captureInitialSnapshot() {
+      initialSnapshot = {
+        w1: $i("w1")!.value,
+        n1: $i("n1")!.value,
+        d1: $i("d1")!.value,
+        w2: $i("w2")!.value,
+        n2: $i("n2")!.value,
+        d2: $i("d2")!.value,
+        showWhole: $i("show-whole-cb")!.checked,
+        template: currentWordProblemTemplate,
+      };
+    }
+
+    function restart() {
+      const snap = initialSnapshot;
+      if (!snap) return;
+
+      // 拖曳中按下按鈕的機會不大，但保險起見把手上的複製品清掉。
+      if (pieceDrag) {
+        pieceDrag.redClone.remove();
+        pieceDrag.blueClone.remove();
+        pieceDrag = null;
+        endPieceDrag();
+      }
+      document.querySelectorAll(".fa48-fly").forEach((el) => el.remove());
+
+      $i("w1")!.value = snap.w1;
+      $i("n1")!.value = snap.n1;
+      $i("d1")!.value = snap.d1;
+      $i("w2")!.value = snap.w2;
+      $i("n2")!.value = snap.n2;
+      $i("d2")!.value = snap.d2;
+      $i("show-whole-cb")!.checked = snap.showWhole;
+      currentWordProblemTemplate = snap.template;
+
+      // toggleWholeNumber 會依 checkbox 顯示/隱藏整數輸入框，最後呼叫 updateUI()。
+      // updateUI() 會整個重建 anim-area（兩條 bar、垃圾桶都在裡面），所以減去完畢時
+      // 上的 pointer-events 鎖、tools 的 visibility 都會跟著舊節點消失；trashedCount /
+      // trashHistory 與答案輸入框也都由 updateUI() 一併歸零。
+      toggleWholeNumber();
+    }
 
     // ---------- controls ----------
     function toggleWholeNumber() {
@@ -959,10 +1022,17 @@ export default function FractionSubtractionPage() {
       }
     }
 
-    // 把複製品從目前位置飛回指定色塊的位置（垃圾桶 → 長條圖的還原動畫）。
+    /**
+     * 把複製品從目前位置飛回指定色塊的位置（垃圾桶 → 長條圖的還原動畫）。
+     *
+     * 這裡用 rAF 逐格計算而不是 CSS transition：還原的過程中版面會動
+     * （垃圾桶內容變少、最後一份還原時填答區收起來、文件變短還會讓 scrollTop 被夾回去），
+     * 目標色塊在視窗座標裡的位置因此會跑掉。只在開始時量一次的話，最後一格就會落在錯的地方。
+     * 每一格都重新量目標位置，並把同樣的位移補到起點上，路徑才不會跳、收尾也一定對齊。
+     */
     function flyCloneToPiece(clone: HTMLElement, target: HTMLElement, durationMs: number) {
-      const from = clone.getBoundingClientRect();
-      const to = target.getBoundingClientRect();
+      const r0 = clone.getBoundingClientRect();
+      const from = { left: r0.left, top: r0.top, width: r0.width, height: r0.height };
       clone.style.transition = "none";
       clone.style.transform = "none";
       clone.style.left = from.left + "px";
@@ -971,18 +1041,32 @@ export default function FractionSubtractionPage() {
       clone.style.height = from.height + "px";
       clone.style.boxShadow = "none";
       clone.style.zIndex = "1000";
-      void clone.offsetWidth;
-      clone.style.transition = `all ${durationMs}ms cubic-bezier(0.25, 1, 0.5, 1)`;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!alive) return;
-          clone.style.left = to.left + "px";
-          clone.style.top = to.top + "px";
-          clone.style.width = to.width + "px";
-          clone.style.height = to.height + "px";
-        });
-      });
-      T(() => clone.remove(), durationMs + 50);
+
+      const t0 = performance.now();
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+      let prevTo = target.getBoundingClientRect();
+
+      const step = () => {
+        if (!alive) {
+          clone.remove();
+          return;
+        }
+        const to = target.getBoundingClientRect();
+        // 目標因為版面位移而移動時，起點跟著移動同樣的距離。
+        from.left += to.left - prevTo.left;
+        from.top += to.top - prevTo.top;
+        prevTo = to;
+
+        const k = easeOutCubic(Math.min(1, (performance.now() - t0) / durationMs));
+        clone.style.left = from.left + (to.left - from.left) * k + "px";
+        clone.style.top = from.top + (to.top - from.top) * k + "px";
+        clone.style.width = from.width + (to.width - from.width) * k + "px";
+        clone.style.height = from.height + (to.height - from.height) * k + "px";
+
+        if (k < 1) requestAnimationFrame(step);
+        else clone.remove();
+      };
+      requestAnimationFrame(step);
     }
 
     // 減完之後還想改？把垃圾桶裡的一份拉回（或點回）長條圖，一次還原一步。
@@ -1021,7 +1105,7 @@ export default function FractionSubtractionPage() {
       }
 
       updateTrashTooltip(cd);
-      exitCompletedState();
+      exitCompletedState(durationMs + 100);
     }
 
     function placeCloneAt(clone: HTMLElement, rect: { left: number; top: number; width: number; height: number }) {
@@ -1042,8 +1126,12 @@ export default function FractionSubtractionPage() {
       return pieces[pieces.length - 1] || null;
     }
 
-    // 從「減去完畢」退回未完成狀態：解鎖長條圖、收掉填答區、把擴分/約分按鈕放回來。
-    function exitCompletedState() {
+    /**
+     * 從「減去完畢」退回未完成狀態：解鎖長條圖、收掉填答區、把擴分/約分按鈕放回來。
+     * collapseAfterMs：填答區的 display:none 會讓文件變短、連帶影響捲動位置，
+     * 所以等還原動畫飛完再收，過程中版面就不會動。
+     */
+    function exitCompletedState(collapseAfterMs = 300) {
       [$e("bar1-row"), $e("bar2-row")].forEach((row) => {
         if (row) {
           row.style.opacity = "1";
@@ -1057,7 +1145,7 @@ export default function FractionSubtractionPage() {
       zone.style.opacity = "0";
       T(() => {
         if (trashedCount !== piecesNeeded()) zone.style.display = "none";
-      }, 300);
+      }, collapseAfterMs);
       $e("drag-instruction")!.innerHTML =
         trashedCount === 0
           ? `💡 分母相同了！一次拖一份被減數的色塊丟進垃圾桶（減數會跟著一起扣掉一份），或點擊色塊讓它自己慢慢飛過去。`
@@ -1710,6 +1798,7 @@ export default function FractionSubtractionPage() {
       updateUI,
       autoCheck,
       applyTool,
+      restart,
     };
     window.__FA48 = api;
 
@@ -1775,6 +1864,8 @@ export default function FractionSubtractionPage() {
 
     // window.onload sequence
     applyIncomingParams();
+    // 套用完題目參數後拍快照，「重新開始」就能回到這一題最初的狀態。
+    captureInitialSnapshot();
     updateSpeed();
     toggleWholeNumber();
     updateUI();

@@ -40,6 +40,13 @@ const STYLES = `
 .fa65-root .lang-btn:active{ box-shadow:0 0 0 var(--nav-gray); transform:translateY(3px); }
 .fa65-root .lang-btn.btn-active-mode{ border-color:#34495e; color:#34495e; box-shadow:0 3px 0 #34495e; }
 
+/* 數字旁邊的排列方向篩選鈕（只看橫排 / 只看豎排） */
+.fa65-root .layout-btn{ padding:6px 12px; border:2px solid var(--nav-gray); background:#fff; color:#333; border-radius:8px;
+  cursor:pointer; font-weight:bold; font-size:0.9rem; box-shadow:0 3px 0 var(--nav-gray); outline:none; transition:0.15s;
+  white-space:nowrap; transform:translateY(0); }
+.fa65-root .layout-btn:active{ box-shadow:0 0 0 var(--nav-gray); transform:translateY(3px); }
+.fa65-root .layout-btn.filter-active{ border-color:#e67e22; color:#e67e22; box-shadow:0 3px 0 #e67e22; background:#fdf3e7; }
+
 /* input section */
 .fa65-root .input-section{ margin-top:20px; display:flex; align-items:flex-start; gap:40px; background:#fafafa; padding:30px; border-radius:15px; border:1px solid #eee; min-height:150px; }
 .fa65-root .math-box{ width:80px; height:80px; font-size:32px; text-align:center; border:3px solid #3498db; border-radius:10px; color:#2c3e50; outline:none; transition:border-color 0.3s; }
@@ -100,7 +107,13 @@ const BODY_HTML = `
   <div class="input-section">
     <div style="display: flex; flex-direction: column; align-items: center;">
       <div class="hint" style="margin-bottom: 10px;">輸入一個整數</div>
-      <input type="number" id="mainNum" class="math-box" min="1" max="999" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <input type="number" id="mainNum" class="math-box" min="1" max="999" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
+        <div id="layoutFilterGroup" style="display: none; flex-direction: column; gap: 8px;">
+          <button id="rowOnlyBtn" class="layout-btn" onclick="window.__FA65.setArrangeFilter('row')" title="只顯示橫排：列數比排數多的排列（例如 1×12、2×6）">⬌ 橫排</button>
+          <button id="colOnlyBtn" class="layout-btn" onclick="window.__FA65.setArrangeFilter('col')" title="只顯示豎排：排數比列數多的排列（例如 12×1、6×2）">⬍ 豎排</button>
+        </div>
+      </div>
     </div>
 
     <div style="display: flex; flex-direction: column; align-items: center;">
@@ -128,11 +141,14 @@ const BODY_HTML = `
 </div>
 `;
 
+type ArrangeFilter = "all" | "row" | "col";
+
 type FA65Api = {
   toggleMode: () => void;
   handleArrange: (row: HTMLElement) => void;
   swapValues: (event: Event, btnElement: HTMLElement) => void;
   nextFactorPair: (event: Event) => void;
+  setArrangeFilter: (mode: ArrangeFilter) => void;
 };
 
 declare global {
@@ -169,6 +185,8 @@ export default function FractionIntegerPage() {
     let currentFactorPairs: number[][] = [];
     let currentFactorIndex = 0;
     let currentMode = 1; // 1: 探索模式, 2: 完整排列模式
+    // 完整排列模式下要看哪個方向：all=全部、row=只看橫排（寬扁）、col=只看豎排（高瘦）
+    let arrangeFilter: ArrangeFilter = "all";
 
     function getFactorPairs(num: number) {
       const pairs: number[][] = [];
@@ -176,6 +194,42 @@ export default function FractionIntegerPage() {
         if (num % i === 0) pairs.push([i, num / i]);
       }
       return pairs;
+    }
+
+    /**
+     * pair = [排數, 列數]。橫排是列數 >= 排數（1×12 這種橫躺的），
+     * 豎排是排數 >= 列數（12×1 這種直立的）。正方形（4×4）兩邊都算，兩個篩選都看得到。
+     */
+    function filteredFactorPairs() {
+      if (arrangeFilter === "row") return currentFactorPairs.filter(([rows, cols]) => cols >= rows);
+      if (arrangeFilter === "col") return currentFactorPairs.filter(([rows, cols]) => rows >= cols);
+      return currentFactorPairs;
+    }
+
+    /**
+     * 方向篩選鈕只在「顯示全部」（完整排列模式）而且真的有輸入數字時才出現，
+     * 因為逐一顯示模式一次只畫一種排列，篩方向沒有意義。
+     */
+    function applyFilterButtons() {
+      const group = $e("layoutFilterGroup");
+      if (group) group.style.display = currentMode === 2 && targetTotal > 0 ? "flex" : "none";
+
+      const btns: [string, ArrangeFilter][] = [
+        ["rowOnlyBtn", "row"],
+        ["colOnlyBtn", "col"],
+      ];
+      btns.forEach(([id, mode]) => {
+        const btn = $e(id);
+        if (!btn) return;
+        btn.classList.toggle("filter-active", arrangeFilter === mode);
+      });
+    }
+
+    function setArrangeFilter(mode: ArrangeFilter) {
+      // 再按一次同一顆就回到「全部」，不用另外做一顆取消鈕。
+      arrangeFilter = arrangeFilter === mode ? "all" : mode;
+      applyFilterButtons();
+      updateView();
     }
 
     function applyModeButton() {
@@ -196,7 +250,10 @@ export default function FractionIntegerPage() {
 
     function toggleMode() {
       currentMode = currentMode === 1 ? 2 : 1;
+      // 逐一顯示模式一次只畫一種排列，方向篩選沒有意義，回到「全部」。
+      if (currentMode === 1) arrangeFilter = "all";
       applyModeButton();
+      applyFilterButtons();
       updateView();
     }
 
@@ -239,7 +296,11 @@ export default function FractionIntegerPage() {
         singleRow.classList.remove("active", "error", "viewing");
         indicator.innerHTML = "";
         circleContainer.innerHTML = "";
+        arrangeFilter = "all";
       }
+
+      // 數字被清空／重新輸入時，篩選鈕的顯示與選中狀態要跟著更新。
+      applyFilterButtons();
     }
 
     function renderAllArrangements() {
@@ -253,7 +314,22 @@ export default function FractionIntegerPage() {
       circleContainer.style.gridTemplateColumns = "";
       circleContainer.style.gridTemplateRows = "";
 
-      currentFactorPairs.forEach((pair) => {
+      const pairs = filteredFactorPairs();
+      if (arrangeFilter !== "all") {
+        const caption = document.createElement("div");
+        caption.style.width = "100%";
+        caption.style.textAlign = "center";
+        caption.style.fontWeight = "bold";
+        caption.style.color = "#e67e22";
+        caption.style.marginBottom = "5px";
+        caption.innerText =
+          arrangeFilter === "row"
+            ? `只顯示橫排（共 ${pairs.length} 種）`
+            : `只顯示豎排（共 ${pairs.length} 種）`;
+        circleContainer.appendChild(caption);
+      }
+
+      pairs.forEach((pair) => {
         const rows = pair[0];
         const cols = pair[1];
 
@@ -415,7 +491,7 @@ export default function FractionIntegerPage() {
     }
 
     // ---------- bootstrap ----------
-    const api: FA65Api = { toggleMode, handleArrange, swapValues, nextFactorPair };
+    const api: FA65Api = { toggleMode, handleArrange, swapValues, nextFactorPair, setArrangeFilter };
     window.__FA65 = api;
 
     de.style.setProperty("--circle-size", "45px");
@@ -432,6 +508,7 @@ export default function FractionIntegerPage() {
     const pNum = params.get("num");
     if (pMode === "2") currentMode = 2;
     applyModeButton();
+    applyFilterButtons();
     if (pNum !== null && pNum !== "") {
       let n = parseInt(pNum, 10);
       if (Number.isFinite(n)) {
