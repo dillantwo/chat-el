@@ -138,11 +138,42 @@ const STYLES = `
    整數和分數才會靠在一起，讀起來像一個帶分數而不是兩個數字。 */
 .fa45-root .nl-unit .inline-frac{ margin:0; }
 
-.fa45-root #bottom-answer-zone{ width:100%; max-width:650px; background:#fff8e1; padding:20px; border-radius:15px;
-  border:2px dashed var(--red); margin-top:15px; display:none; flex-direction:column; align-items:center; gap:10px;
+/* 填答區搬到 #anim-area 裏（主長條圖下面、步驟紀錄上面），所以要自己置中：
+   #anim-area 是 align-items:stretch 的 flex column，不像 .animation-zone 會幫忙居中。 */
+.fa45-root #bottom-answer-zone{ width:100%; max-width:650px; align-self:center; background:#fff8e1; padding:20px; border-radius:15px;
+  border:2px dashed var(--red); margin:0 auto; display:none; flex-direction:column; align-items:center; gap:10px;
   box-shadow:0 4px 10px rgba(0,0,0,0.05); transition:opacity 0.5s; z-index:50; position:relative; }
 .fa45-root .feedback-msg{ font-size:1.2rem; font-weight:bold; min-height:28px; margin-top:5px; opacity:0; transition:opacity 0.3s, color 0.3s; text-align:center; }
 .fa45-root .drag-block{ transition:transform 0.1s, opacity 0.2s, box-shadow 0.2s; touch-action:manipulation; }
+
+/* 步驟紀錄
+   主長條圖（#bar1-row）固定在上面，動畫都在那裏發生；每做完一步就把當時的樣子複製
+   一份，依序疊在主長條圖「下面」的 #step-history 裏。主長條圖位置不會被推走，學生
+   要點它、或對照上下的變化都比較穩定。 */
+.fa45-root #step-history{ width:100%; display:none; flex-direction:column; gap:10px;
+  background:#f7f9fa; border:1px solid #e4eaee; border-radius:14px; padding:12px 14px; }
+.fa45-root .step-history-head{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  font-size:1rem; font-weight:bold; color:var(--dark); border-bottom:1px dashed #d7dfe4; padding-bottom:8px; }
+.fa45-root .step-history-hint{ font-size:0.85rem; font-weight:normal; color:#7f8c8d; }
+.fa45-root #step-history-list{ display:flex; flex-direction:column; gap:10px; }
+.fa45-root .step-card{ width:100%; background:#fff; border:1px solid #e1e8ed; border-left:5px solid var(--success);
+  border-radius:10px; padding:7px 12px 8px; display:flex; flex-direction:column; align-items:stretch; gap:2px; }
+.fa45-root .step-card-title{ display:flex; align-items:center; gap:8px; font-size:0.9rem; color:var(--dark); flex-wrap:wrap; }
+.fa45-root .step-card-badge{ flex:none; background:var(--success); color:#fff; border-radius:12px; padding:2px 9px; font-size:0.8rem; font-weight:bold; }
+.fa45-root .step-card-text{ font-weight:bold; display:inline-flex; align-items:center; flex-wrap:wrap; }
+.fa45-root .step-card-text .inline-frac{ font-size:0.9em; }
+/* 與 #bar1-row 中央那條 70% 寬的長條圖對齊，各步驟的格線才會上下對照得起來 */
+.fa45-root .step-card-bars{ width:70% !important; margin:0 auto; padding:2px 0 2px; }
+.fa45-root .step-card .bar-wrap-container{ min-height:0; }
+.fa45-root .step-card .bar-unit{ height:30px; }
+.fa45-root .step-card .nl-unit{ height:44px; }
+
+/* 主長條圖左邊的狀態標籤：步驟 1 顯示被乘數，之後改成「目前步驟」提示，
+   讓學生一眼分得出「上面是正在做的」、「下面是已完成的紀錄」。 */
+.fa45-root .live-step-badge{ display:inline-block; background:var(--blue); color:#fff; border-radius:12px;
+  padding:4px 10px; font-size:0.9rem; font-weight:bold; line-height:1.3; }
+.fa45-root .live-step-badge small{ display:block; font-size:0.72rem; font-weight:normal; opacity:0.9; }
+.fa45-root .live-step-badge.done{ background:var(--success); }
 
 @media (max-width:768px){
   .fa45-root .header{ flex-direction:column; align-items:stretch; text-align:center; }
@@ -227,24 +258,32 @@ const BODY_HTML = `
         </div>
         <div style="width:15%;"></div>
       </div>
-    </div>
 
-    <div id="bottom-answer-zone">
-      <div class="formula">
-        <div id="bot-frac1"></div>
-        <span>×</span>
-        <div id="bot-frac2"></div>
-        <span>=</span>
-        <div class="mixed-frac" style="cursor: default;">
-          <input type="number" class="whole-input" id="ans-w" placeholder=" " min="0" oninput="window.__FA45.autoCheck()">
-          <div class="frac">
-            <input type="number" class="frac-input" id="ans-num" placeholder="?" min="0" oninput="window.__FA45.autoCheck()">
-            <div class="frac-line" style="background:#ccc;"></div>
-            <input type="number" class="frac-input" id="ans-den" placeholder="?" min="1" oninput="window.__FA45.autoCheck()">
+      <div id="bottom-answer-zone">
+        <div class="formula">
+          <div id="bot-frac1"></div>
+          <span>×</span>
+          <div id="bot-frac2"></div>
+          <span>=</span>
+          <div class="mixed-frac" style="cursor: default;">
+            <input type="number" class="whole-input" id="ans-w" placeholder=" " min="0" oninput="window.__FA45.autoCheck()">
+            <div class="frac">
+              <input type="number" class="frac-input" id="ans-num" placeholder="?" min="0" oninput="window.__FA45.autoCheck()">
+              <div class="frac-line" style="background:#ccc;"></div>
+              <input type="number" class="frac-input" id="ans-den" placeholder="?" min="1" oninput="window.__FA45.autoCheck()">
+            </div>
           </div>
         </div>
+        <div id="feedback" class="feedback-msg"></div>
       </div>
-      <div id="feedback" class="feedback-msg"></div>
+
+      <div id="step-history">
+        <div class="step-history-head">
+          📋 步驟紀錄
+          <span class="step-history-hint">上面是目前的長條圖，下面依序保留每一步做完的樣子</span>
+        </div>
+        <div id="step-history-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -322,6 +361,30 @@ export default function FractionMultiplicationPage() {
       return id;
     };
     const maxWholesVar = () => parseInt(getComputedStyle(de).getPropertyValue("--max-wholes")) || 1;
+
+    /**
+     * 動畫節奏（毫秒，1.0 倍速）。全部集中在這裏，要調快慢改這一份就好。
+     * 每段動畫「之前」留 read 時間讓學生看說明，「之後」留 hold 時間看結果，
+     * 再把那一步存進步驟紀錄，所以整體比原本慢，但每一步都看得清楚。
+     * 速度滑桿（0.5x～3x）仍然可以整體加速。
+     */
+    const TIMING = {
+      readStep: 1100, // 顯示步驟說明後先停一下再開始動
+      subdivide: 2400, // 虛線往下長、把每格再細分
+      holdSubdivide: 1300, // 細分完停一下
+      extract: 2400, // 提取（保留的留下、其餘淡出）
+      holdExtract: 1300, // 提取完停一下
+      travel: 900, // 重排時單一方塊移動的時間
+      stagger: 90, // 方塊依序出發的間隔（總量會被上限壓住）
+      staggerTotal: 1500, // 所有方塊出發的總時間上限
+      settle: 400, // 重排結束後的收尾
+      autoChain: 2200, // 直接點乘數時，先播步驟 1 再接步驟 2 的間隔
+    };
+    /** 依目前速度換算實際毫秒數。 */
+    const ms = (v: number) => v / currentSpeed;
+
+    /** 步驟 4 的說明，提示文字與步驟紀錄卡片共用同一句。 */
+    const STEP4_TEXT = "把提取出的紅色微細格子依序移動，整齊排列在一起";
 
     const wordProblemTemplates = [
       "一盒巧克力重 [FRAC1] 公斤，小明買了 [FRAC2] 盒。請問總共重多少公斤？",
@@ -547,6 +610,7 @@ export default function FractionMultiplicationPage() {
       wrap.innerHTML = "";
       wrap.style.cursor = "default";
       wrap.title = "";
+      clearStepHistory();
       $e("bottom-answer-zone")!.style.display = "none";
       $e("bottom-answer-zone")!.style.opacity = "0";
       $e("drag-instruction")!.innerHTML = `💡 準備中...請先點擊上方的「被乘數」`;
@@ -631,10 +695,90 @@ export default function FractionMultiplicationPage() {
       }
     }
 
+    // ---------- 步驟時間軸（保留每個做完的步驟） ----------
+    /** 快照是純展示用的複製品：拿掉 id（避免和實際動畫用的 unit-N / bar1-nl 撞名）與 inline 事件。 */
+    function stripInteractive(el: HTMLElement) {
+      el.removeAttribute("id");
+      el.removeAttribute("onclick");
+      el.removeAttribute("title");
+      el.style.cursor = "default";
+      el.querySelectorAll<HTMLElement>("[id]").forEach((c) => c.removeAttribute("id"));
+      el.querySelectorAll<HTMLElement>("[onclick]").forEach((c) => c.removeAttribute("onclick"));
+    }
+
+    /** 標題列用的分數：比照 getDisplayHtml，但整數部分不放大，才不會撐爆一行小字。 */
+    function getCompactDisplayHtml(w: number, n: number, d: number, color: string) {
+      const frac = getFracHtml(n, d, color);
+      if (w > 0) {
+        return `<span style="display:inline-flex; align-items:center; gap:2px;"><b style="color:${color};">${w}</b>${frac}</span>`;
+      }
+      return frac;
+    }
+
+    /**
+     * 把目前長條圖（含數線，如果正在顯示）的樣子凍結成一張卡片，附在主長條圖下面的
+     * 步驟紀錄裏。主長條圖（#bar1-row）永遠留在上面繼續動，紀錄由上而下依步驟累積，
+     * 所以加入新卡片不會推動學生正要點的那條長條圖。
+     */
+    function snapshotStep(num: number, text: string) {
+      const history = $e("step-history");
+      const list = $e("step-history-list");
+      const wrap = $e("main-bar-wrap");
+      if (!history || !list || !wrap) return;
+
+      const card = document.createElement("div");
+      card.className = "step-card fade-in-slow";
+
+      const title = document.createElement("div");
+      title.className = "step-card-title";
+      title.innerHTML = `<span class="step-card-badge">✓ 步驟 ${num}</span><span class="step-card-text">${text}</span>`;
+      card.appendChild(title);
+
+      const column = document.createElement("div");
+      column.className = "bars-column step-card-bars";
+
+      const barClone = wrap.cloneNode(true) as HTMLElement;
+      stripInteractive(barClone);
+      column.appendChild(barClone);
+
+      const nl = $e("bar1-nl");
+      if (nl && nl.style.display !== "none") {
+        const nlClone = nl.cloneNode(true) as HTMLElement;
+        stripInteractive(nlClone);
+        nlClone.style.display = "flex";
+        column.appendChild(nlClone);
+      }
+
+      card.appendChild(column);
+      list.appendChild(card);
+      history.style.display = "flex";
+    }
+
+    function clearStepHistory() {
+      const history = $e("step-history");
+      const list = $e("step-history-list");
+      if (list) list.innerHTML = "";
+      if (history) history.style.display = "none";
+    }
+
+    /**
+     * 主長條圖左邊的狀態標籤。步驟 1 由 onFrac1Click 放被乘數的分數，
+     * 之後改成「目前步驟」的膠囊標籤，跟下面的步驟紀錄區分開來。
+     */
+    function setLiveStepTag(num: number, note: string, done = false) {
+      const el = $e("label1");
+      if (!el) return;
+      el.style.opacity = "1";
+      el.innerHTML = `<span class="live-step-badge${done ? " done" : ""}">步驟 ${num}<small>${note}</small></span>`;
+    }
+
     function onFrac1Click() {
       if (isAnimating) return;
       isPhase1OrLater = false;
+      awaitingRearrangeClick = false;
       currentTutorialStep = 1;
+      // 重新從步驟 1 開始，之前累積的步驟卡片要一起清掉。
+      clearStepHistory();
 
       const vals = getSafeValues();
       const A = vals.total_n1;
@@ -697,7 +841,7 @@ export default function FractionMultiplicationPage() {
       el.innerHTML = `<span style="display:inline-block; background:var(--blue); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">步驟 ${num} / 5</span><span style="color:var(--dark); font-weight:bold; vertical-align:middle;">${text}</span>`;
     }
 
-    function makeGhost(rect: DOMRect) {
+    function makeGhost(rect: DOMRect, travelMs: number) {
       const ghost = document.createElement("div");
       ghost.className = "fa45-ghost";
       ghost.style.position = "fixed";
@@ -709,10 +853,15 @@ export default function FractionMultiplicationPage() {
       // 會導致背景透明、看不到移動中的紅色方塊，故用明確色碼。
       ghost.style.backgroundColor = "#e74c3c";
       ghost.style.opacity = "0.85";
-      ghost.style.transition = "all 0.6s cubic-bezier(0.25, 1, 0.5, 1)";
+      ghost.style.transition = `all ${Math.round(travelMs)}ms cubic-bezier(0.25, 1, 0.5, 1)`;
       ghost.style.zIndex = "100";
       ghost.style.pointerEvents = "none";
       return ghost;
+    }
+
+    /** 重排時方塊「依序出發」的間隔：格子多時自動縮短，總出發時間不超過上限。 */
+    function rearrangeStagger(count: number) {
+      return ms(Math.min(TIMING.stagger, TIMING.staggerTotal / Math.max(1, count)));
     }
 
     function animateSubdivide(dashedLines: HTMLElement[], duration: number) {
@@ -759,18 +908,21 @@ export default function FractionMultiplicationPage() {
         const slotsPerUnit = vals.d1 * vals.d2;
         preRearrangePositions = [];
         const ghosts: HTMLElement[] = [];
+        const travel = ms(TIMING.travel);
+        const stagger = rearrangeStagger(animBlocks.length);
 
         animBlocks.forEach((b) => {
           const rect = b.el.getBoundingClientRect();
           preRearrangePositions.push({ left: b.el.style.left, unit: b.el.parentElement as HTMLElement });
-          const ghost = makeGhost(rect);
+          const ghost = makeGhost(rect, travel);
           document.body.appendChild(ghost);
           ghosts.push(ghost);
           b.el.style.visibility = "hidden";
         });
 
-        T(() => {
-          ghosts.forEach((ghost, i) => {
+        // 一格一格依序出發（原本是全部同時飛過去，太快看不出「依序移動」）。
+        ghosts.forEach((ghost, i) => {
+          T(() => {
             const unitIdx = Math.floor(i / slotsPerUnit);
             const rem = i % slotsPerUnit;
             const targetUnit = $e(`unit-${unitIdx}`);
@@ -779,62 +931,77 @@ export default function FractionMultiplicationPage() {
             const targetLeft = tRect.left + rem * (tRect.width / slotsPerUnit);
             ghost.style.left = `${targetLeft}px`;
             ghost.style.top = `${tRect.top}px`;
-          });
-        }, 50);
+          }, 60 + i * stagger);
+        });
 
-        T(() => {
-          animBlocks.forEach((b, i) => {
-            const unitIdx = Math.floor(i / slotsPerUnit);
-            const rem = i % slotsPerUnit;
-            const targetUnit = $e(`unit-${unitIdx}`);
-            if (targetUnit) targetUnit.appendChild(b.el);
-            b.el.style.left = `${(rem / slotsPerUnit) * 100}%`;
-            b.el.style.visibility = "visible";
-          });
-          ghosts.forEach((g) => g.remove());
-          isRearranged = true;
-          resolve();
-        }, 650);
+        T(
+          () => {
+            animBlocks.forEach((b, i) => {
+              const unitIdx = Math.floor(i / slotsPerUnit);
+              const rem = i % slotsPerUnit;
+              const targetUnit = $e(`unit-${unitIdx}`);
+              if (targetUnit) targetUnit.appendChild(b.el);
+              b.el.style.left = `${(rem / slotsPerUnit) * 100}%`;
+              b.el.style.visibility = "visible";
+            });
+            ghosts.forEach((g) => g.remove());
+            isRearranged = true;
+            resolve();
+          },
+          60 + Math.max(0, ghosts.length - 1) * stagger + travel + 80,
+        );
       });
     }
 
     function rearrangeBackward() {
       return new Promise<void>((resolve) => {
         const ghosts: HTMLElement[] = [];
+        const travel = ms(TIMING.travel);
+        const stagger = rearrangeStagger(animBlocks.length);
+
         animBlocks.forEach((b) => {
           const rect = b.el.getBoundingClientRect();
-          const ghost = makeGhost(rect);
+          const ghost = makeGhost(rect, travel);
           document.body.appendChild(ghost);
           ghosts.push(ghost);
           b.el.style.visibility = "hidden";
         });
 
-        T(() => {
-          ghosts.forEach((ghost, i) => {
-            const orig = preRearrangePositions[i];
-            orig.unit.appendChild(animBlocks[i].el);
-            animBlocks[i].el.style.left = orig.left;
-            const tRect = animBlocks[i].el.getBoundingClientRect();
-            ghost.style.left = `${tRect.left}px`;
-            ghost.style.top = `${tRect.top}px`;
-          });
-        }, 50);
+        // 先把實體方塊放回原位（才量得到目標座標），鬼影再依序飛回去。
+        const targets = animBlocks.map((b, i) => {
+          const orig = preRearrangePositions[i];
+          orig.unit.appendChild(b.el);
+          b.el.style.left = orig.left;
+          const tRect = b.el.getBoundingClientRect();
+          return { left: tRect.left, top: tRect.top };
+        });
 
-        T(() => {
-          animBlocks.forEach((b) => (b.el.style.visibility = "visible"));
-          ghosts.forEach((g) => g.remove());
-          isRearranged = false;
-          resolve();
-        }, 650);
+        ghosts.forEach((ghost, i) => {
+          T(() => {
+            ghost.style.left = `${targets[i].left}px`;
+            ghost.style.top = `${targets[i].top}px`;
+          }, 60 + i * stagger);
+        });
+
+        T(
+          () => {
+            animBlocks.forEach((b) => (b.el.style.visibility = "visible"));
+            ghosts.forEach((g) => g.remove());
+            isRearranged = false;
+            resolve();
+          },
+          60 + Math.max(0, ghosts.length - 1) * stagger + travel + 80,
+        );
       });
     }
 
     async function onFrac2Click() {
       if (isAnimating) return;
       const rowCheck = $e("bar1-row")!;
-      if (rowCheck.style.display === "none") {
+      // 還沒畫被乘數，或已經跑過一次（要重播）時，先回到步驟 1 的乾淨長條圖再開始。
+      if (rowCheck.style.display === "none" || isPhase1OrLater) {
         onFrac1Click();
-        T(onFrac2Click, 1600);
+        T(onFrac2Click, ms(TIMING.autoChain));
         return;
       }
 
@@ -843,15 +1010,22 @@ export default function FractionMultiplicationPage() {
       currentTutorialStep = 2;
       hideFinger();
 
+      const vals = getSafeValues();
+
+      // 步驟 1 的長條圖等一下會被重建成細分後的版本，先存一張到下面的步驟紀錄
+      //（此時數線還在，所以紀錄裏的步驟 1 會連數線一起保留）。
+      snapshotStep(
+        1,
+        `被乘數 ${getCompactDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")} 的長條圖：每個整體平均分成 <b>${vals.d1}</b> 份`,
+      );
+
       const nlCb = $i("show-nl-cb");
       if (nlCb) {
         nlCb.disabled = true;
         nlCb.checked = false;
       }
       $e("bar1-nl")!.style.display = "none";
-      $e("label1")!.style.opacity = "0";
 
-      const vals = getSafeValues();
       const A = vals.total_n1;
       const B = vals.d1;
       const C = vals.total_n2;
@@ -924,23 +1098,31 @@ export default function FractionMultiplicationPage() {
       }
 
       // Step 2: subdivide by multiplier's denominator
-      setAnimStep(2, `引入乘數的分母 <b style="color:var(--blue)">${D}</b>，把被乘數的每一格平均再切分成 <b>${D}</b> 份`);
-      await delay(500 / currentSpeed);
+      const step2Text = `引入乘數的分母 <b style="color:var(--blue)">${D}</b>，把被乘數的每一格平均再切分成 <b>${D}</b> 份`;
+      setAnimStep(2, step2Text);
+      setLiveStepTag(2, "進行中");
+      // 先讓學生讀完說明再開始動。
+      await delay(ms(TIMING.readStep));
       if (!alive) return;
-      await animateSubdivide(dashedLines, 1300 / currentSpeed);
+      await animateSubdivide(dashedLines, ms(TIMING.subdivide));
       if (!alive) return;
-      await delay(400 / currentSpeed);
+      await delay(ms(TIMING.holdSubdivide));
       if (!alive) return;
+      // 細分完成：先把這一步的樣子存進下面的步驟紀錄，主長條圖再接著做提取。
+      snapshotStep(2, step2Text);
 
       // Step 3: extract by multiplier's numerator
-      if (C <= D) {
-        setAnimStep(3, `依乘數的分子 <b style="color:var(--blue)">${C}</b>，從每 <b>${D}</b> 小格中提取 <b style="color:var(--red)">${C}</b> 格（其餘淡出）`);
-      } else {
-        setAnimStep(3, `乘數大於 1，補上不足的格子，共提取 <b style="color:var(--red)">${C}</b> 倍的份量`);
-      }
-      await animateExtract(1300 / currentSpeed);
+      const step3Text =
+        C <= D
+          ? `依乘數的分子 <b style="color:var(--blue)">${C}</b>，從每 <b>${D}</b> 小格中提取 <b style="color:var(--red)">${C}</b> 格（其餘淡出）`
+          : `乘數大於 1，補上不足的格子，共提取 <b style="color:var(--red)">${C}</b> 倍的份量`;
+      setAnimStep(3, step3Text);
+      setLiveStepTag(3, "進行中");
+      await delay(ms(TIMING.readStep));
       if (!alive) return;
-      await delay(300 / currentSpeed);
+      await animateExtract(ms(TIMING.extract));
+      if (!alive) return;
+      await delay(ms(TIMING.holdExtract));
       if (!alive) return;
 
       animBlocks = animBlocks.filter((b) => {
@@ -951,11 +1133,15 @@ export default function FractionMultiplicationPage() {
         return true;
       });
 
+      // 提取完成：同樣存一張紀錄，最後的「整齊排列」還是在上面的主長條圖進行。
+      snapshotStep(3, step3Text);
+
       // Step 4: wait for user click to rearrange
       isAnimating = false;
       awaitingRearrangeClick = true;
       currentTutorialStep = 2;
-      setAnimStep(4, `將提取出的紅色微細格子依序移動、整齊排列`);
+      setAnimStep(4, `👉 點擊上方的長條圖，${STEP4_TEXT}`);
+      setLiveStepTag(4, "等你點擊");
       const wrap2 = $e("main-bar-wrap")!;
       wrap2.style.cursor = "pointer";
       wrap2.title = "點擊方塊整齊排列";
@@ -982,7 +1168,8 @@ export default function FractionMultiplicationPage() {
 
       $e("drag-instruction")!.innerHTML =
         `<span style="display:inline-block; background:var(--success); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">步驟 5 / 5</span>` +
-        `<span style="color:var(--dark); font-weight:bold; vertical-align:middle;">數一數！紅色微細格子共 <b style="color:var(--red)">${resultN}</b> 格（分子）；每個整體分成 <b style="color:var(--blue)">${resultD}</b> 格（分母）。請填寫答案，也可點擊長條圖切換排列。</span>`;
+        `<span style="color:var(--dark); font-weight:bold; vertical-align:middle;">數一數！紅色微細格子共 <b style="color:var(--red)">${resultN}</b> 格（分子）；每個整體分成 <b style="color:var(--blue)">${resultD}</b> 格（分母）。請填寫答案，也可點擊上方的長條圖切換排列。</span>`;
+      setLiveStepTag(5, "完成", true);
 
       $e("bottom-answer-zone")!.style.display = "flex";
       T(() => ($e("bottom-answer-zone")!.style.opacity = "1"), 50);
@@ -1012,9 +1199,15 @@ export default function FractionMultiplicationPage() {
         hideFinger();
         isAnimating = true;
         isRearranging = true;
+        setAnimStep(4, STEP4_TEXT);
+        setLiveStepTag(4, "進行中");
         rearrangeForward().then(() => {
           isRearranging = false;
-          finishAnimation();
+          // 排好之後停一下再進到填答案，並把步驟 4 也存進紀錄（之後學生切換排列也不會影響紀錄）。
+          T(() => {
+            snapshotStep(4, STEP4_TEXT);
+            finishAnimation();
+          }, ms(TIMING.settle));
         });
         return;
       }
