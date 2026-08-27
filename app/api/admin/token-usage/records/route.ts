@@ -87,6 +87,9 @@ export async function GET(req: NextRequest) {
         totalTokens: d.totalTokens ?? 0,
         ragTokens: d.ragTokens ?? 0,
         cost: cost.totalCost,
+        // Which conversation this call belongs to. Null for endpoints that are
+        // not part of a saved transcript (e.g. /api/classify, /api/generate-html).
+        chatId: d.chatId ?? null,
       };
     });
 

@@ -105,7 +105,10 @@ export async function POST(
     const denied = await requireTopicApi("chinese", TOPIC_KEYS[topic]);
     if (denied) return denied;
 
-    const { messages } = (await req.json()) as { messages: InputMessage[] };
+    const { messages, chatId } = (await req.json()) as {
+      messages: InputMessage[];
+      chatId?: string;
+    };
 
     const session = await getSession().catch(() => null);
     const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4.1";
@@ -124,6 +127,7 @@ export async function POST(
         modelName: deploymentName,
         endpoint,
         usage: await result.usage,
+        chatId,
       });
     });
 

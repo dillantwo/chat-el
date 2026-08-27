@@ -6,7 +6,6 @@ export default function ScienceAerospaceChatPage() {
       config={{
         topicId: "science-aerospace",
         topicLabel: "航天科技",
-        sessionPrefix: "science-aerospace",
         apiEndpoint: "/api/science-topic/aerospace",
         backHref: "/science/aerospace",
         backLabel: "返回航天科技",

@@ -140,9 +140,10 @@ function buildSystemPrompt(clockState: ClockToolState | null) {
 
 export async function POST(req: Request) {
   try {
-    const { messages, clockState } = (await req.json()) as {
+    const { messages, clockState, chatId } = (await req.json()) as {
       messages: UIMessage[];
       clockState?: ClockToolState;
+      chatId?: string;
     };
 
     // Two tools share this endpoint and each has its own switches, so the check
@@ -179,6 +180,7 @@ export async function POST(req: Request) {
         modelName: deploymentName,
         endpoint: "/api/clock-chat",
         usage: await result.usage,
+        chatId,
       });
     });
 

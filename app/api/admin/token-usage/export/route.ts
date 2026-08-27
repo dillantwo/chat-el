@@ -18,10 +18,23 @@ const MAX_RECORDS = 50_000;
 
 type ExportType = "records" | "school" | "subject" | "topic" | "user";
 
+/**
+ * Excel and Sheets treat a cell starting with `=`, `+`, `-`, `@`, tab or CR as a
+ * formula, so a value carrying one could execute when an admin opens this file.
+ * Most columns here are server-derived, but school and display names come from
+ * the user directory and `chatId` comes from a request body, so text cells get a
+ * leading apostrophe. Numbers are exempt (a negative cost would otherwise stop
+ * being a number), which is safe because they cannot carry a payload.
+ */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   const s = String(value);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  // Costs arrive pre-formatted as strings (see `money`), so "is it a number?"
+  // has to be decided by parsing rather than by typeof — otherwise a negative
+  // amount would be guarded and stop being numeric in the spreadsheet.
+  const isNumeric = s.trim() !== "" && Number.isFinite(Number(s));
+  const escaped = /^[=+\-@\t\r]/.test(s) && !isNumeric ? `'${s}` : s;
+  return /[",\n\r]/.test(escaped) ? `"${escaped.replace(/"/g, '""')}"` : escaped;
 }
 
 function toCsv(header: string[], rows: unknown[][]): string {
@@ -111,6 +124,7 @@ export async function GET(req: NextRequest) {
           "RAG tokens",
           "總 tokens",
           "估算成本 (USD)",
+          "對話 ID",
         ],
         docs.map((d) => {
           const cost = calculateUsageCost({
@@ -142,6 +156,7 @@ export async function GET(req: NextRequest) {
             d.ragTokens ?? 0,
             d.totalTokens ?? 0,
             money(cost.totalCost),
+            d.chatId ?? "",
           ];
         }),
       );

@@ -6,7 +6,8 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { ArrowUp, ImagePlus, MessageSquare, Mic, MicOff, PanelRight, Square, X } from "lucide-react";
+import { ArrowUp, ImagePlus, MessageSquare, Mic, MicOff, PanelRight, Square } from "lucide-react";
+import { ChatAttachmentPreview } from "@/components/ChatAttachmentPreview";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -71,7 +72,7 @@ function fileToDataURL(file: File): Promise<string> {
 
 export function ClockChatPanel({
   selectedTool,
-  sessionId,
+  chatId,
   hasUserQuestion,
   question,
   type,
@@ -80,14 +81,14 @@ export function ClockChatPanel({
   onHide,
 }: {
   selectedTool: ClockToolKey;
-  sessionId: string;
+  chatId: string;
   hasUserQuestion: boolean;
   question?: string;
   type?: string;
   toolUrl?: string;
   onNewChat: () => void;
   onHide?: () => void;
-} = { selectedTool: "clock-24hrs", sessionId: "clock-chat-default", hasUserQuestion: false, onNewChat: () => {} }) {
+} = { selectedTool: "clock-24hrs", chatId: "clock-chat-default", hasUserQuestion: false, onNewChat: () => {} }) {
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
   const [clockState, setClockState] = useState<ClockToolState | null>(null);
@@ -153,11 +154,15 @@ export function ClockChatPanel({
           body: {
             messages,
             clockState: stateRef.current,
+            // `chatId` is this conversation's history id (see the load/save
+            // effects below), so a token-usage record tagged with it can be
+            // resolved back to the transcript.
+            chatId,
             ...(body ?? {}),
           },
         }),
       }),
-    [],
+    [chatId],
   );
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
@@ -181,7 +186,7 @@ export function ClockChatPanel({
     let cancelled = false;
 
     (async () => {
-      const saved = await getMathChatHistoryItem(sessionId);
+      const saved = await getMathChatHistoryItem(chatId);
       if (cancelled) return;
       setMessages(saved ? restoreUiMessages(saved.messages) : []);
       // The input is about to be cleared, so a live mic would write the old text
@@ -197,7 +202,7 @@ export function ClockChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, setMessages, stopListening]);
+  }, [chatId, setMessages, stopListening]);
 
   useEffect(() => {
     messageHistoryRef.current[activeToolRef.current] = messages;
@@ -214,7 +219,7 @@ export function ClockChatPanel({
       .find((part) => part.type === "text" && part.text.trim().length > 0);
 
     void upsertMathChatHistory({
-      id: sessionId,
+      id: chatId,
       kind: selectedTool,
       title: firstUserText?.type === "text"
         ? `${selectedTool === "clock-24hrs" ? "24小時時鐘" : "時間差時鐘"}: ${firstUserText.text.slice(0, 30)}`
@@ -230,7 +235,7 @@ export function ClockChatPanel({
       messages: serializeUiMessages(messages),
       updatedAt: new Date().toISOString(),
     });
-  }, [hasUserQuestion, messages, question, selectedTool, sessionId, status, toolUrl, type]);
+  }, [hasUserQuestion, messages, question, selectedTool, chatId, status, toolUrl, type]);
 
   useEffect(() => {
     if (selectedTool === activeToolRef.current) {
@@ -257,6 +262,9 @@ export function ClockChatPanel({
       const picked = Array.from(event.target.files);
       setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, picked)]);
     }
+    // Reset so re-choosing the same photo still fires `change`; `chatFiles`
+    // owns the selection from here on.
+    event.target.value = "";
   }
 
   function removeChatFile(index: number) {
@@ -445,26 +453,7 @@ export function ClockChatPanel({
           }}
         >
           <div className="relative w-full rounded-[8px] border border-[#d8d8d8] bg-white shadow-[rgba(0,0,0,0)_0px_84px_24px,rgba(0,0,0,0.01)_0px_54px_22px,rgba(0,0,0,0.04)_0px_30px_18px,rgba(0,0,0,0.08)_0px_13px_13px,rgba(0,0,0,0.09)_0px_3px_7px]">
-            {chatFiles.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                {chatFiles.map((file, index) => (
-                  <div key={`${file.name}-${index}`} className="group relative">
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="size-12 rounded-[4px] border border-[#d8d8d8] object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeChatFile(index)}
-                      className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    >
-                      <X className="size-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} variant="square" />
 
             <Textarea
               value={input}

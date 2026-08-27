@@ -99,7 +99,10 @@ export async function POST(
     const denied = await requireTopicApi("science", topic);
     if (denied) return denied;
 
-    const { messages } = (await req.json()) as { messages: InputMessage[] };
+    const { messages, chatId } = (await req.json()) as {
+      messages: InputMessage[];
+      chatId?: string;
+    };
     const inputMessages = messages ?? [];
 
     // Retrieve topic-specific knowledge from Pinecone and inject it into the
@@ -128,6 +131,7 @@ export async function POST(
         endpoint,
         usage: await result.usage,
         ragTokens,
+        chatId,
       });
     });
 

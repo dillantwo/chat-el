@@ -6,7 +6,6 @@ export default function ChineseLinZexuPage() {
       config={{
         topicId: "lin-zexu",
         topicLabel: "學習林則徐",
-        sessionPrefix: "chinese-lin-zexu",
         apiEndpoint: "/api/chinese-topic/lin-zexu",
         icon: "book",
         placeholder: "輸入你的問題…",

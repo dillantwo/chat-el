@@ -6,7 +6,6 @@ export default function HumanitiesAntiJapaneseWarChatPage() {
       config={{
         topicId: "humanities-anti-japanese-war",
         topicLabel: "抗日戰爭",
-        sessionPrefix: "humanities-anti-japanese-war",
         apiEndpoint: "/api/humanities-topic/anti-japanese-war",
         backHref: "/humanities/anti-japanese-war",
         backLabel: "返回抗日戰爭",

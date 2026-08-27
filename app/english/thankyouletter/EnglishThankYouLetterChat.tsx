@@ -16,6 +16,7 @@ import {
   Pin,
   PinOff,
 } from "lucide-react";
+import { ChatAttachmentPreview } from "@/components/ChatAttachmentPreview";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -24,48 +25,55 @@ import rehypeKatex from "rehype-katex";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { basePath } from "@/lib/utils";
-import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
+import { useStreamingChat } from "@/lib/use-streaming-chat";
+import { useChatAttachments } from "@/lib/use-chat-attachments";
+import {
+  createChatMessage,
+  deriveChatTitle,
+  filesToChatImages,
+  restoreChatMessages,
+  toPayloadMessages,
+  toSavedMessages,
+} from "@/lib/chat-message";
 import {
   createEnglishChatId,
   upsertEnglishChatHistory,
   type EnglishChatHistoryItem,
-  type SavedChatMessage,
 } from "@/lib/english-chat-history";
-
-type ChatImage = { mediaType: string; dataUrl: string; filename?: string };
-type ChatMsg = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  images?: ChatImage[];
-};
 
 const TOPIC_ID = "thank-you-letter";
 const TOPIC_LABEL = "Thank-you Letter";
-const SESSION_PREFIX = "english-thankyou";
 const API_ENDPOINT = "/api/english-thank-you-letter";
 const DEFAULT_TITLE = "Thank-you Letter Chat";
 const PLACEHOLDER = "Type your letter or question…";
 const EMPTY_HINT = "Start chatting with AI to practise your Thank-you Letter.";
 
 export default function EnglishThankYouLetterChat() {
-  const makeSessionId = useCallback(
-    () =>
-      `${SESSION_PREFIX}-${
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2)
-      }`,
-    []
-  );
+  const {
+    messages,
+    setMessages,
+    status,
+    isLoading,
+    beginSend,
+    streamAssistant,
+    stop,
+    reset: resetChat,
+  } = useStreamingChat({
+    endpoint: API_ENDPOINT,
+    errorPrefix: "(Error) ",
+    unknownErrorMessage: "Unknown error",
+  });
+  const {
+    files: chatFiles,
+    inputRef: fileInputRef,
+    remove: removeChatFile,
+    clear: clearChatFiles,
+    onInputChange: handleChatFileChange,
+    onPaste: handlePaste,
+  } = useChatAttachments("en");
 
-  const [sessionId, setSessionId] = useState<string>(() => makeSessionId());
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
   const [input, setInput] = useState("");
-  const [chatFiles, setChatFiles] = useState<File[]>([]);
   const [currentChatId, setCurrentChatId] = useState(() => createEnglishChatId());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -78,13 +86,10 @@ export default function EnglishThankYouLetterChat() {
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   // Loading a saved chat must not re-save it (which would bump updatedAt and
   // reorder the shared history list).
   const skipSaveRef = useRef(false);
 
-  const isLoading = status === "submitted" || status === "streaming";
   const canSend = (!!input.trim() || chatFiles.length > 0) && !isLoading;
   const pinnedMessages = messages.filter((m) => pinnedIds.includes(m.id));
 
@@ -94,16 +99,6 @@ export default function EnglishThankYouLetterChat() {
       new CustomEvent("english-chat:active", { detail: { id: currentChatId } })
     );
   }, [currentChatId]);
-
-  useEffect(() => {
-    setSessionId(makeSessionId());
-  }, [makeSessionId]);
-
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setStatus("idle");
-  }, []);
 
   const handleCopy = useCallback(async (id: string, text: string) => {
     try {
@@ -156,21 +151,16 @@ export default function EnglishThankYouLetterChat() {
   );
 
   const handleNewChat = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
     // The input is about to be cleared, so a live mic would write the old text
     // back on its next result.
     stopListening();
-    setMessages([]);
+    resetChat();
     setInput("");
-    setChatFiles([]);
-    setStatus("idle");
-    setSessionId(makeSessionId());
+    clearChatFiles();
     setCurrentChatId(createEnglishChatId());
     setPinnedIds([]);
     setShowPinned(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [makeSessionId, stopListening]);
+  }, [stopListening, resetChat, clearChatFiles]);
 
   useEffect(() => {
     window.addEventListener("dashboard:new-chat", handleNewChat);
@@ -182,31 +172,19 @@ export default function EnglishThankYouLetterChat() {
     function onLoadChat(event: Event) {
       const detail = (event as CustomEvent<{ item: EnglishChatHistoryItem }>).detail?.item;
       if (!detail || detail.topic !== TOPIC_ID) return;
-      abortRef.current?.abort();
-      abortRef.current = null;
       // The input gets cleared below, so drop any dictation in flight.
       stopListening();
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
-      const restored: ChatMsg[] = detail.messages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        text: m.parts.find((p) => p.type === "text")?.text ?? "",
-        images: m.parts
-          .filter((p) => p.type === "file")
-          .map((p) => ({ mediaType: p.mediaType ?? "", dataUrl: p.url ?? "", filename: p.filename })),
-      }));
-      setMessages(restored);
+      resetChat(restoreChatMessages(detail.messages));
       setInput("");
-      setChatFiles([]);
-      setStatus("idle");
+      clearChatFiles();
       setPinnedIds([]);
       setShowPinned(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
     window.addEventListener("english-chat:load", onLoadChat);
     return () => window.removeEventListener("english-chat:load", onLoadChat);
-  }, [stopListening]);
+  }, [stopListening, resetChat, clearChatFiles]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -217,23 +195,11 @@ export default function EnglishThankYouLetterChat() {
     if (messages.length === 0) return;
     if (status === "streaming" || status === "submitted") return;
 
-    const firstUserText = messages.find((m) => m.role === "user")?.text;
-    const title = firstUserText ? firstUserText.slice(0, 50) : DEFAULT_TITLE;
-
-    const savedMessages: SavedChatMessage[] = messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      parts: [
-        ...(m.text ? [{ type: "text" as const, text: m.text }] : []),
-        ...(m.images ?? []).map((img) => ({ type: "file" as const, url: img.dataUrl, mediaType: img.mediaType, filename: img.filename })),
-      ],
-    }));
-
     void upsertEnglishChatHistory({
       id: currentChatId,
-      title,
+      title: deriveChatTitle(messages, DEFAULT_TITLE),
       topic: TOPIC_ID,
-      messages: savedMessages,
+      messages: toSavedMessages(messages),
       updatedAt: new Date().toISOString(),
     });
   }, [currentChatId, messages, status]);
@@ -247,143 +213,27 @@ export default function EnglishThankYouLetterChat() {
     }
   }, [messages]);
 
-  function fileToDataURL(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-  }
-
   async function doSend() {
     if (!canSend) return;
     if (isListening) stopListening();
+    const { signal } = beginSend();
 
-    const images: ChatImage[] = await Promise.all(
-      chatFiles.map(async (file) => ({
-        mediaType: file.type,
-        dataUrl: await fileToDataURL(file),
-        filename: file.name,
-      }))
-    );
+    const images = await filesToChatImages(chatFiles, "en");
+    // The student pressed Stop while the attachments were being read.
+    if (signal.aborted) return;
 
-    const userText = input.trim() || "(see image)";
-    const userMsg: ChatMsg = { id: `u-${Date.now()}`, role: "user", text: userText, ...(images.length > 0 ? { images } : {}) };
-    const assistantMsg: ChatMsg = { id: `a-${Date.now()}`, role: "assistant", text: "" };
-
+    const userMsg = createChatMessage("user", input.trim() || "(see image)", images);
     const nextMessages = [...messages, userMsg];
-    setMessages([...nextMessages, assistantMsg]);
+
+    setMessages(nextMessages);
     setInput("");
-    setChatFiles([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setStatus("submitted");
+    clearChatFiles();
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const payloadMessages = nextMessages.map((message) => ({
-      role: message.role,
-      text: message.text,
-      ...(message.images && message.images.length > 0
-        ? { images: message.images.map((image) => ({ mediaType: image.mediaType, data: image.dataUrl })) }
-        : {}),
-    }));
-
-    try {
-      const res = await fetch(`${basePath}${API_ENDPOINT}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: payloadMessages, sessionId }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "");
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: `(Error) ${errText || res.statusText}` } : m));
-        setStatus("idle");
-        abortRef.current = null;
-        return;
-      }
-
-      setStatus("streaming");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let target = "";
-      let displayed = "";
-      let streamDone = false;
-      let rafId: number | null = null;
-      const CHARS_PER_TICK = 2;
-
-      const tick = () => {
-        if (displayed.length < target.length) {
-          const remaining = target.length - displayed.length;
-          const step = Math.max(CHARS_PER_TICK, Math.ceil(remaining / 30));
-          displayed = target.slice(0, displayed.length + step);
-          const snapshot = displayed;
-          setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: snapshot } : m));
-        }
-        if (displayed.length < target.length || !streamDone) {
-          rafId = requestAnimationFrame(tick);
-        } else {
-          rafId = null;
-        }
-      };
-      rafId = requestAnimationFrame(tick);
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          if (chunk) target += chunk;
-        }
-      } finally {
-        streamDone = true;
-        await new Promise<void>((resolve) => {
-          const waitForCatchUp = () => {
-            if (displayed.length >= target.length) {
-              if (rafId !== null) cancelAnimationFrame(rafId);
-              setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: target } : m));
-              resolve();
-            } else {
-              requestAnimationFrame(waitForCatchUp);
-            }
-          };
-          waitForCatchUp();
-        });
-      }
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: error instanceof Error ? `(Error) ${error.message}` : "(Error) Unknown error" } : m));
-      } else {
-        setMessages((prev) => prev.filter((m) => m.id !== assistantMsg.id || m.text));
-      }
-    } finally {
-      abortRef.current = null;
-      setStatus("idle");
-    }
+    // `currentChatId` is the id this transcript is saved under, so a token-usage
+    // record tagged with it can be resolved back to the conversation.
+    await streamAssistant(toPayloadMessages(nextMessages), { chatId: currentChatId });
   }
 
-  function handleChatFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files) {
-      const picked = Array.from(e.target.files);
-      setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, picked, "en")]);
-    }
-  }
-  function removeChatFile(index: number) {
-    setChatFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) { const f = items[i].getAsFile(); if (f) imageFiles.push(f); }
-    }
-    if (imageFiles.length === 0) return;
-    e.preventDefault();
-    setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, imageFiles, "en")]);
-  }
   function handleSubmit(e: React.FormEvent) { e.preventDefault(); void doSend(); }
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void doSend(); }
@@ -559,18 +409,7 @@ export default function EnglishThankYouLetterChat() {
         <div className="px-4 pb-4 bg-white">
           <form onSubmit={handleSubmit} className="w-full">
             <div className="relative w-full rounded-2xl border border-[#e5e5e5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-              {chatFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                  {chatFiles.map((file, i) => (
-                    <div key={i} className="relative group">
-                      <img src={URL.createObjectURL(file)} alt={file.name} className="size-12 rounded-[8px] border border-[#e5e5e5] object-cover" />
-                      <button type="button" onClick={() => removeChatFile(i)} className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        <X className="size-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} removeLabel="Remove image" />
               <Textarea ref={textareaRef} placeholder={PLACEHOLDER} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste}
                 className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0" />
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleChatFileChange} className="hidden" />

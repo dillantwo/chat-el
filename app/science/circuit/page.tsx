@@ -6,7 +6,6 @@ export default function ScienceCircuitPage() {
       config={{
         topicId: "science-circuit",
         topicLabel: "電力及電路",
-        sessionPrefix: "science-circuit",
         apiEndpoint: "/api/science-topic/circuit",
         backHref: "/science",
         backLabel: "返回科學科",

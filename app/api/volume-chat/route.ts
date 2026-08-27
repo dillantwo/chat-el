@@ -153,9 +153,10 @@ export async function POST(req: Request) {
     const denied = await requireMathToolApi("volume-cubes");
     if (denied) return denied;
 
-    const { messages, sceneState } = (await req.json()) as {
+    const { messages, sceneState, chatId } = (await req.json()) as {
       messages: UIMessage[];
       sceneState?: SceneState;
+      chatId?: string;
     };
 
     const session = await getSession().catch(() => null);
@@ -175,6 +176,7 @@ export async function POST(req: Request) {
         modelName: deploymentName,
         endpoint: "/api/volume-chat",
         usage: await result.usage,
+        chatId,
       });
     });
 

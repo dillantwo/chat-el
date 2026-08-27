@@ -51,11 +51,12 @@ function uiMessagesToModelMessages(messages: UIMessage[]): ModelMessage[] {
 
 export async function POST(req: Request) {
   try {
-    const { messages, systemPrompt, mode, hasQuestion } = (await req.json()) as {
+    const { messages, systemPrompt, mode, hasQuestion, chatId } = (await req.json()) as {
       messages: UIMessage[];
       systemPrompt?: string;
       mode?: "question" | "ai-tool";
       hasQuestion?: boolean;
+      chatId?: string;
     };
 
     // Get session for token tracking (non-blocking — don't fail if no session)
@@ -172,6 +173,7 @@ export async function POST(req: Request) {
         modelName: deploymentName,
         endpoint: "/api/chat",
         usage: await result.usage,
+        chatId,
       });
     });
 

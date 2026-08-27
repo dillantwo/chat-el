@@ -35,8 +35,45 @@ export interface RecordTokenUsageParams {
   usage: ProviderUsage | null | undefined;
   /** Embedding tokens spent on RAG retrieval, if any. */
   ragTokens?: number;
-  /** Optional chat session id for drill-down. */
-  chatId?: string;
+  /**
+   * The conversation this request belongs to, so admin usage reports can drill
+   * down from "this student spent N tokens" to the actual transcript. Must be
+   * the id the transcript is SAVED under (the `chatId` of the *-chat-history
+   * document), otherwise the drill-down resolves to nothing.
+   *
+   * Client-supplied, so it is normalized here rather than at each call site.
+   */
+  chatId?: unknown;
+}
+
+/**
+ * The shape every chat id in this app actually has: `crypto.randomUUID()`, or
+ * the `<prefix>-<timestamp>-<random>` fallback the create*ChatId helpers use
+ * where randomUUID is unavailable.
+ *
+ * Constraining the shape (rather than only the length) matters for two reasons
+ * beyond storing tidy data: it keeps an arbitrary client string out of the admin
+ * CSV export, where a leading `=`/`+`/`-`/`@` would be interpreted as a formula
+ * by Excel, and it bounds what can be echoed back into the admin UI.
+ */
+const CHAT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+/**
+ * Chat ids arrive in a request body, so treat them as untrusted: anything that
+ * is not a plausible id is dropped rather than stored. Normalizing here means no
+ * route can forget to do it.
+ *
+ * Note this proves the id is well-formed, not that the caller owns that
+ * conversation — a student could tag their own token spend with a chat id
+ * belonging to someone else, which would misdirect the admin drill-down. That
+ * costs a database round-trip per record to close, so it is accepted for now:
+ * the blast radius is a mislabelled usage row, and transcripts themselves stay
+ * behind their own per-user checks.
+ */
+function normalizeChatId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return CHAT_ID_PATTERN.test(trimmed) ? trimmed : undefined;
 }
 
 function toNonNegativeInt(value: number | null | undefined): number {
@@ -115,7 +152,7 @@ export async function recordTokenUsage({
       completionTokens,
       totalTokens: toNonNegativeInt(usage.totalTokens) || inputTokens + completionTokens,
       ragTokens: toNonNegativeInt(ragTokens),
-      chatId,
+      chatId: normalizeChatId(chatId),
       endpoint,
     });
   } catch (err) {

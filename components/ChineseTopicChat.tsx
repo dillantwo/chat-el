@@ -23,6 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { ChatAttachmentPreview } from "@/components/ChatAttachmentPreview";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -32,14 +33,21 @@ import rehypeRaw from "rehype-raw";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { basePath } from "@/lib/utils";
-import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useStreamingChat } from "@/lib/use-streaming-chat";
+import { useChatAttachments } from "@/lib/use-chat-attachments";
+import {
+  createChatMessage,
+  deriveChatTitle,
+  filesToChatImages,
+  restoreChatMessages,
+  toPayloadMessages,
+  toSavedMessages,
+} from "@/lib/chat-message";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import {
   createChineseChatId,
   upsertChineseChatHistory,
   type ChineseChatHistoryItem,
-  type SavedChatMessage,
 } from "@/lib/chinese-chat-history";
 import {
   createEssayDraftId,
@@ -55,8 +63,6 @@ export interface ChineseTopicConfig {
   topicId: string;
   /** Human-readable label shown in the header. */
   topicLabel: string;
-  /** Prefix used when generating a session id. */
-  sessionPrefix: string;
   /** API route this topic talks to (system prompt lives on the server). */
   apiEndpoint: string;
   /** Where the header back-link points (defaults to the Chinese subject). */
@@ -87,14 +93,6 @@ export interface ChineseTopicConfig {
    *  overwrites the existing content). */
   promptPresets?: { label: string; text: string }[];
 }
-
-type ChatImage = { mediaType: string; dataUrl: string; filename?: string };
-type ChatMsg = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  images?: ChatImage[];
-};
 
 // Drafts panel: the three writing stages a student works through.
 type DraftStage = "first" | "revised" | "final";
@@ -246,7 +244,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   const {
     topicId,
     topicLabel,
-    sessionPrefix,
     apiEndpoint,
     backHref = "/chinese",
     backLabel = "返回中文科",
@@ -261,21 +258,30 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   } = config;
   const HeaderIcon = ICON_MAP[icon];
 
-  const makeSessionId = useCallback(
-    () =>
-      `${sessionPrefix}-${
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2)
-      }`,
-    [sessionPrefix]
-  );
+  const {
+    messages,
+    setMessages,
+    status,
+    isLoading,
+    beginSend,
+    streamAssistant,
+    stop,
+    reset: resetChat,
+  } = useStreamingChat({
+    endpoint: apiEndpoint,
+    errorPrefix: "（出錯了）",
+    unknownErrorMessage: "未知錯誤",
+  });
+  const {
+    files: chatFiles,
+    inputRef: fileInputRef,
+    remove: removeChatFile,
+    clear: clearChatFiles,
+    onInputChange: handleChatFileChange,
+    onPaste: handlePaste,
+  } = useChatAttachments("zh");
 
-  const [sessionId, setSessionId] = useState<string>(() => makeSessionId());
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
   const [input, setInput] = useState("");
-  const [chatFiles, setChatFiles] = useState<File[]>([]);
   const [currentChatId, setCurrentChatId] = useState(() => createChineseChatId());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -321,8 +327,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   // Loading a saved chat must not re-save it (which would bump updatedAt and
   // reorder the shared history list).
   const skipSaveRef = useRef(false);
@@ -398,7 +402,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     [isListening, rebaseChatDictation]
   );
 
-  const isLoading = status === "submitted" || status === "streaming";
   const mustSelectFirst =
     requireQuickStartSelection &&
     !!quickStartOptions?.length &&
@@ -413,16 +416,6 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       new CustomEvent("chinese-chat:active", { detail: { id: currentChatId } })
     );
   }, [currentChatId]);
-
-  useEffect(() => {
-    setSessionId(makeSessionId());
-  }, [makeSessionId]);
-
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setStatus("idle");
-  }, []);
 
   const handleCopy = useCallback(async (id: string, text: string) => {
     try {
@@ -699,21 +692,16 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
   }, [showDrafts, draftsView, finishDraftDictation, flushDraftSave]);
 
   const handleNewChat = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
     // The input is about to be cleared, so a live mic would write the old text
     // back on its next result.
     stopListening();
-    setMessages([]);
+    resetChat();
     setInput("");
-    setChatFiles([]);
-    setStatus("idle");
-    setSessionId(makeSessionId());
+    clearChatFiles();
     setCurrentChatId(createChineseChatId());
     setPinnedIds([]);
     setShowPinned(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [makeSessionId, stopListening]);
+  }, [stopListening, resetChat, clearChatFiles]);
 
   useEffect(() => {
     window.addEventListener("dashboard:new-chat", handleNewChat);
@@ -725,31 +713,19 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     function onLoadChat(event: Event) {
       const detail = (event as CustomEvent<{ item: ChineseChatHistoryItem }>).detail?.item;
       if (!detail || detail.topic !== topicId) return;
-      abortRef.current?.abort();
-      abortRef.current = null;
       // The input gets cleared below, so drop any dictation in flight.
       stopListening();
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
-      const restored: ChatMsg[] = detail.messages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        text: m.parts.find((p) => p.type === "text")?.text ?? "",
-        images: m.parts
-          .filter((p) => p.type === "file")
-          .map((p) => ({ mediaType: p.mediaType ?? "", dataUrl: p.url ?? "", filename: p.filename })),
-      }));
-      setMessages(restored);
+      resetChat(restoreChatMessages(detail.messages));
       setInput("");
-      setChatFiles([]);
-      setStatus("idle");
+      clearChatFiles();
       setPinnedIds([]);
       setShowPinned(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
     window.addEventListener("chinese-chat:load", onLoadChat);
     return () => window.removeEventListener("chinese-chat:load", onLoadChat);
-  }, [topicId, stopListening]);
+  }, [topicId, stopListening, resetChat, clearChatFiles]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -760,23 +736,11 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     if (messages.length === 0) return;
     if (status === "streaming" || status === "submitted") return;
 
-    const firstUserText = messages.find((m) => m.role === "user")?.text;
-    const title = firstUserText ? firstUserText.slice(0, 50) : defaultTitle;
-
-    const savedMessages: SavedChatMessage[] = messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      parts: [
-        ...(m.text ? [{ type: "text" as const, text: m.text }] : []),
-        ...(m.images ?? []).map((img) => ({ type: "file" as const, url: img.dataUrl, mediaType: img.mediaType, filename: img.filename })),
-      ],
-    }));
-
     void upsertChineseChatHistory({
       id: currentChatId,
-      title,
+      title: deriveChatTitle(messages, defaultTitle),
       topic: topicId,
-      messages: savedMessages,
+      messages: toSavedMessages(messages),
       updatedAt: new Date().toISOString(),
     });
   }, [currentChatId, messages, status, topicId, defaultTitle]);
@@ -790,14 +754,13 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     }
   }, [messages]);
 
-  function fileToDataURL(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-  }
-
+  /**
+   * `overrideText` is a quick-start prompt: it bypasses the "must have typed
+   * something" and "must pick a mode first" guards, because pressing one of
+   * those buttons IS the choice. Queued attachments are left alone rather than
+   * cleared — a canned prompt does not carry the student's images, so dropping
+   * them would silently discard work.
+   */
   async function doSend(overrideText?: string) {
     const isQuick = typeof overrideText === "string";
     if (isQuick) {
@@ -806,134 +769,30 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       return;
     }
     if (isListening) stopListening();
+    const { signal } = beginSend();
 
-    const images: ChatImage[] = isQuick
-      ? []
-      : await Promise.all(
-          chatFiles.map(async (file) => ({
-            mediaType: file.type,
-            dataUrl: await fileToDataURL(file),
-            filename: file.name,
-          }))
-        );
+    const images = isQuick ? [] : await filesToChatImages(chatFiles, "zh");
+    // The student pressed Stop while the attachments were being read.
+    if (signal.aborted) return;
 
-    const userText = isQuick ? overrideText : (input.trim() || "（見圖片）");
-    const userMsg: ChatMsg = { id: `u-${Date.now()}`, role: "user", text: userText, ...(images.length > 0 ? { images } : {}) };
-    const assistantMsg: ChatMsg = { id: `a-${Date.now()}`, role: "assistant", text: "" };
-
+    const userMsg = createChatMessage(
+      "user",
+      isQuick ? overrideText : input.trim() || "（見圖片）",
+      images,
+    );
     const nextMessages = [...messages, userMsg];
-    setMessages([...nextMessages, assistantMsg]);
-    setInput("");
-    setChatFiles([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setStatus("submitted");
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const payloadMessages = nextMessages.map((message) => ({
-      role: message.role,
-      text: message.text,
-      ...(message.images && message.images.length > 0
-        ? { images: message.images.map((image) => ({ mediaType: image.mediaType, data: image.dataUrl })) }
-        : {}),
-    }));
-
-    try {
-      const res = await fetch(`${basePath}${apiEndpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: payloadMessages, sessionId }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "");
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: `（出錯了）${errText || res.statusText}` } : m));
-        setStatus("idle");
-        abortRef.current = null;
-        return;
-      }
-
-      setStatus("streaming");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let target = "";
-      let displayed = "";
-      let streamDone = false;
-      let rafId: number | null = null;
-      const CHARS_PER_TICK = 2;
-
-      const tick = () => {
-        if (displayed.length < target.length) {
-          const remaining = target.length - displayed.length;
-          const step = Math.max(CHARS_PER_TICK, Math.ceil(remaining / 30));
-          displayed = target.slice(0, displayed.length + step);
-          const snapshot = displayed;
-          setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: snapshot } : m));
-        }
-        if (displayed.length < target.length || !streamDone) {
-          rafId = requestAnimationFrame(tick);
-        } else {
-          rafId = null;
-        }
-      };
-      rafId = requestAnimationFrame(tick);
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          if (chunk) target += chunk;
-        }
-      } finally {
-        streamDone = true;
-        await new Promise<void>((resolve) => {
-          const waitForCatchUp = () => {
-            if (displayed.length >= target.length) {
-              if (rafId !== null) cancelAnimationFrame(rafId);
-              setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: target } : m));
-              resolve();
-            } else {
-              requestAnimationFrame(waitForCatchUp);
-            }
-          };
-          waitForCatchUp();
-        });
-      }
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: error instanceof Error ? `（出錯了）${error.message}` : "（出錯了）未知錯誤" } : m));
-      } else {
-        setMessages((prev) => prev.filter((m) => m.id !== assistantMsg.id || m.text));
-      }
-    } finally {
-      abortRef.current = null;
-      setStatus("idle");
+    setMessages(nextMessages);
+    if (!isQuick) {
+      setInput("");
+      clearChatFiles();
     }
+
+    // `currentChatId` is the id this transcript is saved under, so a token-usage
+    // record tagged with it can be resolved back to the conversation.
+    await streamAssistant(toPayloadMessages(nextMessages), { chatId: currentChatId });
   }
 
-  function handleChatFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files) {
-      const picked = Array.from(e.target.files);
-      setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, picked)]);
-    }
-  }
-  function removeChatFile(index: number) {
-    setChatFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) { const f = items[i].getAsFile(); if (f) imageFiles.push(f); }
-    }
-    if (imageFiles.length === 0) return;
-    e.preventDefault();
-    setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, imageFiles)]);
-  }
   function handleSubmit(e: React.FormEvent) { e.preventDefault(); void doSend(); }
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void doSend(); }
@@ -1173,18 +1032,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
           )}
           <form onSubmit={handleSubmit} className="w-full">
             <div className="relative w-full rounded-2xl border border-[#e5e5e5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-              {chatFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                  {chatFiles.map((file, i) => (
-                    <div key={i} className="relative group">
-                      <img src={URL.createObjectURL(file)} alt={file.name} className="size-12 rounded-[8px] border border-[#e5e5e5] object-cover" />
-                      <button type="button" onClick={() => removeChatFile(i)} className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        <X className="size-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} />
               <Textarea ref={textareaRef} placeholder={mustSelectFirst ? "請先在上方選擇一個模式…" : placeholder} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={mustSelectFirst}
                 className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60" />
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleChatFileChange} className="hidden" />

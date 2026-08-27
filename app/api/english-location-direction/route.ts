@@ -70,11 +70,12 @@ export async function POST(req: Request) {
     const denied = await requireTopicApi("english", "location-direction");
     if (denied) return denied;
 
-    const { messages, taskId, locationA, locationB } = (await req.json()) as {
+    const { messages, taskId, locationA, locationB, chatId } = (await req.json()) as {
       messages: InputMessage[];
       taskId?: number | null;
       locationA?: string | null;
       locationB?: string | null;
+      chatId?: string;
     };
 
     const session = await getSession().catch(() => null);
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
         modelName: deploymentName,
         endpoint: "/api/english-location-direction",
         usage: await result.usage,
+        chatId,
       });
     });
 

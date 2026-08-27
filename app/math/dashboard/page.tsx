@@ -22,6 +22,7 @@ import {
   X,
   MousePointerClick,
 } from "lucide-react";
+import { ChatAttachmentPreview } from "@/components/ChatAttachmentPreview";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
@@ -773,6 +774,11 @@ function MathDashboardContent() {
   const [dashboardData, setDashboardData] = useState<{ type: string; question: string; imageData?: string } | null>(null);
   const [entryMode, setEntryMode] = useState<DashboardEntryMode>("question");
   const entryModeRef = useRef<DashboardEntryMode>("question");
+  // Mirrors `currentChatId`, which is declared below this transport. Read
+  // through a ref for the same reason as the two above: the request builder is
+  // captured once, so it has to reach for the current value rather than close
+  // over the one from the render that built it.
+  const currentChatIdRef = useRef<string | null>(null);
 
   const type = dashboardData?.type || urlType;
   const question = dashboardData?.question || "";
@@ -790,6 +796,9 @@ function MathDashboardContent() {
           messageId,
           mode: entryModeRef.current,
           hasQuestion: hasUserQuestionRef.current,
+          // The id this transcript is saved under, so a token-usage record
+          // tagged with it can be resolved back to the conversation.
+          chatId: currentChatIdRef.current,
         },
       }),
     }),
@@ -985,6 +994,10 @@ function MathDashboardContent() {
   useEffect(() => {
     entryModeRef.current = entryMode;
   }, [entryMode]);
+
+  useEffect(() => {
+    currentChatIdRef.current = currentChatId;
+  }, [currentChatId]);
 
   useEffect(() => {
     hasUserQuestionRef.current = hasUserQuestion;
@@ -2012,6 +2025,9 @@ function MathDashboardContent() {
       const picked = Array.from(e.target.files);
       setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, picked)]);
     }
+    // Reset so re-choosing the same photo still fires `change`; `chatFiles`
+    // owns the selection from here on.
+    e.target.value = "";
   }
 
   function removeChatFile(index: number) {
@@ -2070,6 +2086,9 @@ function MathDashboardContent() {
       accepted.forEach((f) => dt.items.add(f));
       setQuestionFiles(dt.files);
     }
+    // Reset so re-choosing the same photo still fires `change`; `questionFiles`
+    // holds its own DataTransfer copy, so nothing depends on the input's value.
+    e.target.value = "";
   }
 
   function removeQuestionFile(index: number) {
@@ -2469,27 +2488,14 @@ function MathDashboardContent() {
               {/* Question input form */}
               <form onSubmit={handleQuestionSubmit} className="w-full max-w-3xl">
                 <div className="relative w-full rounded-[8px] border border-[#d8d8d8] bg-white shadow-[0px_30px_18px_rgba(0,0,0,0.04),0px_13px_13px_rgba(0,0,0,0.08),0px_3px_7px_rgba(0,0,0,0.09)] transition-all focus-within:border-[#146ef5] focus-within:shadow-[0px_30px_18px_rgba(20,110,245,0.09),0px_13px_13px_rgba(20,110,245,0.14),0px_3px_7px_rgba(20,110,245,0.2)]">
-                  {questionFiles && questionFiles.length > 0 && (
-                    <div className="flex flex-wrap gap-2 px-4 pt-3">
-                      {Array.from(questionFiles).map((file, i) => (
-                        <div key={i} className="relative group">
-                          <img
-                            src={URL.createObjectURL(file)}
-                            alt={file.name}
-                            className="size-16 cursor-zoom-in rounded-[4px] border border-[#d8d8d8] object-cover"
-                            onClick={() => setQuestionPreviewSrc(URL.createObjectURL(file))}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeQuestionFile(i)}
-                            className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <ChatAttachmentPreview
+                    files={questionFiles ? Array.from(questionFiles) : []}
+                    onRemove={removeQuestionFile}
+                    onPreview={(url) => setQuestionPreviewSrc(url)}
+                    variant="square"
+                    thumbnailSize="lg"
+                    className="px-4 pt-3"
+                  />
 
                   <Textarea
                     ref={questionTextareaRef}
@@ -2600,9 +2606,9 @@ function MathDashboardContent() {
 
       {/* Right panel: AI Chat (narrower) */}
       {chatVisible && !hideChatForTool && (selectedTool === "volume-cubes" ? (
-        <VolumeChatPanel key={toolChatSessionIds["volume-cubes"]} sessionId={toolChatSessionIds["volume-cubes"]} hasUserQuestion={hasUserQuestion} question={question || undefined} type={type} toolUrl={previewUrl ?? undefined} onNewChat={handleNewChat} onHide={() => setChatVisible(false)} />
+        <VolumeChatPanel key={toolChatSessionIds["volume-cubes"]} chatId={toolChatSessionIds["volume-cubes"]} hasUserQuestion={hasUserQuestion} question={question || undefined} type={type} toolUrl={previewUrl ?? undefined} onNewChat={handleNewChat} onHide={() => setChatVisible(false)} />
       ) : selectedTool === "clock-24hrs" || selectedTool === "clock-time-difference" ? (
-        <ClockChatPanel key={`${selectedTool}-${toolChatSessionIds[selectedTool]}`} selectedTool={selectedTool} sessionId={toolChatSessionIds[selectedTool]} hasUserQuestion={hasUserQuestion} question={question || undefined} type={type} toolUrl={previewUrl ?? undefined} onNewChat={handleNewChat} onHide={() => setChatVisible(false)} />
+        <ClockChatPanel key={`${selectedTool}-${toolChatSessionIds[selectedTool]}`} selectedTool={selectedTool} chatId={toolChatSessionIds[selectedTool]} hasUserQuestion={hasUserQuestion} question={question || undefined} type={type} toolUrl={previewUrl ?? undefined} onNewChat={handleNewChat} onHide={() => setChatVisible(false)} />
       ) : (
         <div className="relative flex w-[360px] shrink-0 flex-col min-h-0 bg-white/95">
         <div className="border-b border-[#d8d8d8] px-4 py-3">
@@ -2761,26 +2767,7 @@ function MathDashboardContent() {
             )}
             <div className="relative w-full rounded-[8px] border border-[#d8d8d8] bg-white shadow-[rgba(0,0,0,0)_0px_84px_24px,rgba(0,0,0,0.01)_0px_54px_22px,rgba(0,0,0,0.04)_0px_30px_18px,rgba(0,0,0,0.08)_0px_13px_13px,rgba(0,0,0,0.09)_0px_3px_7px]">
               {/* Image preview thumbnails */}
-              {chatFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                  {chatFiles.map((file, i) => (
-                    <div key={i} className="relative group">
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt={file.name}
-                        className="size-12 rounded-[4px] border border-[#d8d8d8] object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeChatFile(i)}
-                        className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                      >
-                        <X className="size-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} variant="square" />
 
               <Textarea
                 ref={textareaRef}

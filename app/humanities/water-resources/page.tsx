@@ -6,7 +6,6 @@ export default function HumanitiesWaterResourcesPage() {
       config={{
         topicId: "humanities-water-resources",
         topicLabel: "水資源",
-        sessionPrefix: "humanities-water-resources",
         apiEndpoint: "/api/humanities-topic/water-resources",
         backHref: "/humanities",
         backLabel: "返回人文科",

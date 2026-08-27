@@ -6,7 +6,6 @@ export default function ChineseCharacterPage() {
       config={{
         topicId: "character-description",
         topicLabel: "人物描寫",
-        sessionPrefix: "chinese-character",
         apiEndpoint: "/api/chinese-topic/character",
         emptyHint: "歡迎來到人物描寫寫作練習！請選擇你要進行的模式：",
         quickStartOptions: [

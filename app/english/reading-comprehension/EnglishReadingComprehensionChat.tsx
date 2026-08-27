@@ -17,6 +17,7 @@ import {
   Pin,
   PinOff,
 } from "lucide-react";
+import { ChatAttachmentPreview } from "@/components/ChatAttachmentPreview";
 import Link from "next/link";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,7 +27,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { basePath } from "@/lib/utils";
-import { filterUploadsWithinLimit } from "@/lib/upload-limits";
+import { useStreamingChat } from "@/lib/use-streaming-chat";
+import { useChatAttachments } from "@/lib/use-chat-attachments";
+import {
+  createChatMessage,
+  deriveChatTitle,
+  filesToChatImages,
+  restoreChatMessages,
+  toPayloadMessages,
+  toSavedMessages,
+  type ChatMsg,
+  type PayloadMessage,
+} from "@/lib/chat-message";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import { VOCAB_ADD_EVENT } from "@/components/VocabBank";
 import {
@@ -39,16 +51,7 @@ import {
   createEnglishChatId,
   upsertEnglishChatHistory,
   type EnglishChatHistoryItem,
-  type SavedChatMessage,
 } from "@/lib/english-chat-history";
-
-type ChatImage = { mediaType: string; dataUrl: string; filename?: string };
-type ChatMsg = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  images?: ChatImage[];
-};
 
 // Reverse lookup from the bold speaker label the AI uses to the role key.
 const ROLE_LABEL_TO_ROLE: Record<string, ReadingRole> = Object.fromEntries(
@@ -152,7 +155,6 @@ function VocabAnchor({ href, children }: { href?: string; children?: ReactNode }
 const assistantMarkdownComponents = { a: VocabAnchor };
 
 const TOPIC_ID = "reading-comprehension";
-const SESSION_PREFIX = "english-reading";
 const API_ENDPOINT = "/api/english-reading-comprehension";
 const DEFAULT_TITLE = "Reading Comprehension Chat";
 const PLACEHOLDER = "Type your answer or question…";
@@ -178,21 +180,30 @@ export default function EnglishReadingComprehensionChat({
   backHref = "/english/reading-comprehension/modes",
   startMessageText = `Here is our reading. Let's read it together!\n\n![Sunshine Ice-cream advertisement](${basePath}/english/reading-comprehension-article.png)`,
 }: EnglishReadingComprehensionChatProps = {}) {
-  const makeSessionId = useCallback(
-    () =>
-      `${SESSION_PREFIX}-${
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2)
-      }`,
-    []
-  );
+  const {
+    messages,
+    setMessages,
+    status,
+    isLoading,
+    beginSend,
+    streamAssistant,
+    stop,
+    reset: resetChat,
+  } = useStreamingChat({
+    endpoint: API_ENDPOINT,
+    errorPrefix: "(Error) ",
+    unknownErrorMessage: "Unknown error",
+  });
+  const {
+    files: chatFiles,
+    inputRef: fileInputRef,
+    remove: removeChatFile,
+    clear: clearChatFiles,
+    onInputChange: handleChatFileChange,
+    onPaste: handlePaste,
+  } = useChatAttachments("en");
 
-  const [sessionId, setSessionId] = useState<string>(() => makeSessionId());
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
   const [input, setInput] = useState("");
-  const [chatFiles, setChatFiles] = useState<File[]>([]);
   const [currentChatId, setCurrentChatId] = useState(() => createEnglishChatId());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -206,13 +217,10 @@ export default function EnglishReadingComprehensionChat({
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   // Loading a saved chat must not re-save it (which would bump updatedAt and
   // reorder the shared history list).
   const skipSaveRef = useRef(false);
 
-  const isLoading = status === "submitted" || status === "streaming";
   const hasStarted = messages.length > 0;
   const canSend = (!!input.trim() || chatFiles.length > 0) && !isLoading && hasStarted;
   const pinnedMessages = messages.filter((m) => pinnedIds.includes(m.id));
@@ -223,16 +231,6 @@ export default function EnglishReadingComprehensionChat({
       new CustomEvent("english-chat:active", { detail: { id: currentChatId } })
     );
   }, [currentChatId]);
-
-  useEffect(() => {
-    setSessionId(makeSessionId());
-  }, [makeSessionId]);
-
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setStatus("idle");
-  }, []);
 
   const handleCopy = useCallback(async (id: string, text: string) => {
     try {
@@ -285,22 +283,17 @@ export default function EnglishReadingComprehensionChat({
   );
 
   const handleNewChat = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
     // The input is about to be cleared, so a live mic would write the old text
     // back on its next result.
     stopListening();
-    setMessages([]);
+    resetChat();
     setInput("");
-    setChatFiles([]);
-    setStatus("idle");
-    setSessionId(makeSessionId());
+    clearChatFiles();
     setCurrentChatId(createEnglishChatId());
     setPinnedIds([]);
     setShowPinned(false);
     setStudentRole(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [makeSessionId, stopListening]);
+  }, [stopListening, resetChat, clearChatFiles]);
 
   useEffect(() => {
     window.addEventListener("dashboard:new-chat", handleNewChat);
@@ -312,36 +305,25 @@ export default function EnglishReadingComprehensionChat({
     function onLoadChat(event: Event) {
       const detail = (event as CustomEvent<{ item: EnglishChatHistoryItem }>).detail?.item;
       if (!detail || detail.topic !== TOPIC_ID) return;
-      abortRef.current?.abort();
-      abortRef.current = null;
       // The input gets cleared below, so drop any dictation in flight.
       stopListening();
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
-      const restored: ChatMsg[] = detail.messages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        text: m.parts.find((p) => p.type === "text")?.text ?? "",
-        images: m.parts
-          .filter((p) => p.type === "file")
-          .map((p) => ({ mediaType: p.mediaType ?? "", dataUrl: p.url ?? "", filename: p.filename })),
-      }));
+      const restored = restoreChatMessages(detail.messages);
       const storedRole =
         detail.studentRole && READING_ROLES.includes(detail.studentRole as ReadingRole)
           ? (detail.studentRole as ReadingRole)
           : null;
       setStudentRole(storedRole ?? inferStudentRole(restored));
-      setMessages(restored);
+      resetChat(restored);
       setInput("");
-      setChatFiles([]);
-      setStatus("idle");
+      clearChatFiles();
       setPinnedIds([]);
       setShowPinned(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
     window.addEventListener("english-chat:load", onLoadChat);
     return () => window.removeEventListener("english-chat:load", onLoadChat);
-  }, [stopListening]);
+  }, [stopListening, resetChat, clearChatFiles]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -352,24 +334,12 @@ export default function EnglishReadingComprehensionChat({
     if (messages.length === 0) return;
     if (status === "streaming" || status === "submitted") return;
 
-    const firstUserText = messages.find((m) => m.role === "user")?.text;
-    const title = firstUserText ? firstUserText.slice(0, 50) : DEFAULT_TITLE;
-
-    const savedMessages: SavedChatMessage[] = messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      parts: [
-        ...(m.text ? [{ type: "text" as const, text: m.text }] : []),
-        ...(m.images ?? []).map((img) => ({ type: "file" as const, url: img.dataUrl, mediaType: img.mediaType, filename: img.filename })),
-      ],
-    }));
-
     void upsertEnglishChatHistory({
       id: currentChatId,
-      title,
+      title: deriveChatTitle(messages, DEFAULT_TITLE),
       topic: TOPIC_ID,
       studentRole,
-      messages: savedMessages,
+      messages: toSavedMessages(messages),
       updatedAt: new Date().toISOString(),
     });
   }, [currentChatId, messages, status, studentRole]);
@@ -383,138 +353,37 @@ export default function EnglishReadingComprehensionChat({
     }
   }, [messages]);
 
-  function fileToDataURL(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  type PayloadMessage = {
-    role: "user" | "assistant";
-    text: string;
-    images?: { mediaType: string; data: string }[];
-  };
-
-  // Streams one assistant reply into a fresh placeholder message, given the
-  // full conversation payload to send to the API.
-  const streamAssistant = useCallback(
-    async (payloadMessages: PayloadMessage[], roleForRequest: ReadingRole | null) => {
-      const assistantMsg: ChatMsg = { id: `a-${Date.now()}`, role: "assistant", text: "" };
-      setMessages((prev) => [...prev, assistantMsg]);
-      setStatus("submitted");
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      try {
-        const res = await fetch(`${basePath}${API_ENDPOINT}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: payloadMessages, sessionId, role: roleForRequest, reading }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok || !res.body) {
-          const errText = await res.text().catch(() => "");
-          setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: `(Error) ${errText || res.statusText}` } : m));
-          setStatus("idle");
-          abortRef.current = null;
-          return;
-        }
-
-        setStatus("streaming");
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let target = "";
-        let displayed = "";
-        let streamDone = false;
-        let rafId: number | null = null;
-        const CHARS_PER_TICK = 2;
-
-        const tick = () => {
-          if (displayed.length < target.length) {
-            const remaining = target.length - displayed.length;
-            const step = Math.max(CHARS_PER_TICK, Math.ceil(remaining / 30));
-            displayed = target.slice(0, displayed.length + step);
-            const snapshot = displayed;
-            setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: snapshot } : m));
-          }
-          if (displayed.length < target.length || !streamDone) {
-            rafId = requestAnimationFrame(tick);
-          } else {
-            rafId = null;
-          }
-        };
-        rafId = requestAnimationFrame(tick);
-
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            if (chunk) target += chunk;
-          }
-        } finally {
-          streamDone = true;
-          await new Promise<void>((resolve) => {
-            const waitForCatchUp = () => {
-              if (displayed.length >= target.length) {
-                if (rafId !== null) cancelAnimationFrame(rafId);
-                setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: target } : m));
-                resolve();
-              } else {
-                requestAnimationFrame(waitForCatchUp);
-              }
-            };
-            waitForCatchUp();
-          });
-        }
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, text: error instanceof Error ? `(Error) ${error.message}` : "(Error) Unknown error" } : m));
-        } else {
-          setMessages((prev) => prev.filter((m) => m.id !== assistantMsg.id || m.text));
-        }
-      } finally {
-        abortRef.current = null;
-        setStatus("idle");
-      }
-    },
-    [sessionId, reading]
+  // `role` and `reading` ride on every request: the server needs them to keep
+  // playing the two roles the student did not pick. `chatId` is the id this
+  // transcript is saved under, so a token-usage record tagged with it can be
+  // resolved back to the conversation.
+  const sendTurn = useCallback(
+    (payloadMessages: PayloadMessage[], roleForRequest: ReadingRole | null) =>
+      streamAssistant(payloadMessages, {
+        chatId: currentChatId,
+        role: roleForRequest,
+        reading,
+      }),
+    [streamAssistant, currentChatId, reading],
   );
 
   async function doSend() {
     if (!canSend) return;
     if (isListening) stopListening();
+    const { signal } = beginSend();
 
-    const images: ChatImage[] = await Promise.all(
-      chatFiles.map(async (file) => ({
-        mediaType: file.type,
-        dataUrl: await fileToDataURL(file),
-        filename: file.name,
-      }))
-    );
+    const images = await filesToChatImages(chatFiles, "en");
+    // The student pressed Stop while the attachments were being read.
+    if (signal.aborted) return;
 
-    const userText = input.trim() || "(see image)";
-    const userMsg: ChatMsg = { id: `u-${Date.now()}`, role: "user", text: userText, ...(images.length > 0 ? { images } : {}) };
-
+    const userMsg = createChatMessage("user", input.trim() || "(see image)", images);
     const nextMessages = [...messages, userMsg];
+
     setMessages(nextMessages);
     setInput("");
-    setChatFiles([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    clearChatFiles();
 
-    const payloadMessages: PayloadMessage[] = nextMessages.map((message) => ({
-      role: message.role,
-      text: message.text,
-      ...(message.images && message.images.length > 0
-        ? { images: message.images.map((image) => ({ mediaType: image.mediaType, data: image.dataUrl })) }
-        : {}),
-    }));
-
-    await streamAssistant(payloadMessages, studentRole);
+    await sendTurn(toPayloadMessages(nextMessages), studentRole);
   }
 
   // Agent kick-off: the student picks a role, then clicks "Start". We first
@@ -523,38 +392,13 @@ export default function EnglishReadingComprehensionChat({
   // shown as a student bubble.
   const handleStart = useCallback(async () => {
     if (!studentRole || messages.length > 0 || isLoading) return;
-    const fullTextMsg: ChatMsg = {
-      id: `a-fulltext-${Date.now()}`,
-      role: "assistant",
-      text: startMessageText,
-    };
+    const fullTextMsg: ChatMsg = createChatMessage("assistant", startMessageText);
     setMessages([fullTextMsg]);
-    await streamAssistant(
-      [{ role: "user", text: "Let's begin our reading discussion." }],
-      studentRole
-    );
-  }, [studentRole, messages.length, isLoading, streamAssistant, startMessageText]);
+    // The kickoff turn is sent but deliberately not rendered as a student
+    // bubble, and the reading text above is not part of this first payload.
+    await sendTurn([{ role: "user", text: "Let's begin our reading discussion." }], studentRole);
+  }, [studentRole, messages.length, isLoading, sendTurn, startMessageText, setMessages]);
 
-  function handleChatFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files) {
-      const picked = Array.from(e.target.files);
-      setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, picked, "en")]);
-    }
-  }
-  function removeChatFile(index: number) {
-    setChatFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) { const f = items[i].getAsFile(); if (f) imageFiles.push(f); }
-    }
-    if (imageFiles.length === 0) return;
-    e.preventDefault();
-    setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, imageFiles, "en")]);
-  }
   function handleSubmit(e: React.FormEvent) { e.preventDefault(); void doSend(); }
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void doSend(); }
@@ -780,18 +624,7 @@ export default function EnglishReadingComprehensionChat({
                     : "Pick a role to start"}
                 </span>
               </div>
-              {chatFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                  {chatFiles.map((file, i) => (
-                    <div key={i} className="relative group">
-                      <img src={URL.createObjectURL(file)} alt={file.name} className="size-12 rounded-[8px] border border-[#e5e5e5] object-cover" />
-                      <button type="button" onClick={() => removeChatFile(i)} className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        <X className="size-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} removeLabel="Remove image" />
               <Textarea ref={textareaRef} placeholder={hasStarted ? PLACEHOLDER : "Please choose a role and click \u201CStart\u201D"} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste}
                 disabled={!hasStarted}
                 className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0 disabled:cursor-not-allowed" />

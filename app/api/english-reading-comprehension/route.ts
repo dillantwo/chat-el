@@ -74,10 +74,11 @@ export async function POST(req: Request) {
     const denied = await requireTopicApi("english", "reading-comprehension");
     if (denied) return denied;
 
-    const { messages, role, reading } = (await req.json()) as {
+    const { messages, role, reading, chatId } = (await req.json()) as {
       messages: InputMessage[];
       role?: ReadingRole | null;
       reading?: ReadingId | null;
+      chatId?: string;
     };
 
     const session = await getSession().catch(() => null);
@@ -97,6 +98,7 @@ export async function POST(req: Request) {
         modelName: deploymentName,
         endpoint: "/api/english-reading-comprehension",
         usage: await result.usage,
+        chatId,
       });
     });
 

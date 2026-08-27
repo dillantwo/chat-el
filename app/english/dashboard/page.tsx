@@ -10,7 +10,6 @@ import {
   Mic,
   MicOff,
   ImagePlus,
-  X,
   ChevronLeft,
   PanelRight,
   Copy,
@@ -18,6 +17,7 @@ import {
   Pin,
   PinOff,
 } from "lucide-react";
+import { ChatAttachmentPreview } from "@/components/ChatAttachmentPreview";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -27,14 +27,24 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
+import { useStreamingChat } from "@/lib/use-streaming-chat";
+import { useChatAttachments } from "@/lib/use-chat-attachments";
+import {
+  createChatMessage,
+  deriveChatTitle,
+  filesToChatImages,
+  restoreChatMessages,
+  toPayloadMessages,
+  toSavedMessages,
+  type ChatImage,
+  type ChatMsg,
+} from "@/lib/chat-message";
 import {
   createEnglishChatId,
   upsertEnglishChatHistory,
   type EnglishChatHistoryItem,
-  type SavedChatMessage,
 } from "@/lib/english-chat-history";
 import { pickLocationPair, type LocationPair } from "@/lib/english-prompts";
 import LocationDirectionMap from "@/components/LocationDirectionMap";
@@ -42,14 +52,6 @@ import LocationDirectionMap from "@/components/LocationDirectionMap";
 const API_ENDPOINT = "/api/english-location-direction";
 const TOPIC_ID = "location-direction";
 const DEFAULT_TITLE = "English Chat";
-
-type ChatImage = { mediaType: string; dataUrl: string; filename?: string };
-type ChatMsg = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  images?: ChatImage[];
-};
 
 // Builds the displayed task prompt for a concrete [A] → [B] pair.
 const taskTemplates: Record<number, (a: string, b: string) => string> = {
@@ -178,12 +180,32 @@ function EnglishDashboardContent() {
   // latest selection without recreating callbacks.
   const selectedTaskRef = useRef<number | null>(null);
 
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [status, setStatus] = useState<"idle" | "submitted" | "streaming">("idle");
+  const {
+    messages,
+    setMessages,
+    status,
+    isLoading,
+    beginSend,
+    streamAssistant,
+    stop,
+    reset: resetChat,
+  } = useStreamingChat({
+    endpoint: API_ENDPOINT,
+    errorPrefix: "(Error) ",
+    unknownErrorMessage: "Unknown error",
+  });
+  const {
+    files: chatFiles,
+    inputRef: fileInputRef,
+    remove: removeChatFile,
+    clear: clearChatFiles,
+    onInputChange: handleChatFileChange,
+    onPaste: handlePaste,
+  } = useChatAttachments("en");
+
   const [input, setInput] = useState("");
   const [selectedTask, setSelectedTask] = useState<number | null>(null);
   const [locationPair, setLocationPair] = useState<LocationPair | null>(null);
-  const [chatFiles, setChatFiles] = useState<File[]>([]);
   // Task 5: the map image the student uploaded (shown in the map panel and sent
   // to the chatbot so its questions relate to the student's own drawing).
   const [task5Map, setTask5Map] = useState<ChatImage | null>(null);
@@ -200,8 +222,6 @@ function EnglishDashboardContent() {
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   // When a chat is loaded from history we don't want the auto-save effect to
   // re-save it (which would bump updatedAt and re-sort the list to the top).
   const skipSaveRef = useRef(false);
@@ -222,7 +242,6 @@ function EnglishDashboardContent() {
     locationPairRef.current = locationPair;
   }, [locationPair]);
 
-  const isLoading = status === "submitted" || status === "streaming";
   const canSend = (!!input.trim() || chatFiles.length > 0) && !isLoading;
   const pinnedMessages = messages.filter((m) => pinnedIds.includes(m.id));
 
@@ -236,12 +255,6 @@ function EnglishDashboardContent() {
       container.scrollTop = container.scrollHeight;
     }
   }, [messages]);
-
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setStatus("idle");
-  }, []);
 
   // Declared above the reset/load handlers below, which need to stop dictation
   // before they clear the input.
@@ -300,21 +313,19 @@ function EnglishDashboardContent() {
     // back on its next result.
     stopListening();
     setInput("");
-    setChatFiles([]);
+    clearChatFiles();
     setTask5Map(null);
     setPinnedIds([]);
     setShowPinned(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
     setCurrentChatId(createEnglishChatId());
     setChatVisible(true);
-    setStatus("idle");
 
     if (id == null) {
       setSelectedTask(null);
       setLocationPair(null);
       selectedTaskRef.current = null;
       locationPairRef.current = null;
-      setMessages([]);
+      resetChat();
       return;
     }
 
@@ -327,14 +338,10 @@ function EnglishDashboardContent() {
     // late for a send that happens right after this.
     selectedTaskRef.current = id;
     locationPairRef.current = pair;
-    setMessages([
-      { id: `a-${Date.now()}`, role: "assistant", text: buildOpeningMessage(id, pair) },
-    ]);
-  }, [stopListening]);
+    resetChat([createChatMessage("assistant", buildOpeningMessage(id, pair))]);
+  }, [stopListening, clearChatFiles, resetChat]);
 
   const handleNewChat = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
     // If the student is inside a task, "New Chat" restarts that task instead of
     // dropping them back to the no-task state: same task, same map, fresh
     // conversation. With no task selected it is a full reset.
@@ -355,22 +362,13 @@ function EnglishDashboardContent() {
     function onLoadChat(event: Event) {
       const detail = (event as CustomEvent<{ item: EnglishChatHistoryItem }>).detail?.item;
       if (!detail || detail.topic !== TOPIC_ID) return;
-      abortRef.current?.abort();
-      abortRef.current = null;
       // The input gets cleared below, so drop any dictation in flight.
       stopListening();
       // Loading an existing chat must not trigger a re-save.
       skipSaveRef.current = true;
       setCurrentChatId(detail.id);
-      const restored: ChatMsg[] = detail.messages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        text: m.parts.find((p) => p.type === "text")?.text ?? "",
-        images: m.parts
-          .filter((p) => p.type === "file")
-          .map((p) => ({ mediaType: p.mediaType ?? "", dataUrl: p.url ?? "", filename: p.filename })),
-      }));
-      setMessages(restored);
+      const restored = restoreChatMessages(detail.messages);
+      resetChat(restored);
       setSelectedTask(detail.selectedTask ?? null);
       // The chosen [A]/[B] live in the restored conversation itself, so we
       // don't re-derive a (possibly different) pair here.
@@ -387,16 +385,14 @@ function EnglishDashboardContent() {
         setTask5Map(null);
       }
       setInput("");
-      setChatFiles([]);
-      setStatus("idle");
+      clearChatFiles();
       setPinnedIds([]);
       setShowPinned(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
       setChatVisible(true);
     }
     window.addEventListener("english-chat:load", onLoadChat);
     return () => window.removeEventListener("english-chat:load", onLoadChat);
-  }, [stopListening]);
+  }, [stopListening, resetChat, clearChatFiles]);
 
   // Auto-save chat history
   useEffect(() => {
@@ -407,178 +403,57 @@ function EnglishDashboardContent() {
     if (messages.length === 0) return;
     if (status === "streaming" || status === "submitted") return;
 
-    const firstUserText = messages.find((m) => m.role === "user")?.text;
-    const title = firstUserText ? firstUserText.slice(0, 50) : DEFAULT_TITLE;
-
-    const savedMessages: SavedChatMessage[] = messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      parts: [
-        ...(m.text ? [{ type: "text" as const, text: m.text }] : []),
-        ...(m.images ?? []).map((img) => ({ type: "file" as const, url: img.dataUrl, mediaType: img.mediaType, filename: img.filename })),
-      ],
-    }));
-
     void upsertEnglishChatHistory({
       id: currentChatId,
-      title,
+      title: deriveChatTitle(messages, DEFAULT_TITLE),
       topic: TOPIC_ID,
       selectedTask,
-      messages: savedMessages,
+      messages: toSavedMessages(messages),
       updatedAt: new Date().toISOString(),
     });
   }, [currentChatId, messages, status, selectedTask]);
 
-  function fileToDataURL(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  type PayloadMessage = {
-    role: "user" | "assistant";
-    text: string;
-    images?: { mediaType: string; data: string }[];
-  };
-
-  // Streams an assistant reply (with typewriter effect) into the message that
-  // matches `assistantId`. Shared by manual sends and task kickoffs.
-  async function runStream(
-    assistantId: string,
-    payloadMessages: PayloadMessage[],
-    controller: AbortController,
-    ctx: { taskId: number | null; pair: LocationPair | null },
-  ) {
-    try {
-      const res = await fetch(`${basePath}${API_ENDPOINT}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: payloadMessages,
-          taskId: ctx.taskId,
-          locationA: ctx.pair?.from ?? null,
-          locationB: ctx.pair?.to ?? null,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "");
-        setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, text: `(Error) ${errText || res.statusText}` } : m));
-        setStatus("idle");
-        abortRef.current = null;
-        return;
-      }
-
-      setStatus("streaming");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let target = "";
-      let displayed = "";
-      let streamDone = false;
-      let rafId: number | null = null;
-      const CHARS_PER_TICK = 2;
-
-      const tick = () => {
-        if (displayed.length < target.length) {
-          const remaining = target.length - displayed.length;
-          const step = Math.max(CHARS_PER_TICK, Math.ceil(remaining / 30));
-          displayed = target.slice(0, displayed.length + step);
-          const snapshot = displayed;
-          setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, text: snapshot } : m));
-        }
-        if (displayed.length < target.length || !streamDone) {
-          rafId = requestAnimationFrame(tick);
-        } else {
-          rafId = null;
-        }
-      };
-      rafId = requestAnimationFrame(tick);
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          if (chunk) target += chunk;
-        }
-      } finally {
-        streamDone = true;
-        await new Promise<void>((resolve) => {
-          const waitForCatchUp = () => {
-            if (displayed.length >= target.length) {
-              if (rafId !== null) cancelAnimationFrame(rafId);
-              setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, text: target } : m));
-              resolve();
-            } else {
-              requestAnimationFrame(waitForCatchUp);
-            }
-          };
-          waitForCatchUp();
-        });
-      }
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, text: error instanceof Error ? `(Error) ${error.message}` : "(Error) Unknown error" } : m));
-      } else {
-        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.text));
-      }
-    } finally {
-      abortRef.current = null;
-      setStatus("idle");
-    }
-  }
+  // The task and its [A]/[B] pair ride on every request. They are read from
+  // refs rather than state so a send that happens immediately after picking a
+  // task still sees the new selection.
+  const sendTurn = useCallback(
+    (nextMessages: readonly ChatMsg[], taskId: number | null, pair: LocationPair | null) =>
+      streamAssistant(toPayloadMessages(nextMessages), {
+        taskId,
+        locationA: pair?.from ?? null,
+        locationB: pair?.to ?? null,
+        // The id this transcript is saved under, so a token-usage record tagged
+        // with it can be resolved back to the conversation.
+        chatId: currentChatId,
+      }),
+    [streamAssistant, currentChatId],
+  );
 
   // Switching tasks resets the conversation and seeds the chatbot with the new
   // task instructions. The opening message is built locally (see
   // buildOpeningMessage) — no LLM call, so picking a task costs zero tokens.
   function startTask(id: number) {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    // resetConversationForTask stops dictation itself.
+    // resetConversationForTask aborts and stops dictation itself.
     resetConversationForTask(id);
   }
 
   async function doSend() {
     if (!canSend) return;
     if (isListening) stopListening();
+    const { signal } = beginSend();
 
-    const images: ChatImage[] = await Promise.all(
-      chatFiles.map(async (file) => ({
-        mediaType: file.type,
-        dataUrl: await fileToDataURL(file),
-        filename: file.name,
-      }))
-    );
+    const images = await filesToChatImages(chatFiles, "en");
+    // The student pressed Stop while the attachments were being read.
+    if (signal.aborted) return;
 
-    const userText = input.trim() || "(see image)";
-    const userMsg: ChatMsg = { id: `u-${Date.now()}`, role: "user", text: userText, ...(images.length > 0 ? { images } : {}) };
-    const assistantMsg: ChatMsg = { id: `a-${Date.now()}`, role: "assistant", text: "" };
-
+    const userMsg = createChatMessage("user", input.trim() || "(see image)", images);
     const nextMessages = [...messages, userMsg];
-    setMessages([...nextMessages, assistantMsg]);
+
+    setMessages(nextMessages);
     setInput("");
-    setChatFiles([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setStatus("submitted");
+    clearChatFiles();
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const payloadMessages: PayloadMessage[] = nextMessages.map((message) => ({
-      role: message.role,
-      text: message.text,
-      ...(message.images && message.images.length > 0
-        ? { images: message.images.map((image) => ({ mediaType: image.mediaType, data: image.dataUrl })) }
-        : {}),
-    }));
-
-    await runStream(assistantMsg.id, payloadMessages, controller, {
-      taskId: selectedTaskRef.current,
-      pair: locationPairRef.current,
-    });
+    await sendTurn(nextMessages, selectedTaskRef.current, locationPairRef.current);
   }
 
   // Task 5: the student uploads their own map in the map panel. We show it as
@@ -589,62 +464,30 @@ function EnglishDashboardContent() {
     if (filterUploadsWithinLimit([], [file], "en").length === 0) return;
     if (isListening) stopListening();
 
-    const dataUrl = await fileToDataURL(file);
-    const image: ChatImage = { mediaType: file.type, dataUrl, filename: file.name };
+    // Marked busy before the read, not after. The composer sits next to the map
+    // panel, so otherwise the student could press Enter while the drawing was
+    // still being encoded and this handler would then commit a `messages`
+    // snapshot from before that turn, silently discarding it.
+    const { signal } = beginSend();
+
+    const [image] = await filesToChatImages([file], "en");
+    if (signal.aborted) return;
+    if (!image) {
+      // Unreadable file: settle the panel rather than leaving it locked.
+      stop();
+      return;
+    }
     setTask5Map(image);
 
-    abortRef.current?.abort();
-
-    const userMsg: ChatMsg = {
-      id: `u-${Date.now()}`,
-      role: "user",
-      text: "Here is my map. It shows the way from my home to school.",
-      images: [image],
-    };
-    const assistantMsg: ChatMsg = { id: `a-${Date.now()}`, role: "assistant", text: "" };
-
+    const userMsg = createChatMessage(
+      "user",
+      "Here is my map. It shows the way from my home to school.",
+      [image],
+    );
     const nextMessages = [...messages, userMsg];
-    setMessages([...nextMessages, assistantMsg]);
-    setStatus("submitted");
+    setMessages(nextMessages);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const payloadMessages: PayloadMessage[] = nextMessages.map((message) => ({
-      role: message.role,
-      text: message.text,
-      ...(message.images && message.images.length > 0
-        ? { images: message.images.map((img) => ({ mediaType: img.mediaType, data: img.dataUrl })) }
-        : {}),
-    }));
-
-    await runStream(assistantMsg.id, payloadMessages, controller, { taskId: 5, pair: null });
-  }
-
-  function handleChatFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files) {
-      const picked = Array.from(e.target.files);
-      setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, picked, "en")]);
-    }
-  }
-
-  function removeChatFile(index: number) {
-    setChatFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) {
-        const file = items[i].getAsFile();
-        if (file) imageFiles.push(file);
-      }
-    }
-    if (imageFiles.length === 0) return;
-    e.preventDefault();
-    setChatFiles((prev) => [...prev, ...filterUploadsWithinLimit(prev, imageFiles, "en")]);
+    await sendTurn(nextMessages, 5, null);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -931,26 +774,7 @@ function EnglishDashboardContent() {
             <form onSubmit={handleSubmit}>
               <div className="relative w-full rounded-2xl border border-[#e5e5e5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                 {/* Image preview thumbnails */}
-                {chatFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                    {chatFiles.map((file, i) => (
-                      <div key={i} className="relative group">
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={file.name}
-                          className="size-12 rounded-[8px] border border-[#e5e5e5] object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeChatFile(i)}
-                          className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-[#080808] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                        >
-                          <X className="size-2.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} removeLabel="Remove image" />
 
                 <Textarea
                   ref={textareaRef}

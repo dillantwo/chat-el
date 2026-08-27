@@ -110,6 +110,8 @@ interface DetailRecord {
   totalTokens: number;
   ragTokens: number;
   cost: number;
+  /** The conversation this call belongs to; null for non-chat endpoints. */
+  chatId: string | null;
 }
 
 interface RecordsResponse {
@@ -975,6 +977,7 @@ function RecordsTable({ records }: { records: DetailRecord[] }) {
             <TableHead className="px-4">學校</TableHead>
             <TableHead className="px-4">科目 / 主題</TableHead>
             <TableHead className="px-4">模型</TableHead>
+            <TableHead className="px-4">對話</TableHead>
             <TableHead className="px-4 text-right">輸入</TableHead>
             <TableHead className="px-4 text-right">快取</TableHead>
             <TableHead className="px-4 text-right">輸出</TableHead>
@@ -1005,6 +1008,15 @@ function RecordsTable({ records }: { records: DetailRecord[] }) {
               </TableCell>
               <TableCell className="px-4 py-3 text-xs text-muted-foreground">
                 {r.modelName}
+              </TableCell>
+              {/* Ids are UUIDs, so only the leading segment is shown; the full
+                  value is in the title attribute and the CSV export. */}
+              <TableCell className="px-4 py-3 font-mono text-xs whitespace-nowrap text-muted-foreground">
+                {r.chatId ? (
+                  <span title={r.chatId}>{r.chatId.slice(0, 8)}</span>
+                ) : (
+                  "—"
+                )}
               </TableCell>
               <TableCell className="px-4 py-3 text-right tabular-nums">
                 {formatTokens(r.inputTokens)}
