@@ -34,6 +34,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       route: "/math/dashboard",
     },
     {
+      key: "ai-diagram",
+      label: "AI 生成圖解",
+      labelEn: "AI Diagram Generator",
+      route: "/math/diagram",
+    },
+    {
       key: "learning-materials",
       label: "學習資源",
       labelEn: "Learning Materials",

@@ -98,8 +98,8 @@ async function seed() {
         displayName: u.displayName,
         school: school._id,
         subjects,
-        // Teachers get student-data access to exactly what they teach.
-        ...(u.role === "teacher" ? { dataSubjects: subjects } : {}),
+        // Teachers get student-data access to exactly what they teach, which
+        // `canViewStudentData` defaults to — nothing to set here.
       });
 
       console.log(

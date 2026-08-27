@@ -492,9 +492,8 @@ export async function commitUserImport(plan: ImportPlan): Promise<ImportPlan> {
         displayName: row.displayName,
         school: plan.schoolId,
         subjects: row.subjects,
-        // Matches single-user creation: a new teacher may review the student
-        // data of exactly the subjects they teach.
-        ...(row.role === "teacher" ? { dataSubjects: row.subjects } : {}),
+        // No student-data field: a teacher reviews the student data of exactly
+        // the subjects they teach, and `canViewStudentData` defaults to true.
         classes: row.classes.map((c) => c.id),
       });
     } catch (err) {

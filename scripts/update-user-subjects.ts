@@ -5,8 +5,8 @@
  * Replaces the old scripts/update-user-subjects.cjs, whose inline copy of the
  * User schema declared `role` as an enum of teacher|student only. Loading an
  * admin through it and calling save() threw a ValidationError, and its schema
- * also lacked school / dataSubjects / classes. This version imports the real
- * model, so it stays in step with models/User.ts.
+ * also lacked school / classes. This version imports the real model, so it
+ * stays in step with models/User.ts.
  *
  * Usage (inside Docker — the tools profile already supplies MONGODB_URI):
  *   docker compose run --rm tools npx tsx scripts/update-user-subjects.ts \
@@ -23,13 +23,16 @@
  *   --username      (required) login name, matched lowercased
  *   --subjects      (optional) comma list; defaults to the school's enabled set
  *   --add           (optional) merge with current subjects instead of replacing
- *   --dataSubjects  (optional) teachers only — subjects whose student data they
- *                              may review. Always narrowed to --subjects.
+ *
+ * For a teacher this also changes which student data they may review in
+ * 查看學生數據: that follows `subjects`, so revoking a subject here revokes its
+ * student data too. Use scripts/create-user.ts --noStudentData (or the admin UI)
+ * to switch the feature off without touching the subjects.
  */
 
 import mongoose from "mongoose";
 import { requireMongoUri } from "./lib/load-env";
-import { ALL_SUBJECTS, User, effectiveDataSubjects, type Subject } from "../models/User";
+import { ALL_SUBJECTS, User, canViewStudentData, type Subject } from "../models/User";
 import { School } from "../models/School";
 
 type Args = Record<string, string | true>;
@@ -94,10 +97,6 @@ async function main() {
   const merge = args.add === true;
   const explicitSubjects = typeof args.subjects === "string";
   const requested = explicitSubjects ? parseSubjects(str(args, "subjects"), "subjects") : null;
-  const hasDataSubjects = typeof args.dataSubjects === "string";
-  const requestedData = hasDataSubjects
-    ? parseSubjects(str(args, "dataSubjects"), "dataSubjects")
-    : null;
 
   await mongoose.connect(MONGODB_URI);
   console.log("Connected to MongoDB.");
@@ -127,7 +126,6 @@ async function main() {
 
     const allowed = canonical(school.enabledSubjects);
     const before = canonical(user.subjects ?? []);
-    const beforeData = canonical(effectiveDataSubjects(user));
 
     // Default: everything the school has enabled.
     const target = requested ?? allowed;
@@ -142,27 +140,7 @@ async function main() {
 
     const after = merge ? canonical([...before, ...target]) : canonical(target);
 
-    if (requestedData) {
-      const outOfScope = requestedData.filter((s) => !after.includes(s));
-      if (outOfScope.length) {
-        fail(
-          "--dataSubjects must be a subset of the resulting subjects; " +
-            `extra: ${outOfScope.join(", ")}`,
-        );
-      }
-    }
-
     user.subjects = after;
-
-    // Narrow dataSubjects to the new subject set. Without this, revoking a
-    // subject would leave the teacher still able to read that subject's student
-    // data in 查看學生數據, because that check reads dataSubjects, not subjects.
-    const afterData = canonical(requestedData ?? beforeData).filter((s) => after.includes(s));
-    const dataChanged =
-      afterData.join(",") !== beforeData.join(",") || requestedData !== null;
-    if (user.role === "teacher" && dataChanged) {
-      user.dataSubjects = afterData;
-    }
 
     await user.save();
 
@@ -170,8 +148,11 @@ async function main() {
     console.log(`  subjects before: [${before.join(", ")}]`);
     console.log(`  subjects after : [${after.join(", ")}]`);
     if (user.role === "teacher") {
-      console.log(`  data before    : [${beforeData.join(", ")}]`);
-      console.log(`  data after     : [${canonical(effectiveDataSubjects(user)).join(", ")}]`);
+      // Student data follows the subjects, so the only extra thing worth
+      // reporting is whether the feature is switched off for this teacher.
+      console.log(
+        `  student data   : ${canViewStudentData(user) ? `[${after.join(", ")}]` : "已關閉"}`,
+      );
     }
   } finally {
     await mongoose.disconnect();

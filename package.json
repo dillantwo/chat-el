@@ -14,7 +14,8 @@
     "create-user": "tsx scripts/create-user.ts",
     "update-user-subjects": "tsx scripts/update-user-subjects.ts",
     "ingest:rag": "tsx scripts/ingest-rag.ts",
-    "backfill:token-usage": "tsx scripts/backfill-token-usage.ts"
+    "backfill:token-usage": "tsx scripts/backfill-token-usage.ts",
+    "migrate:student-data-access": "tsx scripts/migrate-student-data-access.ts"
   },
   "dependencies": {
     "@ai-sdk/azure": "^3.0.42",

@@ -7,6 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -77,36 +78,34 @@ interface UserRow {
   schoolId: string | null;
   schoolName: string | null;
   subjects: string[];
-  /** Teachers only. null = 未設定，沿用科目權限。 */
-  dataSubjects: string[] | null;
+  /** Teachers only. Whether 查看學生數據 is available to them at all. */
+  canViewStudentData: boolean;
   classes: UserClass[];
 }
 
-/** The subjects whose student data a teacher may review. */
-function TeacherDataSubjects({ user }: { user: UserRow }) {
+/**
+ * Whether this teacher may review student data, and for which subjects.
+ *
+ * There is no separate subject list to show: a teacher reviews the student data
+ * of exactly the subjects they hold, so this column reports the switch and
+ * points back at 科目權限 for the scope.
+ */
+function TeacherDataAccess({ user }: { user: UserRow }) {
   if (user.role !== "teacher") {
     return <span className="text-muted-foreground">—</span>;
   }
 
-  // Not configured yet: access still follows the teaching subjects.
-  const effective = user.dataSubjects ?? user.subjects;
-
-  if (effective.length === 0) {
-    return <span className="text-muted-foreground">無</span>;
+  if (!user.canViewStudentData) {
+    return <Badge variant="outline">已關閉</Badge>;
   }
 
-  return (
-    <div className="flex flex-wrap gap-1">
-      {effective.map((sub) => (
-        <Badge key={sub} variant="outline">
-          {SUBJECT_LABELS[sub] ?? sub}
-        </Badge>
-      ))}
-      {user.dataSubjects === null && (
-        <span className="text-xs text-muted-foreground">（沿用科目權限）</span>
-      )}
-    </div>
-  );
+  if (user.subjects.length === 0) {
+    // The switch is on but there is nothing in scope, which reads as a
+    // misconfiguration rather than as a denial.
+    return <span className="text-muted-foreground">無科目</span>;
+  }
+
+  return <span className="text-muted-foreground">同科目權限</span>;
 }
 
 export default function UsersPage() {
@@ -137,8 +136,9 @@ export default function UsersPage() {
   const [role, setRole] = useState<"admin" | "teacher" | "student">("teacher");
   const [schoolId, setSchoolId] = useState("");
   const [subjects, setSubjects] = useState<string[]>([]);
-  // Which subjects' student data a teacher may open in 查看學生數據.
-  const [dataSubjects, setDataSubjects] = useState<string[]>([]);
+  // Whether a teacher may open 查看學生數據. The subjects it covers are the
+  // teaching subjects above, so there is nothing else to pick.
+  const [canViewStudentData, setCanViewStudentData] = useState(true);
   const [classes, setClasses] = useState<string[]>([]);
 
   const loadUsers = useCallback(async () => {
@@ -195,7 +195,7 @@ export default function UsersPage() {
     setRole("teacher");
     setSchoolId(filterSchool || "");
     setSubjects([]);
-    setDataSubjects([]);
+    setCanViewStudentData(true);
     setClasses(filterClass ? [filterClass] : []);
     setError(null);
     setDialogOpen(true);
@@ -211,9 +211,7 @@ export default function UsersPage() {
     setRole(u.role);
     setSchoolId(u.schoolId ?? "");
     setSubjects(u.subjects);
-    // Unset means the teacher currently falls back to their teaching subjects;
-    // show that as the starting point so saving does not silently change it.
-    setDataSubjects(u.dataSubjects ?? u.subjects);
+    setCanViewStudentData(u.canViewStudentData);
     setClasses(u.classes.map((c) => c.id));
     setError(null);
     setDialogOpen(true);
@@ -221,12 +219,6 @@ export default function UsersPage() {
 
   function toggleSubject(value: string) {
     setSubjects((prev) =>
-      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
-    );
-  }
-
-  function toggleDataSubject(value: string) {
-    setDataSubjects((prev) =>
       prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
     );
   }
@@ -258,7 +250,7 @@ export default function UsersPage() {
       }
 
       if (role === "teacher") {
-        payload.dataSubjects = dataSubjects.filter((s) => availableSubjects.includes(s));
+        payload.canViewStudentData = canViewStudentData;
       }
 
       if (!isEdit) {
@@ -416,7 +408,7 @@ export default function UsersPage() {
                 <TableHead className="px-4">學校</TableHead>
                 <TableHead className="px-4">班級</TableHead>
                 <TableHead className="px-4">科目權限</TableHead>
-                <TableHead className="px-4">學生數據權限</TableHead>
+                <TableHead className="px-4">學生數據</TableHead>
                 <TableHead className="px-4" />
               </TableRow>
             </TableHeader>
@@ -475,7 +467,7 @@ export default function UsersPage() {
                     </div>
                   </TableCell>
                   <TableCell className="px-4 py-3">
-                    <TeacherDataSubjects user={u} />
+                    <TeacherDataAccess user={u} />
                   </TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex justify-end gap-2">
@@ -615,7 +607,6 @@ export default function UsersPage() {
                     onValueChange={(v) => {
                       setSchoolId(v as string);
                       setSubjects([]);
-                      setDataSubjects([]);
                       setClasses([]);
                     }}
                   >
@@ -708,36 +699,18 @@ export default function UsersPage() {
 
             {role === "teacher" && (
               <div className="space-y-2">
-                <Label>學生數據查看權限</Label>
+                <Label>學生數據</Label>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="user-can-view-student-data"
+                    checked={canViewStudentData}
+                    onCheckedChange={(checked) => setCanViewStudentData(checked)}
+                  />
+                  <Label htmlFor="user-can-view-student-data">允許查看學生數據</Label>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  決定這位老師可在「查看學生數據」開啟哪些科目的學生記錄。留空表示不能查看任何科目。
+                  可查看的科目就是上面的科目權限，不需另設。範圍仍限於同校且與自己同班的學生。
                 </p>
-                {!schoolId ? (
-                  <p className="text-sm text-muted-foreground">請先選擇學校。</p>
-                ) : availableSubjects.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">該校尚未開通任何科目。</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {availableSubjects.map((sub) => {
-                      const on = dataSubjects.includes(sub);
-                      return (
-                        <button
-                          key={sub}
-                          type="button"
-                          onClick={() => toggleDataSubject(sub)}
-                          className={
-                            "rounded-md border px-3 py-1.5 text-sm transition-colors " +
-                            (on
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "text-muted-foreground hover:bg-muted")
-                          }
-                        >
-                          {SUBJECT_LABELS[sub] ?? sub}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             )}
 

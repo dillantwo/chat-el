@@ -32,14 +32,22 @@ function createToolKey(title: string) {
 
 export async function POST(req: Request) {
   try {
-    // Saved AI tools belong to the math dashboard.
-    const denied = await requireTopicApi("math", "ai-problem-solving");
+    // Saved 圖解 belong to the AI 生成圖解 topic (app/math/diagram).
+    const denied = await requireTopicApi("math", "ai-diagram");
     if (denied) return denied;
 
     const session = await getSession();
     if (!session) {
       return new Response(JSON.stringify({ error: "未登錄" }), {
         status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    // Only the author of a 圖解 keeps one. A student reaches a teacher's through
+    // the class scope in readScope() and has nothing of their own to save.
+    if (session.role !== "teacher") {
+      return new Response(JSON.stringify({ error: "僅教師可保存圖解" }), {
+        status: 403,
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -153,7 +161,7 @@ async function readScope(
 
 export async function GET(req: Request) {
   try {
-    const denied = await requireTopicApi("math", "ai-problem-solving");
+    const denied = await requireTopicApi("math", "ai-diagram");
     if (denied) return denied;
 
     // Role and id come from getSubjectAccess rather than the cookie: it reads
@@ -225,7 +233,7 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const denied = await requireTopicApi("math", "ai-problem-solving");
+    const denied = await requireTopicApi("math", "ai-diagram");
     if (denied) return denied;
 
     const session = await getSession();
@@ -297,7 +305,7 @@ export async function PATCH(req: Request) {
  */
 export async function DELETE(req: Request) {
   try {
-    const denied = await requireTopicApi("math", "ai-problem-solving");
+    const denied = await requireTopicApi("math", "ai-diagram");
     if (denied) return denied;
 
     const session = await getSession();

@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/password";
 import {
   User,
   ALL_SUBJECTS,
+  canViewStudentData,
   resolveAuthProvider,
   type AuthProvider,
   type Subject,
@@ -91,9 +92,10 @@ export async function GET(req: NextRequest) {
         schoolId: s ? s._id.toString() : null,
         schoolName: s ? s.name : null,
         subjects: u.subjects ?? [],
-        // null means "not configured yet", in which case the teacher's data
-        // access falls back to `subjects` (see IUser.dataSubjects).
-        dataSubjects: Array.isArray(u.dataSubjects) ? u.dataSubjects : null,
+        // Normalized rather than passed through, for the same reason as
+        // authProvider: .lean() skips the schema default, so a teacher created
+        // before this field existed would arrive as undefined and read as "off".
+        canViewStudentData: canViewStudentData(u),
         classes: serializeClasses(u.classes),
         createdAt: u.createdAt,
       };
@@ -180,8 +182,9 @@ export async function POST(req: NextRequest) {
 
     let schoolId: string | null = null;
     let subjects: Subject[] = [];
-    // Only teachers carry a student-data permission; left undefined otherwise.
-    let dataSubjects: Subject[] | undefined;
+    // Only teachers carry a student-data permission; left undefined otherwise
+    // so the schema default applies and the field is never meaningful noise.
+    let studentDataAccess: boolean | undefined;
     let classes: Awaited<ReturnType<typeof resolveClassesForSchool>> = [];
 
     if (role === "admin") {
@@ -202,10 +205,10 @@ export async function POST(req: NextRequest) {
       subjects = requested.filter((s) => school.enabledSubjects.includes(s));
 
       if (role === "teacher") {
-        // Default a new teacher's data access to the subjects they teach.
-        const requestedData =
-          body.dataSubjects === undefined ? subjects : sanitizeSubjects(body.dataSubjects);
-        dataSubjects = requestedData.filter((s) => school.enabledSubjects.includes(s));
+        // Which subjects' data they may review is not asked for: it is the
+        // subjects above. This only decides whether they may review any.
+        studentDataAccess =
+          body.canViewStudentData === undefined ? true : body.canViewStudentData !== false;
       }
 
       // Classes must belong to the same school as the user.
@@ -223,7 +226,7 @@ export async function POST(req: NextRequest) {
       role,
       school: schoolId,
       subjects,
-      dataSubjects,
+      canViewStudentData: studentDataAccess,
       classes,
     });
 
@@ -237,7 +240,7 @@ export async function POST(req: NextRequest) {
         role: user.role,
         schoolId,
         subjects: user.subjects,
-        dataSubjects: user.dataSubjects ?? null,
+        canViewStudentData: canViewStudentData(user),
         classes: classes.map((id) => String(id)),
         createdAt: user.createdAt,
       },

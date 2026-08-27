@@ -3,7 +3,7 @@ import { streamObject } from "ai";
 import { z } from "zod";
 import { after } from "next/server";
 import { getSession } from "@/lib/session";
-import { requireTopicApi } from "@/lib/subject-access";
+import { getSubjectAccess, requireTopicApi } from "@/lib/subject-access";
 import { recordTokenUsage } from "@/lib/token-usage";
 
 /**
@@ -119,8 +119,30 @@ function ensureHtmlDocument(html: string): string {
 
 export async function POST(req: Request) {
   try {
-    const denied = await requireTopicApi("math", "ai-problem-solving");
+    // Generating belongs to the AI 生成圖解 topic (app/math/diagram).
+    const denied = await requireTopicApi("math", "ai-diagram");
     if (denied) return denied;
+
+    /**
+     * Teachers author diagrams; students only open the ones that were shared
+     * with them. The workspace hides the composer for them, and this is the
+     * matching server-side half. The role is read from the database by
+     * getSubjectAccess (already resolved by the gate above, so this is free),
+     * not from the 7-day session cookie.
+     */
+    const access = await getSubjectAccess();
+    if (!access.ok) {
+      return new Response(JSON.stringify({ error: access.message }), {
+        status: access.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (access.role !== "teacher") {
+      return new Response(JSON.stringify({ error: "僅教師可生成圖解" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     const { prompt, imageData, currentHtml, currentTitle, targetedEdit, targetLabel, targetIsDynamic } =
       (await req.json()) as {

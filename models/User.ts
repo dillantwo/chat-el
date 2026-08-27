@@ -73,19 +73,19 @@ export interface IUser extends Document {
   /** Subjects this user may access (must be a subset of the school's enabled subjects) */
   subjects: Subject[];
   /**
-   * Subjects whose *student data* this teacher may review in 查看學生數據.
-   * Teachers only; always a subset of the school's enabled subjects.
+   * Whether this teacher may open 查看學生數據 at all. Teachers only.
    *
-   * Tri-state on purpose:
-   *  - field absent  → not configured yet, falls back to `subjects`
-   *  - `[]`          → explicitly no access to any subject's student data
-   *  - `[...]`       → access to exactly those subjects
+   * There is deliberately no separate subject list for student data: a teacher
+   * who holds a subject may review that subject's student records, so the
+   * subjects above are the only place access is configured. This flag exists
+   * only to switch the whole feature off for an individual teacher.
    *
-   * The fallback keeps teachers created before this field existed working
-   * without a migration. Resolve it with `effectiveDataSubjects()` rather
+   * Defaults to true, and an absent field reads as true — `.lean()` skips
+   * schema defaults, so documents written before this field existed must
+   * behave the same as new ones. Resolve it with `canViewStudentData()` rather
    * than reading the field directly.
    */
-  dataSubjects?: Subject[];
+  canViewStudentData?: boolean;
   /**
    * Classes this user belongs to. Always within the user's own school.
    *
@@ -135,12 +135,12 @@ const UserSchema = new Schema<IUser>(
       enum: ["math", "chinese", "english", "science", "humanities"],
       default: [],
     },
-    dataSubjects: {
-      type: [String],
-      enum: ["math", "chinese", "english", "science", "humanities"],
-      // No default: an absent field means "not configured", which is
-      // meaningfully different from an empty array (see IUser.dataSubjects).
-      default: undefined,
+    canViewStudentData: {
+      type: Boolean,
+      // Granting a subject grants that subject's student data, so the default
+      // has to be true or every new teacher would start unable to see the
+      // classes they teach. Only read for teachers.
+      default: true,
     },
     classes: {
       type: [{ type: Schema.Types.ObjectId, ref: "Class" }],
@@ -152,14 +152,25 @@ const UserSchema = new Schema<IUser>(
 );
 
 /**
- * Which subjects' student data a teacher may review.
- * Falls back to their teaching subjects while `dataSubjects` is unset.
+ * Whether this teacher may review student data, normalizing the two ways the
+ * field can be missing: documents written before it existed, and `.lean()`
+ * reads that skip the schema default. Only an explicit `false` denies.
+ */
+export function canViewStudentData(user: { canViewStudentData?: boolean }): boolean {
+  return user.canViewStudentData !== false;
+}
+
+/**
+ * Which subjects' student data a teacher may review: exactly the subjects they
+ * teach, or none at all when an admin switched the feature off for them.
+ *
+ * Callers still have to intersect this with the school's enabled subjects.
  */
 export function effectiveDataSubjects(user: {
   subjects?: Subject[];
-  dataSubjects?: Subject[] | null;
+  canViewStudentData?: boolean;
 }): Subject[] {
-  if (Array.isArray(user.dataSubjects)) return user.dataSubjects;
+  if (!canViewStudentData(user)) return [];
   return user.subjects ?? [];
 }
 

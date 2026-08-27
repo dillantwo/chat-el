@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Box, Clock, Loader2, LogOut, MessageSquare, Sparkles, Save, Share2, Timer, Trash2, Variable, Zap } from "lucide-react";
+import { Box, Clock, Loader2, LogOut, MessageSquare, Sparkles, Share2, Timer, Trash2, Variable, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -150,6 +150,8 @@ export function AppSidebar() {
   const question = toolbox?.question ?? "";
   const recommendedToolKeys = toolbox?.recommendedToolKeys ?? [];
   const isMathDashboard = pathname.startsWith('/math/dashboard');
+  /** AI 生成圖解 — its own topic, with 圖解生成記錄 inline in this sidebar. */
+  const isMathDiagram = pathname.startsWith('/math/diagram');
   const isChineseScenery = pathname.startsWith('/chinese/scenery');
   const isChineseCharacter = pathname.startsWith('/chinese/character');
   const isChineseLinZexu = pathname.startsWith('/chinese/lin-zexu');
@@ -173,6 +175,8 @@ export function AppSidebar() {
   const recommendCandidates = allToolGroups.length > 0 ? allToolGroups.flatMap((g) => g.tools) : tools;
   const recommendedTools = recommendCandidates.filter((t) => recommendedToolKeys.includes(t.key));
   const [savedAiTools, setSavedAiTools] = useState<SavedAiTool[]>([]);
+  /** The toolKey of the 圖解 the workspace currently has open, for highlighting. */
+  const [activeDiagramKey, setActiveDiagramKey] = useState<string | null>(null);
   /** The 圖解 awaiting delete confirmation; also drives the confirm dialog. */
   const [pendingDeleteTool, setPendingDeleteTool] = useState<SavedAiTool | null>(null);
   const [deletingTool, setDeletingTool] = useState(false);
@@ -210,13 +214,13 @@ export function AppSidebar() {
   // reached from the home page — not from this sidebar or from any topic page.
 
   const fetchSavedAiTools = useCallback(() => {
-    if (!isMathDashboard || (!isTeacher && !isStudent)) return;
+    if (!isMathDiagram || (!isTeacher && !isStudent)) return;
 
     fetch(`${basePath}/api/html-content`)
       .then((res) => res.json())
       .then((data) => setSavedAiTools(data.items ?? []))
       .catch(() => {});
-  }, [isMathDashboard, isTeacher, isStudent]);
+  }, [isMathDiagram, isTeacher, isStudent]);
 
   async function toggleShareAiTool(toolKey: string, sharedWithStudents: boolean) {
     try {
@@ -257,6 +261,13 @@ export function AppSidebar() {
         { method: "DELETE" }
       );
       if (!res.ok) throw new Error("Failed to delete saved AI tool");
+      // Clear the workspace when the record it is showing is the one that just
+      // went away, so the teacher cannot keep editing (and re-saving) a deleted
+      // 圖解.
+      if (activeDiagramKey === item.toolKey) {
+        setActiveDiagramKey(null);
+        window.dispatchEvent(new CustomEvent("diagram:new"));
+      }
       closeDeleteToolDialog();
       fetchSavedAiTools();
     } catch {
@@ -266,20 +277,21 @@ export function AppSidebar() {
     }
   }
 
+  /**
+   * Open a saved 圖解 in the workspace. The list response already carries the
+   * HTML, but this refetches the single record so the teacher's transcript comes
+   * with it — and so a record deleted in another tab fails here rather than
+   * loading a stale copy. The API strips `chatMessages` for students, so the
+   * workspace simply starts them on an empty conversation.
+   */
   async function loadSavedAiTool(toolKey: string) {
     try {
       const res = await fetch(`${basePath}/api/html-content?toolKey=${encodeURIComponent(toolKey)}`);
       if (!res.ok) throw new Error("Failed to load saved AI tool");
       const data = await res.json();
       if (!data.item) return;
-      window.dispatchEvent(new CustomEvent("dashboard:load-ai-tool", {
-        detail: {
-          ...data.item,
-          chatMode: isTeacher ? "ai-tool" : "question",
-          // Students should always start from Q&A chat mode on shared tools.
-          chatMessages: isTeacher ? data.item.chatMessages : [],
-        },
-      }));
+      setActiveDiagramKey(toolKey);
+      window.dispatchEvent(new CustomEvent("diagram:load", { detail: { item: data.item } }));
     } catch {
       // Keep sidebar interaction quiet if loading fails.
     }
@@ -393,9 +405,21 @@ export function AppSidebar() {
       fetchSavedAiTools();
     }
 
-    window.addEventListener("dashboard:ai-tool-saved", handleAiToolSaved);
-    return () => window.removeEventListener("dashboard:ai-tool-saved", handleAiToolSaved);
+    window.addEventListener("diagram:saved", handleAiToolSaved);
+    return () => window.removeEventListener("diagram:saved", handleAiToolSaved);
   }, [fetchSavedAiTools]);
+
+  // Track which 圖解 the workspace has open so we can highlight it (it also
+  // clears itself when the teacher starts a new one).
+  useEffect(() => {
+    if (!isMathDiagram) return;
+    function handleActive(event: Event) {
+      const key = (event as CustomEvent<{ toolKey: string | null }>).detail?.toolKey ?? null;
+      setActiveDiagramKey(key);
+    }
+    window.addEventListener("diagram:active", handleActive);
+    return () => window.removeEventListener("diagram:active", handleActive);
+  }, [isMathDiagram]);
 
   // Build a map from tool key to its group label
   const toolGroupLabelMap: Record<string, string> = {};
@@ -426,6 +450,21 @@ export function AppSidebar() {
             AI and Coding for Subject Learning
           </span>
         </Link>
+        {isMathDiagram ? (
+          // AI 生成圖解: a teacher starts a new one from here. A student has
+          // nothing to start — they only open what was shared with them, from
+          // the 圖解記錄 list below.
+          isTeacher && (
+            <Button
+              className="mt-4 w-full gap-2 bg-[#16a34a] text-white hover:bg-[#15803d]"
+              size="lg"
+              onClick={() => window.dispatchEvent(new CustomEvent('diagram:new'))}
+            >
+              <Sparkles className="size-4" />
+              新圖解
+            </Button>
+          )
+        ) : (
         <Button
           className={`mt-4 w-full ${
             isChineseLikeChat || isEnglishDashboard
@@ -458,18 +497,6 @@ export function AppSidebar() {
         }}>
           {isEnglishDashboard ? '+ New Chat' : isChineseLikeChat ? '+ 新聊天' : isMathDashboard ? '加入題目' : '+ Add New Question'}
         </Button>
-        {isMathDashboard && isTeacher && (
-          <Button
-            variant="outline"
-            className="mt-2 w-full justify-center gap-2 border-[#cfe0ff] bg-[#f4f8ff] text-[#146ef5] hover:border-[#a9c7ff] hover:bg-[#eaf2ff] hover:text-[#0055d4]"
-            size="lg"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('dashboard:new-ai-tool'));
-            }}
-          >
-            <Sparkles className="size-4" />
-            AI生成圖解
-          </Button>
         )}
       </SidebarHeader>
 
@@ -536,6 +563,147 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
+          </SidebarGroup>
+        )}
+
+        {/* 圖解生成記錄 — inline on the AI 生成圖解 page, which has no toolbox */}
+        {isMathDiagram && (isTeacher || isStudent) && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="flex items-center gap-1.5">
+              <Clock className="size-3.5" />
+              圖解生成記錄
+            </SidebarGroupLabel>
+            <p className="px-3 pb-1 text-[10px] text-muted-foreground">
+              {isTeacher ? "已保存的圖解（可分享給學生）" : "老師分享給你的圖解"}
+            </p>
+            {savedAiTools.length > 0 ? (
+              <div className="space-y-0.5 px-1">
+                {savedAiTools.map((item) => (
+                  <div
+                    key={item.toolKey}
+                    className={`flex items-start gap-1.5 rounded-lg px-2 py-1.5 transition-colors ${
+                      activeDiagramKey === item.toolKey
+                        ? "bg-blue-50 ring-1 ring-blue-300"
+                        : "hover:bg-muted"
+                    }`}
+                  >
+                    <button
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                      onClick={() => {
+                        void loadSavedAiTool(item.toolKey);
+                      }}
+                    >
+                      <Sparkles
+                        className={`mt-0.5 size-3.5 shrink-0 ${
+                          activeDiagramKey === item.toolKey ? "text-blue-600" : "text-muted-foreground"
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className={`line-clamp-2 text-xs font-medium leading-snug ${
+                            activeDiagramKey === item.toolKey ? "text-blue-700" : ""
+                          }`}
+                        >
+                          {item.title}
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {!isTeacher && item.sharedWithStudents && "已分享 · "}
+                          {item.updatedAt ? new Date(item.updatedAt).toLocaleString("zh-HK") : ""}
+                        </p>
+                      </div>
+                    </button>
+                    {isTeacher && (
+                      <>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant={item.sharedWithStudents ? "default" : "outline"}
+                          className={
+                            item.sharedWithStudents
+                              ? "size-7 shrink-0 bg-[#146ef5] text-white hover:bg-[#0055d4]"
+                              : "size-7 shrink-0"
+                          }
+                          title={item.sharedWithStudents ? "已分享給學生，點擊取消" : "分享給學生"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void toggleShareAiTool(item.toolKey, !item.sharedWithStudents);
+                          }}
+                        >
+                          <Share2 className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          className="size-7 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
+                          title="刪除記錄"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeleteToolError(null);
+                            setPendingDeleteTool(item);
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="px-3 py-2 text-xs text-muted-foreground">
+                {isTeacher ? "暫無圖解生成記錄" : "老師還沒有分享圖解"}
+              </p>
+            )}
+
+            {/*
+              The record can be visible to a whole class, so the confirmation —
+              and any failure — belongs in the same surface the teacher is
+              already looking at, rather than a window.confirm.
+            */}
+            <Dialog
+              open={pendingDeleteTool !== null}
+              onOpenChange={(open) => {
+                // Ignore backdrop / Escape while the request is in flight so the
+                // teacher cannot lose sight of a delete that may land.
+                if (!open && !deletingTool) closeDeleteToolDialog();
+              }}
+            >
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>刪除圖解記錄</DialogTitle>
+                  <DialogDescription>此操作無法復原。</DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-2">
+                  <p className="line-clamp-3 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">
+                    {pendingDeleteTool?.title}
+                  </p>
+                  {pendingDeleteTool?.sharedWithStudents && (
+                    <p className="rounded-lg bg-[#fee2e2] px-3 py-2 text-xs text-[#b91c1c]">
+                      此圖解已分享給學生，刪除後他們亦無法再開啟。
+                    </p>
+                  )}
+                  {deleteToolError && <p className="text-sm text-destructive">{deleteToolError}</p>}
+                </div>
+
+                <DialogFooter className="flex-row justify-end gap-2">
+                  <Button variant="outline" disabled={deletingTool} onClick={closeDeleteToolDialog}>
+                    取消
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={deletingTool}
+                    onClick={() => {
+                      void confirmDeleteSavedAiTool();
+                    }}
+                  >
+                    {deletingTool && <Loader2 className="size-4 animate-spin" />}
+                    刪除
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </SidebarGroup>
         )}
 
@@ -660,153 +828,10 @@ export function AppSidebar() {
         {/* Reading-comprehension role-play: draggable Word Bank, pinned at the bottom */}
         {isReadingRoleplay && <VocabBank />}
 
-        {isMathDashboard && (isTeacher || isStudent) && (
-          <Sheet>
-            <SheetTrigger
-              render={
-                <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs" />
-              }
-            >
-              <Save className="size-3.5" />
-              圖解生成記錄
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
-              <SheetHeader className="px-4 pt-4 pb-2">
-                <SheetTitle className="flex items-center gap-2 text-sm">
-                  <Save className="size-4" />
-                  圖解生成記錄
-                </SheetTitle>
-                <SheetDescription className="text-xs">
-                  {isTeacher ? "已保存的 AI 圖解（可分享給學生）" : "老師分享的 AI 圖解"}
-                </SheetDescription>
-              </SheetHeader>
-              <Separator />
-              <div className="flex-1 overflow-y-auto px-2 py-2">
-                {savedAiTools.length > 0 ? (
-                  <div className="space-y-1">
-                    {savedAiTools.map((item) => (
-                      <div key={item.toolKey} className="flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-muted transition-colors">
-                        <button
-                          className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
-                          onClick={() => {
-                            void loadSavedAiTool(item.toolKey);
-                          }}
-                        >
-                          <Save className="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-medium leading-snug line-clamp-2">
-                              {item.title}
-                            </div>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {item.updatedAt ? new Date(item.updatedAt).toLocaleString("zh-HK") : ""}
-                            </p>
-                          </div>
-                        </button>
-                        {isTeacher && (
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant={item.sharedWithStudents ? "default" : "outline"}
-                            className={item.sharedWithStudents ? "h-7 w-7 bg-[#146ef5] text-white hover:bg-[#0055d4]" : "h-7 w-7"}
-                            title={item.sharedWithStudents ? "已分享給學生，點擊取消" : "分享給學生"}
-                            onClick={() => {
-                              void toggleShareAiTool(item.toolKey, !item.sharedWithStudents);
-                            }}
-                          >
-                            <Share2 className="size-3.5" />
-                          </Button>
-                        )}
-                        {isTeacher && (
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="h-7 w-7 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
-                            title="刪除記錄"
-                            onClick={() => {
-                              setDeleteToolError(null);
-                              setPendingDeleteTool(item);
-                            }}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        )}
-                        {!isTeacher && item.sharedWithStudents && (
-                          <span className="mt-0.5 inline-flex items-center rounded-[4px] bg-[#146ef5]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#146ef5]">
-                            已分享
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Save className="size-8 mb-2 opacity-30" />
-                    <p className="text-xs">暫無圖解生成記錄</p>
-                  </div>
-                )}
-              </div>
-
-              {/*
-                Nested inside the sheet on purpose: base-ui tracks the nesting,
-                so Escape closes only this confirm step and the list stays open
-                behind it.
-              */}
-              <Dialog
-                open={pendingDeleteTool !== null}
-                onOpenChange={(open) => {
-                  // Ignore backdrop / Escape while the request is in flight so
-                  // the teacher cannot lose sight of a delete that may land.
-                  if (!open && !deletingTool) closeDeleteToolDialog();
-                }}
-              >
-                <DialogContent className="max-w-sm">
-                  <DialogHeader>
-                    <DialogTitle>刪除圖解記錄</DialogTitle>
-                    <DialogDescription>此操作無法復原。</DialogDescription>
-                  </DialogHeader>
-
-                  <div className="space-y-2">
-                    <p className="line-clamp-3 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">
-                      {pendingDeleteTool?.title}
-                    </p>
-                    {pendingDeleteTool?.sharedWithStudents && (
-                      <p className="rounded-lg bg-[#fee2e2] px-3 py-2 text-xs text-[#b91c1c]">
-                        此圖解已分享給學生，刪除後他們亦無法再開啟。
-                      </p>
-                    )}
-                    {deleteToolError && (
-                      <p className="text-sm text-destructive">{deleteToolError}</p>
-                    )}
-                  </div>
-
-                  <DialogFooter className="flex-row justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      disabled={deletingTool}
-                      onClick={closeDeleteToolDialog}
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      disabled={deletingTool}
-                      onClick={() => {
-                        void confirmDeleteSavedAiTool();
-                      }}
-                    >
-                      {deletingTool && <Loader2 className="size-4 animate-spin" />}
-                      刪除
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </SheetContent>
-          </Sheet>
-        )}
-
-        {/* History trigger — hidden where inline 聊天記錄 already shows (Chinese / Science / Humanities / English) */}
-        {!isChineseLikeChat && !isEnglishDashboard && (
+        {/* History trigger — hidden where an inline list already shows it
+            (Chinese / Science / Humanities / English 聊天記錄, and the 圖解生成記錄
+            on the AI 生成圖解 page, which keeps no 提問記錄 of its own) */}
+        {!isChineseLikeChat && !isEnglishDashboard && !isMathDiagram && (
         <Sheet>
           <SheetTrigger
             render={

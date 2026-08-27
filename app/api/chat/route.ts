@@ -51,12 +51,18 @@ function uiMessagesToModelMessages(messages: UIMessage[]): ModelMessage[] {
 
 export async function POST(req: Request) {
   try {
-    const { messages, systemPrompt, mode, hasQuestion, chatId } = (await req.json()) as {
+    const { messages, systemPrompt, mode, hasQuestion, chatId, topic } = (await req.json()) as {
       messages: UIMessage[];
       systemPrompt?: string;
       mode?: "question" | "ai-tool";
       hasQuestion?: boolean;
       chatId?: string;
+      /**
+       * Which math topic the caller is on. Only 圖解 sends it, and it cannot be
+       * inferred from `mode`: a student on that page chats in "question" mode
+       * but still belongs to ai-diagram.
+       */
+      topic?: "ai-diagram";
     };
 
     // Get session for token tracking (non-blocking — don't fail if no session)
@@ -145,11 +151,11 @@ export async function POST(req: Request) {
     }
 
     // This endpoint is shared by several subjects, so it is gated against the
-    // subject the prompt belongs to. For math it is the AI 解題輔助 topic that
-    // owns the dashboard this endpoint serves.
+    // subject the prompt belongs to. Math has two topics on it: AI 解題輔助 owns
+    // the dashboard, AI 生成圖解 owns /math/diagram and says so explicitly.
     const denied =
       subject === "math"
-        ? await requireTopicApi("math", "ai-problem-solving")
+        ? await requireTopicApi("math", topic === "ai-diagram" ? "ai-diagram" : "ai-problem-solving")
         : await requireSubjectApi(subject);
     if (denied) return denied;
 

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { hashPassword } from "@/lib/password";
-import { User, ALL_SUBJECTS, resolveAuthProvider, type Subject } from "@/models/User";
+import {
+  User,
+  ALL_SUBJECTS,
+  canViewStudentData,
+  resolveAuthProvider,
+  type Subject,
+} from "@/models/User";
 import { School } from "@/models/School";
 import { requireAdmin } from "@/lib/admin-auth";
 import { resolveClassesForSchool } from "@/lib/class-assignment";
@@ -12,7 +18,7 @@ function sanitizeSubjects(input: unknown): Subject[] {
 }
 
 // PATCH /api/admin/users/[id] — update display name, password, school,
-// subjects and (for teachers) student-data view permissions
+// subjects, classes and (for teachers) whether they may review student data
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -83,16 +89,11 @@ export async function PATCH(
         user.subjects = sanitizeSubjects(body.subjects).filter((s) => enabled.includes(s));
       }
 
-      if (user.role === "teacher") {
-        if (body.dataSubjects !== undefined) {
-          user.dataSubjects = sanitizeSubjects(body.dataSubjects).filter((s) =>
-            enabled.includes(s)
-          );
-        } else if (Array.isArray(user.dataSubjects)) {
-          // Moving a teacher to another school must not carry over access to
-          // subjects the new school does not offer.
-          user.dataSubjects = user.dataSubjects.filter((s) => enabled.includes(s));
-        }
+      // Which subjects' data a teacher may review follows `subjects` above, so
+      // a school transfer needs no separate pruning here. This flag only says
+      // whether they may review any at all.
+      if (user.role === "teacher" && body.canViewStudentData !== undefined) {
+        user.canViewStudentData = body.canViewStudentData !== false;
       }
 
       if (body.classes !== undefined) {
@@ -105,8 +106,8 @@ export async function PATCH(
         user.classes = [] as unknown as typeof user.classes;
       }
     } else {
-      // Admins are global: no student-data permission and no classes.
-      user.dataSubjects = undefined;
+      // Admins are global and have no classes. `canViewStudentData` is left
+      // alone: it is only ever read for teachers.
       user.classes = [] as unknown as typeof user.classes;
     }
 
@@ -121,7 +122,7 @@ export async function PATCH(
       role: user.role,
       schoolId: user.school ? user.school.toString() : null,
       subjects: user.subjects,
-      dataSubjects: user.dataSubjects ?? null,
+      canViewStudentData: canViewStudentData(user),
       classes: (user.classes ?? []).map((id) => String(id)),
     });
   } catch (err) {

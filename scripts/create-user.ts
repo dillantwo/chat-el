@@ -26,8 +26,9 @@
  *   --role          (optional) teacher | student   (default: teacher)
  *   --subjects      (optional) comma list; must be a subset of the school's
  *                              enabledSubjects. Defaults to none.
- *   --dataSubjects  (optional) teachers only — subjects whose student data they
- *                              may review. Omit to fall back to --subjects.
+ *   --noStudentData (optional) teachers only — block 查看學生數據 entirely.
+ *                              By default a teacher may review the student data
+ *                              of every subject they hold.
  *   --force         (optional) update an existing user instead of failing
  *
  * Admins are global and have no school, so they are not creatable here.
@@ -116,13 +117,10 @@ async function main() {
   }
 
   const subjects = parseSubjects(str(args, "subjects"), "subjects");
-  const hasDataSubjects = typeof args.dataSubjects === "string";
-  const dataSubjects = hasDataSubjects
-    ? parseSubjects(str(args, "dataSubjects"), "dataSubjects")
-    : undefined;
+  const noStudentData = args.noStudentData === true;
 
-  if (dataSubjects && role !== "teacher") {
-    fail("--dataSubjects only applies to teachers.");
+  if (noStudentData && role !== "teacher") {
+    fail("--noStudentData only applies to teachers.");
   }
 
   await mongoose.connect(MONGODB_URI);
@@ -157,11 +155,6 @@ async function main() {
       );
     }
 
-    const outOfScope = dataSubjects?.filter((s) => !subjects.includes(s)) ?? [];
-    if (outOfScope.length) {
-      fail(`--dataSubjects must be a subset of --subjects; extra: ${outOfScope.join(", ")}`);
-    }
-
     const existing = await User.findOne({ username });
 
     if (existing && !force) {
@@ -183,7 +176,7 @@ async function main() {
       existing.displayName = displayName;
       existing.school = school._id as mongoose.Types.ObjectId;
       existing.subjects = subjects;
-      if (dataSubjects) existing.dataSubjects = dataSubjects;
+      if (role === "teacher") existing.canViewStudentData = !noStudentData;
       await existing.save();
 
       console.log(`Updated "${username}".`);
@@ -195,7 +188,7 @@ async function main() {
         displayName,
         school: school._id,
         subjects,
-        ...(dataSubjects ? { dataSubjects } : {}),
+        ...(role === "teacher" ? { canViewStudentData: !noStudentData } : {}),
       });
 
       console.log(`Created "${username}".`);
@@ -204,7 +197,9 @@ async function main() {
     console.log(`  role     : ${role}`);
     console.log(`  school   : ${school.code} (${school.name})`);
     console.log(`  subjects : [${subjects.join(", ")}]`);
-    if (dataSubjects) console.log(`  data     : [${dataSubjects.join(", ")}]`);
+    if (role === "teacher") {
+      console.log(`  data     : ${noStudentData ? "查看學生數據已關閉" : "同科目權限"}`);
+    }
   } catch (err) {
     // Same non-atomic findOne/create pattern as the admin API. Far less likely
     // from a CLI, but a raw E11000 stack trace would not tell the operator that

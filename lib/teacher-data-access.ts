@@ -10,8 +10,10 @@ import { Class } from "@/models/Class";
  * Authorization + scoping for the teacher-facing 查看學生數據 views.
  *
  * Three rules are enforced here for every student-data endpoint:
- *  1. The teacher must have been granted data access for that subject
- *     (`User.dataSubjects`, configured by an admin).
+ *  1. The teacher must hold the subject (`User.subjects`) and must not have had
+ *     student-data access switched off (`User.canViewStudentData`). Holding a
+ *     subject is what grants access to that subject's student records — there
+ *     is no second, per-subject list to keep in step with the first.
  *  2. Only students of the teacher's own school are ever exposed.
  *  3. Only students who share a class with the teacher are exposed. A teacher
  *     with no class assigned therefore sees nothing.
@@ -79,7 +81,7 @@ type TeacherPermissionDoc = {
   _id: mongoose.Types.ObjectId;
   school: mongoose.Types.ObjectId | null;
   subjects?: Subject[];
-  dataSubjects?: Subject[];
+  canViewStudentData?: boolean;
   classes?: mongoose.Types.ObjectId[];
 };
 
@@ -87,9 +89,9 @@ type LoadedTeacher = {
   ok: true;
   teacher: TeacherPermissionDoc;
   /**
-   * The teacher's data subjects already narrowed to what the school still
-   * offers, so revoking a subject in 學校管理 takes effect even if the
-   * per-user pruning ever misses a document.
+   * The teacher's subjects, narrowed to what the school still offers, and empty
+   * when student-data access is switched off for them. Revoking a subject in
+   * 學校管理 therefore takes effect on the next request.
    */
   dataSubjects: Subject[];
 };
@@ -106,7 +108,7 @@ async function loadTeacher(): Promise<
   await connectDB();
 
   const teacher = await User.findOne({ _id: session.userId, role: "teacher" })
-    .select({ school: 1, subjects: 1, dataSubjects: 1, classes: 1 })
+    .select({ school: 1, subjects: 1, canViewStudentData: 1, classes: 1 })
     .lean<TeacherPermissionDoc | null>();
 
   if (!teacher) return { ok: false, status: 403, message: "帳戶不存在" };
