@@ -43,6 +43,9 @@ interface ClassRow {
 
 type ImportAction = "create" | "skip" | "error";
 
+/** Which login route the imported accounts will use. */
+type AccountType = "local" | "edconnect";
+
 interface ImportRowResult {
   line: number;
   username: string;
@@ -51,11 +54,14 @@ interface ImportRowResult {
   subjects: string[];
   classes: { id: string; name: string }[];
   edcityLoginId: string | null;
+  /** Where the initial password came from. Never the password itself. */
+  passwordSource: "row" | "default" | null;
   action: ImportAction;
   messages: string[];
 }
 
 interface ImportPlan {
+  accountType: AccountType;
   schoolId: string;
   schoolName: string;
   academicYear: string;
@@ -72,20 +78,54 @@ const ACTION_LABELS: Record<ImportAction, string> = {
   error: "錯誤",
 };
 
-const TEMPLATE_COLUMNS = [
-  "profileId",
-  "displayName",
-  "role",
-  "subjects",
-  "classes",
-  "edcityLoginId",
-] as const;
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  local: "密碼帳戶",
+  edconnect: "EdCity 帳戶",
+};
 
-const SAMPLE = [
-  TEMPLATE_COLUMNS.join("\t"),
-  "TYPNY8NJAOOH\t陳小明\tstudent\tmath|chinese\t6A\thke-stud001",
-  "QWRTY7HJKLM2\t李老師\tteacher\t\t6A|6B\thke-tchr001",
-].join("\n");
+const PASSWORD_SOURCE_LABELS: Record<"row" | "default", string> = {
+  row: "逐筆",
+  default: "預設",
+};
+
+/** Minimum initial password length, mirroring MIN_IMPORT_PASSWORD_LENGTH. */
+const MIN_PASSWORD_LENGTH = 6;
+
+/**
+ * The columns each account type takes. They differ in exactly two cells: a
+ * password account is identified by a username the school chooses and needs a
+ * password, an EdCity account is identified by the profile_id EdConnect issues
+ * and has none.
+ */
+const TEMPLATE_COLUMNS: Record<AccountType, readonly string[]> = {
+  local: ["username", "displayName", "role", "subjects", "classes", "password"],
+  edconnect: ["profileId", "displayName", "role", "subjects", "classes", "edcityLoginId"],
+};
+
+/**
+ * Example rows, minus the header. The second row leaves the last cell empty on
+ * purpose: for a password account that shows the batch default filling in, and
+ * for EdCity that the readable login name is optional. Both also leave subjects
+ * empty to show an empty cell inheriting the school's enabled subjects.
+ */
+const SAMPLE_ROWS: Record<AccountType, string[][]> = {
+  local: [
+    ["chan.siuming", "陳小明", "student", "math|chinese", "6A", "ChangeMe123"],
+    ["lee.teacher", "李老師", "teacher", "", "6A|6B", ""],
+  ],
+  edconnect: [
+    ["TYPNY8NJAOOH", "陳小明", "student", "math|chinese", "6A", "hke-stud001"],
+    ["QWRTY7HJKLM2", "李老師", "teacher", "", "6A|6B", ""],
+  ],
+};
+
+/** Tab-separated, which is what pasting out of Excel produces. */
+function buildSample(accountType: AccountType): string {
+  return [
+    TEMPLATE_COLUMNS[accountType].join("\t"),
+    ...SAMPLE_ROWS[accountType].map((r) => r.join("\t")),
+  ].join("\n");
+}
 
 /** Quote a CSV field only when it needs it, doubling any embedded quotes. */
 function csvCell(value: string): string {
@@ -111,19 +151,22 @@ function csvCell(value: string): string {
  * Multi-value cells use "|" and never a comma, since a comma is this file's
  * field delimiter.
  */
-function buildTemplateCsv(sampleClasses: string[], enabledSubjects: string[]): string {
+function buildTemplateCsv(
+  accountType: AccountType,
+  sampleClasses: string[],
+  enabledSubjects: string[]
+): string {
   // Use the school's own classes and subjects when known, so the example row is
   // directly usable instead of referring to a "6A" that may not exist.
   const klass = sampleClasses[0] ?? "6A";
   const twoClasses = sampleClasses.slice(0, 2).join("|") || "6A|6B";
   const twoSubjects = enabledSubjects.slice(0, 2).join("|") || "math|chinese";
 
+  const [first, second] = SAMPLE_ROWS[accountType];
   const rows: string[][] = [
-    [...TEMPLATE_COLUMNS],
-    ["TYPNY8NJAOOH", "陳小明", "student", twoSubjects, klass, "hke-stud001"],
-    // Blank subjects on purpose: shows that an empty cell inherits the school's
-    // enabled subjects.
-    ["QWRTY7HJKLM2", "李老師", "teacher", "", twoClasses, "hke-tchr001"],
+    [...TEMPLATE_COLUMNS[accountType]],
+    [first[0], first[1], first[2], twoSubjects, klass, first[5]],
+    [second[0], second[1], second[2], "", twoClasses, second[5]],
   ];
 
   return "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
@@ -136,6 +179,9 @@ export default function UserImportPage() {
   const [schoolId, setSchoolId] = useState("");
   const [academicYear, setAcademicYear] = useState("");
   const [defaultRole, setDefaultRole] = useState<"student" | "teacher">("student");
+  const [accountType, setAccountType] = useState<AccountType>("edconnect");
+  // Used for rows whose password cell is empty. Password accounts only.
+  const [defaultPassword, setDefaultPassword] = useState("");
   const [text, setText] = useState("");
 
   const [plan, setPlan] = useState<ImportPlan | null>(null);
@@ -189,7 +235,15 @@ export default function UserImportPage() {
     const res = await fetch(`${basePath}/api/admin/users/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, schoolId, academicYear, defaultRole, dryRun }),
+      body: JSON.stringify({
+        text,
+        schoolId,
+        academicYear,
+        defaultRole,
+        accountType,
+        defaultPassword,
+        dryRun,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? "處理失敗");
@@ -213,7 +267,8 @@ export default function UserImportPage() {
     if (!plan) return;
     if (
       !confirm(
-        `將為「${plan.schoolName}」新增 ${plan.summary.create} 個 EdCity 帳戶，確定執行？`
+        `將為「${plan.schoolName}」新增 ${plan.summary.create} 個` +
+          `${ACCOUNT_TYPE_LABELS[plan.accountType]}，確定執行？`
       )
     ) {
       return;
@@ -234,12 +289,17 @@ export default function UserImportPage() {
 
   function downloadTemplate() {
     const csv = buildTemplateCsv(
+      accountType,
       availableClasses.map((c) => c.name),
       selectedSchool?.enabledSubjects ?? []
     );
 
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const parts = ["edcity-users", selectedSchool?.code, academicYear].filter(Boolean);
+    const parts = [
+      accountType === "local" ? "users" : "edcity-users",
+      selectedSchool?.code,
+      academicYear,
+    ].filter(Boolean);
 
     const a = document.createElement("a");
     a.href = url;
@@ -263,7 +323,14 @@ export default function UserImportPage() {
   // back "找不到班級" and the real cause (a malformed year) would not be visible.
   const yearValid =
     academicYears.length > 0 ? Boolean(academicYear) : isValidAcademicYear(academicYear);
-  const canValidate = Boolean(schoolId && text.trim()) && yearValid && !validating;
+  const isLocal = accountType === "local";
+  const sample = buildSample(accountType);
+  // An empty default is allowed: it means every row carries its own password,
+  // and any row that does not is reported as an error in the preview.
+  const passwordValid =
+    !isLocal || !defaultPassword || defaultPassword.length >= MIN_PASSWORD_LENGTH;
+  const canValidate =
+    Boolean(schoolId && text.trim()) && yearValid && passwordValid && !validating;
   const canCommit = Boolean(plan && !plan.committed && plan.summary.create > 0) && !committing;
 
   return (
@@ -275,15 +342,44 @@ export default function UserImportPage() {
         >
           <ArrowLeft className="size-4" /> 返回使用者管理
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight">批量匯入 EdCity 帳戶</h1>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight">批量匯入使用者</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          預先建立 EdConnect 帳戶。使用者按「EdCity 登入」時，系統以 EdConnect
-          回傳的 profile_id 比對這裡的用戶名；比對不到就無法登入，所以名單要先匯入。
+          {isLocal
+            ? "一次建立多個密碼帳戶。使用者以下方名單的用戶名與密碼在登入頁登入。已存在的用戶名一律略過，不會覆寫或重設任何現有帳戶的密碼。"
+            : "預先建立 EdConnect 帳戶。使用者按「EdCity 登入」時，系統以 EdConnect 回傳的 profile_id 比對這裡的用戶名；比對不到就無法登入，所以名單要先匯入。"}
         </p>
       </div>
 
       <div className="space-y-5 rounded-lg border bg-background p-5">
         <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>帳戶類型</Label>
+            <Select
+              value={accountType}
+              onValueChange={(v) => {
+                setAccountType(v as AccountType);
+                // The password only exists for one of the two types, so drop it
+                // rather than keep it around while it cannot be used.
+                setDefaultPassword("");
+                invalidatePlan();
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>
+                  {(v) => ACCOUNT_TYPE_LABELS[v as AccountType] ?? "選擇帳戶類型"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="local">密碼帳戶</SelectItem>
+                <SelectItem value="edconnect">EdCity 帳戶</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {isLocal ? "用戶名 + 密碼登入。" : "以 EdConnect 的 profile_id 登入。"}
+              一次匯入只能是同一種類型。
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label>學校</Label>
             <Select
@@ -381,6 +477,28 @@ export default function UserImportPage() {
               名單沒有 role 欄位時採用。管理員角色不能由此匯入。
             </p>
           </div>
+
+          {isLocal && (
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="default-password">預設密碼</Label>
+              <Input
+                id="default-password"
+                type="password"
+                value={defaultPassword}
+                onChange={(e) => {
+                  setDefaultPassword(e.target.value);
+                  invalidatePlan();
+                }}
+                placeholder={`至少 ${MIN_PASSWORD_LENGTH} 個字元`}
+                aria-invalid={!passwordValid}
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                名單沒有填 password 的資料列會用這個密碼。留空則每一列都必須自己填密碼，
+                否則該列會被視為錯誤。整批共用同一個密碼時，請匯入後盡快個別更改。
+              </p>
+            </div>
+          )}
         </div>
 
         {selectedSchool && (
@@ -417,7 +535,7 @@ export default function UserImportPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setText(SAMPLE);
+                  setText(sample);
                   invalidatePlan();
                 }}
               >
@@ -434,19 +552,26 @@ export default function UserImportPage() {
             }}
             rows={10}
             spellCheck={false}
-            placeholder={SAMPLE}
+            placeholder={sample}
             className="w-full rounded-md border bg-background p-3 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
           <div className="space-y-1 text-xs text-muted-foreground">
             <p>
               第一行必須是標題列。必填欄位：
-              <code className="mx-1">profileId</code>（或「用戶名」）、
+              <code className="mx-1">{isLocal ? "username" : "profileId"}</code>
+              （或「用戶名」）、
               <code className="mx-1">displayName</code>（或「姓名」）。選填：
               <code className="mx-1">role</code>
               <code className="mx-1">subjects</code>
               <code className="mx-1">classes</code>
-              <code className="mx-1">edcityLoginId</code>。
+              <code className="mx-1">{isLocal ? "password" : "edcityLoginId"}</code>。
             </p>
+            {isLocal && (
+              <p>
+                用戶名只接受英文字母、數字與 <code>. _ - @</code>，會統一轉成小寫。
+                <code className="mx-1">password</code> 留空的資料列會用上面的預設密碼。
+              </p>
+            )}
             <p>
               多值欄位用 <code>|</code> 分隔，例如 <code>math|chinese</code>、
               <code>6A|6B</code>。班級只需寫名稱，學年由上方選擇。
@@ -515,9 +640,12 @@ export default function UserImportPage() {
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="px-4">行</TableHead>
                   <TableHead className="px-4">狀態</TableHead>
-                  <TableHead className="px-4">profile_id</TableHead>
+                  <TableHead className="px-4">
+                    {plan.accountType === "local" ? "用戶名" : "profile_id"}
+                  </TableHead>
                   <TableHead className="px-4">姓名</TableHead>
                   <TableHead className="px-4">角色</TableHead>
+                  {plan.accountType === "local" && <TableHead className="px-4">密碼</TableHead>}
                   <TableHead className="px-4">科目</TableHead>
                   <TableHead className="px-4">班級</TableHead>
                   <TableHead className="px-4">說明</TableHead>
@@ -554,6 +682,19 @@ export default function UserImportPage() {
                     <TableCell className="px-4 py-2 text-sm">
                       {row.role ? ROLE_LABELS[row.role] : "—"}
                     </TableCell>
+                    {plan.accountType === "local" && (
+                      // The source, never the password: it is not sent to the
+                      // browser at all.
+                      <TableCell className="px-4 py-2 text-sm">
+                        {row.passwordSource ? (
+                          <Badge variant="secondary">
+                            {PASSWORD_SOURCE_LABELS[row.passwordSource]}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="px-4 py-2">
                       <div className="flex flex-wrap gap-1">
                         {row.subjects.length === 0 ? (
