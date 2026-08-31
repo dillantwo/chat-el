@@ -529,13 +529,9 @@ export default function FractionMultiplicationPage() {
       $e("speed-val")!.innerText = currentSpeed.toFixed(1);
     }
 
+    // 數線在整段動畫中都跟著長條圖走：刻度的分母是 currentNL_D，步驟 1 是 d1，
+    // 步驟 2 細分之後改成 d1×d2，所以學生隨時都能把格子對回數線上的位置。
     function toggleNumberLine() {
-      if (isPhase1OrLater) {
-        const nlWrap = $e("bar1-nl");
-        if (nlWrap) nlWrap.style.display = "none";
-        $i("show-nl-cb")!.checked = false;
-        return;
-      }
       const maxW = maxWholesVar();
       renderNumberLine("bar1-nl", maxW, currentNL_D);
       const wrap = $e("main-bar-wrap")!;
@@ -696,7 +692,7 @@ export default function FractionMultiplicationPage() {
     }
 
     // ---------- 步驟時間軸（保留每個做完的步驟） ----------
-    /** 快照是純展示用的複製品：拿掉 id（避免和實際動畫用的 unit-N / bar1-nl 撞名）與 inline 事件。 */
+    /** 快照是純展示用的複製品：拿掉 id（避免和實際動畫用的 unit-N 撞名）與 inline 事件。 */
     function stripInteractive(el: HTMLElement) {
       el.removeAttribute("id");
       el.removeAttribute("onclick");
@@ -716,9 +712,12 @@ export default function FractionMultiplicationPage() {
     }
 
     /**
-     * 把目前長條圖（含數線，如果正在顯示）的樣子凍結成一張卡片，附在主長條圖下面的
-     * 步驟紀錄裏。主長條圖（#bar1-row）永遠留在上面繼續動，紀錄由上而下依步驟累積，
-     * 所以加入新卡片不會推動學生正要點的那條長條圖。
+     * 把目前長條圖的樣子凍結成一張卡片，附在主長條圖下面的步驟紀錄裏。主長條圖
+     *（#bar1-row）永遠留在上面繼續動，紀錄由上而下依步驟累積，所以加入新卡片不會
+     * 推動學生正要點的那條長條圖。
+     *
+     * 卡片只留長條圖，不複製數線：數線只在上面那條「正在操作」的長條圖上有意義，
+     * 每張紀錄都帶一條刻度會把紀錄拉得很長，也讓學生分不清該看哪一條。
      */
     function snapshotStep(num: number, text: string) {
       const history = $e("step-history");
@@ -740,14 +739,6 @@ export default function FractionMultiplicationPage() {
       const barClone = wrap.cloneNode(true) as HTMLElement;
       stripInteractive(barClone);
       column.appendChild(barClone);
-
-      const nl = $e("bar1-nl");
-      if (nl && nl.style.display !== "none") {
-        const nlClone = nl.cloneNode(true) as HTMLElement;
-        stripInteractive(nlClone);
-        nlClone.style.display = "flex";
-        column.appendChild(nlClone);
-      }
 
       card.appendChild(column);
       list.appendChild(card);
@@ -1012,19 +1003,11 @@ export default function FractionMultiplicationPage() {
 
       const vals = getSafeValues();
 
-      // 步驟 1 的長條圖等一下會被重建成細分後的版本，先存一張到下面的步驟紀錄
-      //（此時數線還在，所以紀錄裏的步驟 1 會連數線一起保留）。
+      // 步驟 1 的長條圖等一下會被重建成細分後的版本，先存一張到下面的步驟紀錄。
       snapshotStep(
         1,
         `被乘數 ${getCompactDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")} 的長條圖：每個整體平均分成 <b>${vals.d1}</b> 份`,
       );
-
-      const nlCb = $i("show-nl-cb");
-      if (nlCb) {
-        nlCb.disabled = true;
-        nlCb.checked = false;
-      }
-      $e("bar1-nl")!.style.display = "none";
 
       const A = vals.total_n1;
       const B = vals.d1;
@@ -1106,6 +1089,9 @@ export default function FractionMultiplicationPage() {
       if (!alive) return;
       await animateSubdivide(dashedLines, ms(TIMING.subdivide));
       if (!alive) return;
+      // 細分完成，數線的刻度也一起變細（分母 d1 → d1×d2），才對得上新的小格。
+      currentNL_D = B * D;
+      toggleNumberLine();
       await delay(ms(TIMING.holdSubdivide));
       if (!alive) return;
       // 細分完成：先把這一步的樣子存進下面的步驟紀錄，主長條圖再接著做提取。
@@ -1154,9 +1140,6 @@ export default function FractionMultiplicationPage() {
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = window.setTimeout(showIdleHint, 3000);
       timers.push(idleTimer);
-
-      const nlCb = $i("show-nl-cb");
-      if (nlCb) nlCb.disabled = false;
 
       const vals = getSafeValues();
       const A = vals.total_n1;
