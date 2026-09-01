@@ -45,6 +45,7 @@ const topics: TopicCard[] = [
     icon: FolderDown,
     accent: "#7a3dff",
     cta: "Open resources",
+    group: "resource",
   },
 ];
 
@@ -64,6 +65,8 @@ export default function EnglishPage() {
       emptyBody="No topics are open for this subject. Please ask your teacher or administrator to open one."
       comingSoonLabel="Coming soon"
       backLabel="Select Subject"
+      topicsSectionLabel="Topics"
+      resourcesSectionLabel="Resources"
     />
   );
 }

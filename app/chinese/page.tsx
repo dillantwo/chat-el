@@ -53,6 +53,7 @@ const topics: TopicCard[] = [
     icon: FolderDown,
     accent: "#7a3dff",
     cta: "打開資源",
+    group: "resource",
   },
 ];
 
