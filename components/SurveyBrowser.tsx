@@ -40,7 +40,7 @@ const COPY = {
     navToggle: "Choose a questionnaire",
     loading: "Loading the questionnaire…",
     loadError: "Could not load the questionnaire. Please try again later.",
-    empty: "Your teacher has not set up a pre-test or post-test for this subject yet.",
+    empty: "No pre-test or post-test is currently available for this subject.",
     openNewTab: "Open in a new window",
     embedHint:
       "If the panel stays blank, use “Open in a new window” to fill the questionnaire in instead.",

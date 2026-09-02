@@ -40,7 +40,7 @@ const topics: TopicCard[] = [
     label: "Pre-test & Post-test",
     labelEn: "Questionnaires",
     description:
-      "Questionnaires for before and after the topics. Whichever one your teacher has set up appears here.",
+      "Questionnaires for before and after the topics.",
     href: "/english/pre-post-test",
     icon: ClipboardList,
     accent: "#0f766e",
