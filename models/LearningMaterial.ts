@@ -14,8 +14,8 @@ export const MATERIAL_AUDIENCES: MaterialAudience[] = ["teacher", "student", "bo
 
 /**
  * A single uploaded resource in the school-agnostic resource pool.
- * Grouping and per-school assignment live in SchoolMaterialLayout — a resource
- * here is just the file plus its metadata.
+ * Grouping and per-school assignment live in MaterialTemplate — a resource here
+ * is just the file plus its metadata.
  */
 export interface ILearningMaterial extends Document {
   /** Subject this material belongs to (english, math, ...) */

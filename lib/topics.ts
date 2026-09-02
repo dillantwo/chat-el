@@ -40,6 +40,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       route: "/math/diagram",
     },
     {
+      key: "pre-post-test",
+      label: "前測-後測",
+      labelEn: "Pre / Post Test",
+      route: "/math/pre-post-test",
+    },
+    {
       key: "learning-materials",
       label: "學習資源",
       labelEn: "Learning Materials",
@@ -72,6 +78,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       route: "/chinese/wenyan",
     },
     {
+      key: "pre-post-test",
+      label: "前測-後測",
+      labelEn: "Pre / Post Test",
+      route: "/chinese/pre-post-test",
+    },
+    {
       key: "learning-materials",
       label: "學習資源",
       labelEn: "Learning Materials",
@@ -98,6 +110,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       route: "/english/reading-comprehension",
     },
     {
+      key: "pre-post-test",
+      label: "Pre-test & Post-test",
+      labelEn: "Pre / Post Test",
+      route: "/english/pre-post-test",
+    },
+    {
       key: "learning-materials",
       label: "Learning Materials",
       labelEn: "Resource Library",
@@ -118,6 +136,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       route: "/science/aerospace",
     },
     {
+      key: "pre-post-test",
+      label: "前測-後測",
+      labelEn: "Pre / Post Test",
+      route: "/science/pre-post-test",
+    },
+    {
       key: "learning-materials",
       label: "學習資源",
       labelEn: "Learning Materials",
@@ -136,6 +160,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       label: "抗日戰爭",
       labelEn: "Anti-Japanese War",
       route: "/humanities/anti-japanese-war",
+    },
+    {
+      key: "pre-post-test",
+      label: "前測-後測",
+      labelEn: "Pre / Post Test",
+      route: "/humanities/pre-post-test",
     },
     {
       key: "learning-materials",

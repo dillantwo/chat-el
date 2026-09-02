@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/admin-auth";
 import { LearningMaterial, MATERIAL_AUDIENCES, type MaterialAudience } from "@/models/LearningMaterial";
-import { SchoolMaterialLayout } from "@/models/SchoolMaterialLayout";
 import { MaterialTemplate } from "@/models/MaterialTemplate";
 import { deleteMaterialFile } from "@/lib/gridfs";
 
@@ -83,18 +82,13 @@ export async function DELETE(
     await deleteMaterialFile(material.fileId);
     await material.deleteOne();
 
-    // Remove this material from any school group and from the subject template
-    // that referenced it, so a later template sync cannot resurrect the id.
-    await Promise.all([
-      SchoolMaterialLayout.updateMany(
-        { "groups.materials": material._id },
-        { $pull: { "groups.$[].materials": material._id } }
-      ),
-      MaterialTemplate.updateMany(
-        { "groups.materials": material._id },
-        { $pull: { "groups.$[].materials": material._id } }
-      ),
-    ]);
+    // Drop the material from every template group that referenced it. The groups
+    // are what the schools read directly, so leaving the id behind would show a
+    // dead row on their 學習資源 page.
+    await MaterialTemplate.updateMany(
+      { "groups.materials": material._id },
+      { $pull: { "groups.$[].materials": material._id } }
+    );
 
     return NextResponse.json({ success: true });
   } catch (err) {

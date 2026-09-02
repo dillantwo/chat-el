@@ -6,8 +6,8 @@ import {
   ChevronUp,
   Link2,
   Loader2,
+  Pencil,
   Plus,
-  RefreshCw,
   Save,
   Trash2,
   X,
@@ -16,6 +16,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -30,6 +39,13 @@ import { basePath } from "@/lib/utils";
 interface SchoolRow {
   id: string;
   name: string;
+}
+
+interface TemplateRow {
+  id: string;
+  name: string;
+  /** 適用學校 ids, used to show which template a school currently belongs to. */
+  schools: string[];
 }
 
 interface PoolMaterial {
@@ -47,6 +63,11 @@ interface EditableGroup {
   collapsed?: boolean;
 }
 
+interface ApiGroup {
+  name: string;
+  materials: { id: string }[];
+}
+
 function move<T>(arr: T[], from: number, to: number): T[] {
   if (to < 0 || to >= arr.length) return arr;
   const next = arr.slice();
@@ -55,70 +76,91 @@ function move<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
-// Sentinel value for the "template" target in the school picker.
-const TEMPLATE = "__template__";
+function toEditable(groups: ApiGroup[] | undefined): EditableGroup[] {
+  return (groups ?? []).map((g) => ({
+    name: g.name,
+    materialIds: g.materials.map((m) => m.id),
+    collapsed: false,
+  }));
+}
+
+/** State of the 新增／重新命名 dialog; `null` while it is closed. */
+type NameDialogState = {
+  mode: "create" | "rename";
+  value: string;
+  /** Create only: copy this template's groups into the new one. */
+  copyFrom: string | null;
+};
 
 export default function AdminSchoolMaterialsPage() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
-  const [school, setSchool] = useState("");
+  const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [templateId, setTemplateId] = useState("");
   const [subject, setSubject] = useState("english");
 
   const [pool, setPool] = useState<PoolMaterial[]>([]);
   const [groups, setGroups] = useState<EditableGroup[]>([]);
+  const [schoolIds, setSchoolIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [busyTemplate, setBusyTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
 
-  const isTemplate = school === TEMPLATE;
+  const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
+  // Collapsed by default: 適用學校 is set once and then rarely touched, while the
+  // groups below it are what an admin comes here to edit.
+  const [schoolsOpen, setSchoolsOpen] = useState(false);
+
+  const activeTemplate = templates.find((t) => t.id === templateId);
+  const subjectLabel = SUBJECT_LABELS[subject] ?? subject;
 
   useEffect(() => {
     fetch(`${basePath}/api/admin/schools`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: SchoolRow[]) => {
-        setSchools(data);
-        if (data.length > 0) setSchool((prev) => prev || data[0].id);
-      })
+      .then((data: SchoolRow[]) => setSchools(data))
       .catch(() => setSchools([]));
   }, []);
 
   const load = useCallback(async () => {
-    if (!school || !subject) return;
+    if (!subject) return;
     setLoading(true);
     setError(null);
     try {
       const url =
-        school === TEMPLATE
-          ? `${basePath}/api/admin/material-templates?subject=${subject}`
-          : `${basePath}/api/admin/school-materials?school=${school}&subject=${subject}`;
+        `${basePath}/api/admin/material-templates?subject=${subject}` +
+        (templateId ? `&template=${templateId}` : "");
       const res = await fetch(url);
-      if (!res.ok) {
-        setPool([]);
+      const data = await res.json().catch(() => ({}));
+      const list: TemplateRow[] = data.templates ?? [];
+      setTemplates(list);
+      setPool(data.pool ?? []);
+
+      // Nothing selected yet, or the selection went stale by switching subject or
+      // deleting it in another tab. Land on the first template; the id change
+      // re-runs this loader.
+      const active = list.find((t) => t.id === templateId);
+      if (!active) {
+        setTemplateId(list[0]?.id ?? "");
         setGroups([]);
+        setSchoolIds([]);
         return;
       }
-      const data = await res.json();
-      setPool(data.pool ?? []);
-      setGroups(
-        (data.groups ?? []).map((g: { name: string; materials: { id: string }[] }) => ({
-          name: g.name,
-          materialIds: g.materials.map((m) => m.id),
-          collapsed: false,
-        }))
-      );
+
+      setGroups(toEditable(data.groups));
+      setSchoolIds(active.schools);
     } finally {
       setLoading(false);
     }
-  }, [school, subject]);
+  }, [subject, templateId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => {
-    setSavedNote(false);
-  }, [school, subject]);
+    setSavedNote(null);
+  }, [templateId, subject]);
 
   const poolMap = new Map(pool.map((p) => [p.id, p]));
 
@@ -166,32 +208,48 @@ export default function AdminSchoolMaterialsPage() {
     );
   }
 
+  function toggleSchool(id: string, checked: boolean) {
+    setSchoolIds((prev) =>
+      checked ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id),
+    );
+  }
+
+  /** The template of this subject that currently holds a school, if not this one. */
+  function otherOwnerOf(schoolId: string): string | null {
+    const owner = templates.find((t) => t.id !== templateId && t.schools.includes(schoolId));
+    return owner?.name ?? null;
+  }
+
+  /** Unnamed groups are dropped rather than saved as blank rows. */
+  function payloadGroups() {
+    return groups
+      .map((g) => ({ name: g.name.trim(), materialIds: g.materialIds }))
+      .filter((g) => g.name.length > 0);
+  }
+
   async function save() {
+    if (!templateId) return;
     setSaving(true);
     setError(null);
-    setSavedNote(false);
+    setSavedNote(null);
     try {
-      const payloadGroups = groups
-        .map((g) => ({ name: g.name.trim(), materialIds: g.materialIds }))
-        .filter((g) => g.name.length > 0);
-      const url = isTemplate
-        ? `${basePath}/api/admin/material-templates`
-        : `${basePath}/api/admin/school-materials`;
-      const body = isTemplate
-        ? { subject, groups: payloadGroups }
-        : { school, subject, groups: payloadGroups };
-      const res = await fetch(url, {
+      const res = await fetch(`${basePath}/api/admin/material-templates`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ id: templateId, groups: payloadGroups(), schools: schoolIds }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         setError(data.error ?? "儲存失敗");
         return;
       }
+      const moved: string[] = data.movedFrom ?? [];
       await load();
-      setSavedNote(true);
+      setSavedNote(
+        moved.length > 0
+          ? `已儲存並套用（已從「${moved.join("」「")}」移出相關學校）`
+          : "已儲存並套用",
+      );
     } catch {
       setError("儲存失敗，請稍後再試。");
     } finally {
@@ -199,73 +257,198 @@ export default function AdminSchoolMaterialsPage() {
     }
   }
 
-  async function syncToAllSchools() {
+  // ── Template management ──────────────────────────────────────────────────────
+
+  function openCreateDialog() {
+    setError(null);
+    setNameDialog({ mode: "create", value: "", copyFrom: null });
+  }
+
+  function openRenameDialog() {
+    if (!activeTemplate) return;
+    setError(null);
+    setNameDialog({ mode: "rename", value: activeTemplate.name, copyFrom: null });
+  }
+
+  async function submitNameDialog() {
+    if (!nameDialog) return;
+    const name = nameDialog.value.trim();
+    if (!name) {
+      setError("請輸入範本名稱");
+      return;
+    }
+
+    setBusyTemplate(true);
+    setError(null);
+    try {
+      if (nameDialog.mode === "create") {
+        const res = await fetch(`${basePath}/api/admin/material-templates`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subject, name, copyFrom: nameDialog.copyFrom ?? undefined }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data.error ?? "新增範本失敗");
+          return;
+        }
+        setNameDialog(null);
+        // Switching the selection reloads the editor onto the new template.
+        setTemplateId(data.id);
+        return;
+      }
+
+      // Rename carries the open edits along, so opening the dialog mid-edit
+      // cannot quietly discard them.
+      const res = await fetch(`${basePath}/api/admin/material-templates`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: templateId,
+          name,
+          groups: payloadGroups(),
+          schools: schoolIds,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "重新命名失敗");
+        return;
+      }
+      setNameDialog(null);
+      await load();
+    } catch {
+      setError("操作失敗，請稍後再試。");
+    } finally {
+      setBusyTemplate(false);
+    }
+  }
+
+  async function deleteTemplate() {
+    if (!activeTemplate) return;
+
+    const affected = activeTemplate.schools.length;
     if (
       !confirm(
-        "確定將此範本同步到所有學校嗎？這會以範本內容覆蓋每間學校在此科目的分組設定，無法復原。"
+        `確定刪除範本「${activeTemplate.name}」嗎？` +
+          (affected > 0
+            ? `\n\n${affected} 間適用學校的${subjectLabel}資源頁會變成空白，除非你再把它們加到其他範本。`
+            : "") +
+          "\n\n此操作無法復原。"
       )
     ) {
       return;
     }
-    setSyncing(true);
+
+    setBusyTemplate(true);
     setError(null);
     try {
-      // Save the current template edits first so the sync uses the latest state.
-      await save();
-      const res = await fetch(`${basePath}/api/admin/material-templates/sync`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject }),
-      });
+      const res = await fetch(
+        `${basePath}/api/admin/material-templates?id=${encodeURIComponent(templateId)}`,
+        { method: "DELETE" },
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "同步失敗");
+        setError(data.error ?? "刪除失敗");
         return;
       }
-      const data = await res.json().catch(() => ({ synced: 0 }));
-      alert(`已同步到 ${data.synced ?? 0} 間學校。`);
+      const remaining = templates.filter((t) => t.id !== templateId);
+      setTemplates(remaining);
+      setTemplateId(remaining[0]?.id ?? "");
     } catch {
-      setError("同步失敗，請稍後再試。");
+      setError("刪除失敗，請稍後再試。");
     } finally {
-      setSyncing(false);
+      setBusyTemplate(false);
     }
   }
 
-  const selectedSchoolName = schools.find((s) => s.id === school)?.name;
+  // ── Render ──────────────────────────────────────────────────────────────────
+
   const hasUnnamed = groups.some((g) => !g.name.trim());
+  const busy = saving || loading || busyTemplate;
+
+  // Enough of the selection to judge it without opening the list: the first few
+  // names, plus a count of the schools this save would take from another template.
+  const selectedNames = schools.filter((s) => schoolIds.includes(s.id)).map((s) => s.name);
+  const namePreview =
+    selectedNames.slice(0, 3).join("、") +
+    (selectedNames.length > 3 ? ` 等 ${selectedNames.length} 間` : "");
+  const movingCount = schoolIds.filter((id) => otherOwnerOf(id)).length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">學校資源</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          為每間學校設定各科的分組，並從資源庫加入要顯示的資源。這裡的排列方式就是學生和老師看到的下載頁面。
-          也可以先編輯「範本」，再一鍵同步到所有學校。
+          每個科目可以有多個範本。一個範本裡設定分組和資源，再勾選適用的學校，儲存後那些學校的下載頁面就是這個內容。
+          同一間學校在同一科目只會屬於一個範本。
         </p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">目標</Label>
-          <Select value={school} onValueChange={(v) => setSchool(v as string)}>
-            <SelectTrigger className="h-9 w-56">
-              <SelectValue placeholder="選擇學校">
-                {(v) =>
-                  v === TEMPLATE
-                    ? "範本（所有學校）"
-                    : schools.find((s) => s.id === v)?.name ?? "選擇學校"
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TEMPLATE}>★ 範本（所有學校）</SelectItem>
-              {schools.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label className="text-xs text-muted-foreground">範本</Label>
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={templateId}
+              onValueChange={(v) => setTemplateId(v as string)}
+              disabled={templates.length === 0}
+            >
+              <SelectTrigger className="h-9 w-56">
+                <SelectValue placeholder="尚無範本">
+                  {(v) =>
+                    templates.find((t) => t.id === (v as string))?.name ??
+                    (templates.length === 0 ? "尚無範本" : "選擇範本")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                    {t.schools.length > 0 ? `（${t.schools.length} 間）` : "（未指定學校）"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="size-9"
+              onClick={openCreateDialog}
+              disabled={busy}
+              title="新增範本"
+              aria-label="新增範本"
+            >
+              <Plus className="size-4" />
+            </Button>
+            {activeTemplate && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-9"
+                  onClick={openRenameDialog}
+                  disabled={busy}
+                  title="重新命名範本"
+                  aria-label="重新命名範本"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-9"
+                  onClick={deleteTemplate}
+                  disabled={busy}
+                  title="刪除範本"
+                  aria-label="刪除範本"
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">科目</Label>
@@ -283,25 +466,11 @@ export default function AdminSchoolMaterialsPage() {
           </Select>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          {savedNote && <span className="text-sm text-green-600">已儲存</span>}
+          {savedNote && <span className="text-sm text-green-600">{savedNote}</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
-          {isTemplate && (
-            <Button
-              variant="outline"
-              onClick={syncToAllSchools}
-              disabled={syncing || saving || loading}
-            >
-              {syncing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-              同步到所有學校
-            </Button>
-          )}
-          <Button onClick={save} disabled={saving || syncing || loading || !school}>
+          <Button onClick={save} disabled={busy || !templateId}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            儲存
+            儲存並套用
           </Button>
         </div>
       </div>
@@ -310,21 +479,15 @@ export default function AdminSchoolMaterialsPage() {
         <div className="flex justify-center py-16">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
-      ) : !school ? (
+      ) : !activeTemplate ? (
         <p className="rounded-md border border-dashed py-16 text-center text-sm text-muted-foreground">
-          請先建立並選擇學校。
+          {subjectLabel}還沒有任何範本，按「＋」建立第一個。
         </p>
       ) : (
         <div className="space-y-4">
-          {isTemplate && (
-            <p className="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
-              你正在編輯此科目的範本。按「同步到所有學校」會以此範本覆蓋每間學校的分組設定。
-            </p>
-          )}
           {pool.length === 0 && (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              此科目的資源庫尚無資源，請先到「上傳資源」上傳，才能加入
-              {isTemplate ? "範本" : selectedSchoolName ? `「${selectedSchoolName}」` : "學校"}。
+              此科目的資源庫尚無資源，請先到「上傳資源」上傳，才能加入範本。
             </p>
           )}
           {hasUnnamed && (
@@ -332,6 +495,102 @@ export default function AdminSchoolMaterialsPage() {
               未命名的分組不會被儲存，請為每個分組輸入名稱。
             </p>
           )}
+
+          {/* ── 適用學校 ─────────────────────────────────────────────────── */}
+          <section className="rounded-[12px] border border-[#e3e6e3] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <div className="flex items-center gap-2 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setSchoolsOpen((open) => !open)}
+                aria-expanded={schoolsOpen}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              >
+                <ChevronDown
+                  className={[
+                    "size-5 shrink-0 text-[#16a34a] transition-transform duration-200",
+                    schoolsOpen ? "" : "-rotate-90",
+                  ].join(" ")}
+                  aria-hidden
+                />
+                <span className="min-w-0">
+                  <span className="block text-[17px] font-semibold text-[#1f2a24]">適用學校</span>
+                  {/* The summary carries the whole point of the section, so the
+                      list itself can stay shut most of the time. */}
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {schools.length === 0
+                      ? "尚未建立任何學校"
+                      : schoolIds.length === 0
+                        ? "未指定學校 · 這個範本只是草稿，沒有人看得到"
+                        : `已選 ${schoolIds.length} / ${schools.length} 間 · ${namePreview}`}
+                    {movingCount > 0 && (
+                      <span className="text-amber-600">
+                        {" "}
+                        · 其中 {movingCount} 間會從其他範本移出
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </button>
+              {schoolsOpen && schools.length > 0 && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSchoolIds(schools.map((s) => s.id))}
+                    disabled={busy}
+                  >
+                    全選
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSchoolIds([])}
+                    disabled={busy || schoolIds.length === 0}
+                  >
+                    清除
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {schoolsOpen &&
+              (schools.length === 0 ? (
+                <p className="border-t border-[#eef1ee] px-5 py-4 text-sm text-muted-foreground">
+                  尚未建立任何學校。
+                </p>
+              ) : (
+                <ul className="max-h-56 overflow-y-auto border-t border-[#eef1ee]">
+                  {schools.map((s) => {
+                    const owner = otherOwnerOf(s.id);
+                    const checked = schoolIds.includes(s.id);
+                    return (
+                      <li key={s.id} className="border-b border-[#f2f5f2] last:border-b-0">
+                        <label className="flex cursor-pointer items-center gap-3 px-5 py-2.5 hover:bg-[#f8faf8]">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => toggleSchool(s.id, v === true)}
+                            disabled={busy}
+                          />
+                          <span className="text-sm">{s.name}</span>
+                          {/* Ticking a school that belongs elsewhere moves it, so
+                              say where it is coming from before the save. */}
+                          {owner && (
+                            <span
+                              className={
+                                "ml-auto shrink-0 text-xs " +
+                                (checked ? "text-amber-600" : "text-muted-foreground")
+                              }
+                            >
+                              {checked ? `將從「${owner}」移出` : `目前屬於「${owner}」`}
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ))}
+          </section>
 
           {groups.map((group, gi) => {
             const available = pool.filter((p) => !group.materialIds.includes(p.id));
@@ -492,6 +751,79 @@ export default function AdminSchoolMaterialsPage() {
           </Button>
         </div>
       )}
+
+      {/* ── 新增／重新命名範本 ─────────────────────────────────────────────── */}
+      <Dialog
+        open={nameDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setNameDialog(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {nameDialog?.mode === "rename" ? "重新命名範本" : "新增範本"}
+            </DialogTitle>
+            <DialogDescription>
+              {subjectLabel}
+              {nameDialog?.mode === "create"
+                ? " · 建立後再設定分組和適用學校。"
+                : " · 只改名稱，分組和適用學校不變。"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="template-name" className="text-xs text-muted-foreground">
+                範本名稱
+              </Label>
+              <Input
+                id="template-name"
+                autoFocus
+                value={nameDialog?.value ?? ""}
+                onChange={(e) =>
+                  setNameDialog((prev) => (prev ? { ...prev, value: e.target.value } : prev))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !busyTemplate) {
+                    e.preventDefault();
+                    void submitNameDialog();
+                  }
+                }}
+                placeholder="例如：基礎版、增潤版"
+              />
+            </div>
+
+            {nameDialog?.mode === "create" && activeTemplate && (
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={nameDialog.copyFrom !== null}
+                  onCheckedChange={(checked) =>
+                    setNameDialog((prev) =>
+                      prev
+                        ? { ...prev, copyFrom: checked === true ? activeTemplate.id : null }
+                        : prev,
+                    )
+                  }
+                />
+                <span>複製「{activeTemplate.name}」的分組內容</span>
+              </label>
+            )}
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+
+          <DialogFooter className="flex-row justify-end">
+            <Button variant="ghost" onClick={() => setNameDialog(null)} disabled={busyTemplate}>
+              取消
+            </Button>
+            <Button onClick={submitNameDialog} disabled={busyTemplate}>
+              {busyTemplate && <Loader2 className="size-4 animate-spin" />}
+              {nameDialog?.mode === "rename" ? "儲存名稱" : "建立範本"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Droplets, FolderDown, Landmark, Swords } from "lucide-react";
+import { ClipboardList, Droplets, FolderDown, Landmark, Swords } from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 
 /** Keys and routes must match lib/topics.ts, which is what 學校管理 switches. */
@@ -26,6 +26,17 @@ const topics: TopicCard[] = [
     // for this topic, and it repeated the colour of the 人文科 sticker sitting
     // right above the card. Dark enough for white button text (6.2:1).
     accent: "#c1121f",
+  },
+  {
+    id: "pre-post-test",
+    label: "前測-後測",
+    labelEn: "Pre / Post Test",
+    description: "課題前後的問卷。",
+    href: "/humanities/pre-post-test",
+    icon: ClipboardList,
+    accent: "#0f766e",
+    cta: "打開問卷",
+    group: "resource",
   },
   {
     id: "learning-materials",

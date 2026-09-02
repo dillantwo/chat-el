@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, FolderDown, Sparkles } from "lucide-react";
+import { Calculator, ClipboardList, FolderDown, Sparkles } from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 
 /** Keys and routes must match lib/topics.ts, which is what 學校管理 switches. */
@@ -18,11 +18,22 @@ const topics: TopicCard[] = [
     id: "ai-diagram",
     label: "AI 生成圖解",
     labelEn: "AI Diagram Generator",
-    description: "老師用一句要求就能生成互動或靜態的數學圖解，再逐個元素修改，滿意後分享給學生。",
+    description: "AI生成互動或靜態的數學圖解。",
     href: "/math/diagram",
     icon: Sparkles,
     accent: "#16a34a",
     cta: "開始生成圖解",
+  },
+  {
+    id: "pre-post-test",
+    label: "前測-後測",
+    labelEn: "Pre / Post Test",
+    description: "課題前後的問卷。",
+    href: "/math/pre-post-test",
+    icon: ClipboardList,
+    accent: "#0f766e",
+    cta: "打開問卷",
+    group: "resource",
   },
   {
     id: "learning-materials",

@@ -4,7 +4,8 @@ import { School } from "@/models/School";
 import { User } from "@/models/User";
 import { Class } from "@/models/Class";
 import { ToolboxConfig } from "@/models/ToolboxConfig";
-import { SchoolMaterialLayout } from "@/models/SchoolMaterialLayout";
+import { MaterialTemplate } from "@/models/MaterialTemplate";
+import { SurveyTemplate } from "@/models/SurveyTemplate";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ALL_SUBJECTS, type Subject } from "@/models/User";
 import { sanitizeDisabledTopics } from "@/lib/topics";
@@ -122,9 +123,18 @@ export async function DELETE(
       ),
     ]);
 
-    // Layouts are per (school, subject) and become unreachable once the school
-    // is gone, so they go with it rather than lingering as orphans.
-    await SchoolMaterialLayout.deleteMany({ school: deleted._id });
+    // Same for the 適用學校 of every 資源範本 and 問卷範本: the counts shown in
+    // 學校資源 / 問卷範本 would otherwise include a school that no longer exists.
+    await Promise.all([
+      MaterialTemplate.updateMany(
+        { schools: deleted._id },
+        { $pull: { schools: deleted._id } },
+      ),
+      SurveyTemplate.updateMany(
+        { schools: deleted._id },
+        { $pull: { schools: deleted._id } },
+      ),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (err) {

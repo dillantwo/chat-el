@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { getSession } from "@/lib/session";
 import { LearningMaterial, type MaterialAudience } from "@/models/LearningMaterial";
-import { SchoolMaterialLayout, type IMaterialGroup } from "@/models/SchoolMaterialLayout";
+import { MaterialTemplate, type IMaterialGroup } from "@/models/MaterialTemplate";
 import { ALL_SUBJECTS, type Subject } from "@/models/User";
 import { isAudienceAllowed } from "@/lib/material-access";
 import { requireTopicApi } from "@/lib/subject-access";
@@ -10,8 +10,9 @@ import { requireTopicApi } from "@/lib/subject-access";
 export const runtime = "nodejs";
 
 // GET /api/learning-materials?subject=english
-// Returns the current user's school groups for the subject, with each group's
-// materials filtered to what the caller's role is allowed to see.
+// Returns the groups of the template that applies to the caller's school for the
+// subject, with each group's materials filtered to what the caller's role is
+// allowed to see.
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -34,31 +35,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Admins have no school, so there is no school layout to show.
+  // Admins have no school, so no template applies to them.
   if (!session.schoolId) {
     return NextResponse.json({ groups: [] });
   }
 
   await connectDB();
 
-  const layout = await SchoolMaterialLayout.findOne({
-    school: session.schoolId,
+  // At most one template per subject lists a given school (see MaterialTemplate),
+  // so this is the school's whole 學習資源 page. A school in no template gets an
+  // empty page rather than an error.
+  const template = await MaterialTemplate.findOne({
     subject,
-  }).lean();
+    schools: session.schoolId,
+  })
+    .select({ groups: 1 })
+    .lean();
 
-  if (!layout || layout.groups.length === 0) {
+  if (!template || template.groups.length === 0) {
     return NextResponse.json({ groups: [] });
   }
 
   // Resolve all referenced material ids in one query.
-  const allIds = layout.groups.flatMap((g: IMaterialGroup) => g.materials.map((m) => String(m)));
+  const allIds = template.groups.flatMap((g: IMaterialGroup) => g.materials.map((m) => String(m)));
   const docs = await LearningMaterial.find({ _id: { $in: allIds }, subject })
     .select({ title: 1, description: 1, audience: 1, filename: 1, contentType: 1, size: 1 })
     .lean();
 
   const byId = new Map(docs.map((d) => [String(d._id), d]));
 
-  const groups = layout.groups
+  const groups = template.groups
     .map((g: IMaterialGroup) => ({
       name: g.name,
       items: g.materials

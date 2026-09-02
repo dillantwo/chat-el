@@ -1,6 +1,6 @@
 "use client";
 
-import { Compass, FolderDown, Globe, Landmark, Route } from "lucide-react";
+import { ClipboardList, Compass, FolderDown, Globe, Landmark, Route } from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 
 /** Keys and routes must match lib/topics.ts, which is what 學校管理 switches. */
@@ -34,6 +34,18 @@ const topics: TopicCard[] = [
     href: "/english/reading-comprehension",
     icon: Compass,
     accent: "#ff6b00",
+  },
+  {
+    id: "pre-post-test",
+    label: "Pre-test & Post-test",
+    labelEn: "Questionnaires",
+    description:
+      "Questionnaires for before and after the topics. Whichever one your teacher has set up appears here.",
+    href: "/english/pre-post-test",
+    icon: ClipboardList,
+    accent: "#0f766e",
+    cta: "Open questionnaire",
+    group: "resource",
   },
   {
     id: "learning-materials",

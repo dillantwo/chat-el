@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { getSession } from "@/lib/session";
 import { LearningMaterial, type MaterialAudience } from "@/models/LearningMaterial";
-import { SchoolMaterialLayout } from "@/models/SchoolMaterialLayout";
+import { MaterialTemplate } from "@/models/MaterialTemplate";
 import { openMaterialDownloadStream } from "@/lib/gridfs";
 import { isAudienceAllowed } from "@/lib/material-access";
 import { canAccessTopic } from "@/lib/subject-access";
@@ -57,7 +57,7 @@ export async function GET(
   }
 
   // Non-admins: must own the subject, the audience must match, and the material
-  // must be assigned to their school's layout for this subject.
+  // must appear in the template that applies to their school for this subject.
   if (session.role !== "admin") {
     if (!(await canAccessTopic(material.subject, "learning-materials"))) {
       return NextResponse.json({ error: "無權存取" }, { status: 403 });
@@ -68,9 +68,9 @@ export async function GET(
     if (!session.schoolId) {
       return NextResponse.json({ error: "無權存取" }, { status: 403 });
     }
-    const assigned = await SchoolMaterialLayout.exists({
-      school: session.schoolId,
+    const assigned = await MaterialTemplate.exists({
       subject: material.subject,
+      schools: session.schoolId,
       "groups.materials": material._id,
     });
     if (!assigned) {

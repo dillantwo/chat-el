@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, FolderDown, MessageSquare, PenTool, ScrollText } from "lucide-react";
+import { BookOpen, ClipboardList, FolderDown, MessageSquare, PenTool, ScrollText } from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 
 /** Keys and routes must match lib/topics.ts, which is what 學校管理 switches. */
@@ -43,6 +43,17 @@ const topics: TopicCard[] = [
     href: "/chinese/wenyan",
     icon: ScrollText,
     accent: "#ed52cb",
+  },
+  {
+    id: "pre-post-test",
+    label: "前測-後測",
+    labelEn: "Pre / Post Test",
+    description: "課題前後的問卷。",
+    href: "/chinese/pre-post-test",
+    icon: ClipboardList,
+    accent: "#0f766e",
+    cta: "打開問卷",
+    group: "resource",
   },
   {
     id: "learning-materials",
