@@ -167,13 +167,8 @@ export default function MaterialsBrowser({
     <>
       <Header backHref={backHref} backLabel={backLabel} />
 
+      {/* Flat paper colour, no dot texture: the bordered cards carry the page. */}
       <main className="relative flex flex-1 items-start overflow-x-hidden overflow-y-auto bg-[#f3f7fc] text-[#1b2942]">
-        {/* Dotted paper texture, so the page does not read as a plain card stack. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(#dbe6f5_1.5px,transparent_1.5px)] [background-size:20px_20px]"
-        />
-
         <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
           {/* Hero — title only, on a medium blue block. */}
           <section className="relative overflow-hidden rounded-[10px] border-2 border-[#22304a] bg-[#3576cf] px-5 py-6 text-white shadow-[8px_8px_0_#22304a] sm:px-7">

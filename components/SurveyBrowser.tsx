@@ -180,13 +180,8 @@ export default function SurveyBrowser({
     <>
       <Header backHref={backHref} backLabel={backLabel} />
 
+      {/* Flat paper colour, no dot texture: the bordered cards carry the page. */}
       <main className="relative flex min-h-0 flex-1 overflow-hidden bg-[#f1f8f6] text-[#12312b]">
-        {/* Dotted paper texture, so the page does not read as a plain card stack. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(#d3e8e2_1.5px,transparent_1.5px)] [background-size:20px_20px]"
-        />
-
         {loading || failed || !active ? (
           <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-10 text-center">
             <h1 className="text-[24px] leading-tight font-bold tracking-[-0.02em] sm:text-[30px]">

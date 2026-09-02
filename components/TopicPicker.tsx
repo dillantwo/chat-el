@@ -68,12 +68,6 @@ type TopicPickerProps = {
   resourcesSectionLabel?: string;
 };
 
-/** Dotted practice-paper texture, shared with the login card and 選科目. */
-const DOTTED_PAPER: React.CSSProperties = {
-  backgroundImage: "radial-gradient(rgba(8,8,8,0.11) 1.5px, transparent 1.5px)",
-  backgroundSize: "22px 22px",
-};
-
 /** `h-full` with `auto-rows-fr` below keeps every card identical whatever the
  *  length of its description. */
 const CARD_BASE =
@@ -254,10 +248,9 @@ export default function TopicPicker({
       <Header backHref="/" backLabel={backLabel} />
 
       {/* app/layout.tsx puts `overflow-hidden` on <body>, so this page owns its
-          own scrolling. The texture is fixed behind it and never scrolls. */}
+          own scrolling. The background is a flat paper colour — no dot texture,
+          so the cards are the only thing competing for attention. */}
       <main className="relative flex-1 overflow-y-auto overflow-x-hidden bg-[#fdf6e9] text-[#080808]">
-        <div aria-hidden className="pointer-events-none fixed inset-0" style={DOTTED_PAPER} />
-
         <div className="relative mx-auto w-full max-w-6xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
           {/* ── Which subject you are in ─────────────────────────────────── */}
           <section className="flex items-start gap-4">

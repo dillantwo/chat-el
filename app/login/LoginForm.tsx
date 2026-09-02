@@ -45,13 +45,6 @@ const subjectStickers = [
   { name: "人文科", icon: Landmark, color: "#ed52cb", tilt: "-rotate-3" },
 ];
 
-/** Dotted practice-paper texture. Cheap in CSS, survives any viewport, and reads
- *  as a school exercise book instead of as decoration for its own sake. */
-const DOTTED_PAPER: React.CSSProperties = {
-  backgroundImage: "radial-gradient(rgba(8,8,8,0.11) 1.5px, transparent 1.5px)",
-  backgroundSize: "22px 22px",
-};
-
 /**
  * Wording for the codes the EdConnect routes redirect back with. The codes
  * themselves are defined in lib/sso-redirect.ts; the callback deliberately sends
@@ -200,8 +193,6 @@ export function LoginForm({ ssoEnabled }: { ssoEnabled: boolean }) {
     // The scroll container: app/layout.tsx puts `overflow-hidden` on <body>, so a
     // page that wants to scroll on a short viewport has to own the scrolling.
     <div className="h-full overflow-y-auto bg-[#fdf6e9] text-[#080808]">
-      <div aria-hidden className="pointer-events-none fixed inset-0" style={DOTTED_PAPER} />
-
       <div className="relative flex min-h-full items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
         {/* Hard offset shadow rather than a soft blur: it is the same treatment
             as the subject tiles on the home page, and it makes the card read as

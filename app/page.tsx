@@ -21,8 +21,8 @@ import type { Subject } from "@/models/User";
  * 選擇學習科目.
  *
  * Same audience and same visual language as app/login: primary-school pupils,
- * sticker tiles with a 2px black edge and a hard offset shadow on dotted
- * exercise-book paper. A pupil lands here straight from the login card, so the
+ * sticker tiles with a 2px black edge and a hard offset shadow on plain paper
+ * colour. A pupil lands here straight from the login card, so the
  * two screens are deliberately the same object family rather than two different
  * design systems bolted together.
  *
@@ -106,12 +106,6 @@ const subjects: SubjectTile[] = [
   },
 ];
 
-/** Dotted practice-paper texture, shared with the login card. */
-const DOTTED_PAPER: React.CSSProperties = {
-  backgroundImage: "radial-gradient(rgba(8,8,8,0.11) 1.5px, transparent 1.5px)",
-  backgroundSize: "22px 22px",
-};
-
 /** One tap target per subject: a pressable card, so the whole tile is the button.
  *
  *  `h-full` plus `auto-rows-fr` on the grid keeps every tile the same size no
@@ -144,10 +138,9 @@ export default function Home() {
       <Header />
 
       {/* app/layout.tsx puts `overflow-hidden` on <body>, so this page owns its
-          own scrolling. The texture is fixed behind it and never scrolls. */}
+          own scrolling. The background is a flat paper colour — no dot texture,
+          so the tiles are the only thing competing for attention. */}
       <main className="relative flex-1 overflow-y-auto overflow-x-hidden bg-[#fdf6e9] text-[#080808]">
-        <div aria-hidden className="pointer-events-none fixed inset-0" style={DOTTED_PAPER} />
-
         <div className="relative mx-auto w-full max-w-6xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
           {/* ── Greeting ─────────────────────────────────────────────────── */}
           <section>
