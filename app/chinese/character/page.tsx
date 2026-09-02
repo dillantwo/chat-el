@@ -1,4 +1,7 @@
 import ChineseTopicChat from "@/components/ChineseTopicChat";
+// The button messages double as the mode selector the API reads back off the
+// transcript, so they come from the prompt module rather than being retyped.
+import { CHINESE_CHARACTER_MODE_MESSAGES } from "@/lib/chinese-character-prompt";
 
 export default function ChineseCharacterPage() {
   return (
@@ -9,9 +12,11 @@ export default function ChineseCharacterPage() {
         apiEndpoint: "/api/chinese-topic/character",
         emptyHint: "歡迎來到人物描寫寫作練習！請選擇你要進行的模式：",
         quickStartOptions: [
-          { label: "1. 段落描寫", message: "段落描寫" },
-          { label: "2. 文章描寫", message: "文章描寫" },
-          { label: "＊ 構思建議", message: "構思建議" },
+          { label: "1. 段落描寫", message: CHINESE_CHARACTER_MODE_MESSAGES.paragraph },
+          { label: "2. 文章描寫", message: CHINESE_CHARACTER_MODE_MESSAGES.essay },
+          // Marked with ＊ rather than "3." because 構思建議 is optional — only
+          // used when the student wants help coming up with material.
+          { label: "＊ 構思建議", message: CHINESE_CHARACTER_MODE_MESSAGES.brainstorm },
         ],
         requireQuickStartSelection: true,
         enableDrafts: true,
