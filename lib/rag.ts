@@ -106,6 +106,134 @@ const RAG_SOURCES: Record<string, RagSource> = {
   "water-resources": { index: "water", description: WATER_DESCRIPTION },
 };
 
+// ---------------------------------------------------------------------------
+// Retrieval budget
+//
+// The knowledge block is appended to the system prompt and changes with every
+// question, so unlike the persona prompt it is never served from Azure's prompt
+// cache — every chunk is billed at full price on every turn. Before these caps
+// the water-resources block alone was 3.4k-5.5k tokens per request, on top of a
+// ~5.8k persona prompt.
+//
+// Measured score distributions (text-embedding-3-small, cosine) across the
+// water / science / aerospace26 indexes, which is where the defaults come from:
+//   - on-topic questions:  top match 0.51-0.74
+//   - greetings, "開始學習!", off-subject asks:  top match 0.19-0.35
+// So an absolute floor separates "the store has nothing for this" from a real
+// lookup, and a ratio relative to the best match drops the long tail that a
+// fixed topK would otherwise drag in. Env-overridable so a topic whose answers
+// regress can be loosened without a code change.
+// ---------------------------------------------------------------------------
+
+function numFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** How many matches to ask Pinecone for. */
+const DEFAULT_TOP_K = numFromEnv("RAG_TOP_K", 4);
+
+/**
+ * Matches below this score are treated as "not in the store". When the best
+ * match fails it, retrieval returns nothing and the persona prompt's
+ * "超出資料庫範圍" rules take over — which is the correct answer for a greeting,
+ * and saves the entire block.
+ */
+const MIN_SCORE = numFromEnv("RAG_MIN_SCORE", 0.3);
+
+/**
+ * Keep only matches scoring at least this fraction of the best match. A spiky
+ * result (one chunk clearly answers the question) then costs one chunk instead
+ * of topK. 0.7 was checked against the on-topic probes above: it leaves every
+ * water-resources result untouched and only trims genuine outliers.
+ */
+const SCORE_RATIO = numFromEnv("RAG_SCORE_RATIO", 0.7);
+
+/**
+ * Per-chunk character cap. Matches CHUNK_SIZE in scripts/ingest-rag.ts, so
+ * chunks produced by that script pass through whole; it exists for stores that
+ * were upserted elsewhere with much coarser chunking (the aerospace26 index
+ * holds chunks over 3,000 characters).
+ */
+const MAX_CHUNK_CHARS = numFromEnv("RAG_MAX_CHUNK_CHARS", 800);
+
+/**
+ * Trim an over-long chunk at the cleanest break in the last quarter of the
+ * budget.
+ *
+ * A paragraph break is tried first, and not only for tidiness: the circuit store
+ * is written as blank-line-separated Q/A pairs and the water store as
+ * blank-line-separated headings, so cutting at a sentence terminator instead
+ * leaves the model holding a question with no answer, or a heading with no body.
+ * Sentence terminators (full-width and ASCII, since the material is bilingual)
+ * are the fallback, and a hard cut marked with an ellipsis the last resort.
+ */
+function truncateChunk(text: string): string {
+  if (text.length <= MAX_CHUNK_CHARS) return text;
+
+  const window = text.slice(0, MAX_CHUNK_CHARS).trimEnd();
+  const floor = Math.floor(MAX_CHUNK_CHARS * 0.75);
+
+  const paragraph = window.lastIndexOf("\n\n");
+  if (paragraph >= floor) {
+    return dropDanglingLabels(window.slice(0, paragraph));
+  }
+
+  let cut = -1;
+  for (const terminator of ["。", "！", "？", "\n", "；", ".", "!", "?", ";"]) {
+    const at = window.lastIndexOf(terminator);
+    if (at >= floor && at > cut) cut = at;
+  }
+
+  return cut === -1
+    ? `${window}…`
+    : dropDanglingLabels(window.slice(0, cut + 1));
+}
+
+/**
+ * Cutting at a paragraph break can still land right after a heading, leaving
+ * something like "- **径流 (Runoff)：**" with the body that explained it on the
+ * far side of the cut. Peel those off: a heading with nothing under it is pure
+ * cost, and it invites the model to answer from a section it cannot see.
+ *
+ * Only labels are peeled, never prose — a line qualifies if it is blank, a
+ * horizontal rule, a markdown heading, or short and ends with a colon or bold
+ * marker. A trailing full sentence is left alone.
+ */
+function dropDanglingLabels(text: string): string {
+  const lines = text.split("\n");
+
+  while (lines.length > 1) {
+    const last = lines[lines.length - 1].trim();
+    const isLabel =
+      last === "" ||
+      /^[-*_]{3,}$/.test(last) ||
+      last.startsWith("#") ||
+      (last.length < 40 && /([:：]|\*\*)$/.test(last));
+    if (!isLabel) break;
+    lines.pop();
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+/**
+ * Apply the relevance floor, the relative cut-off and the per-chunk cap.
+ * Chunks arrive sorted by score, but the best score is computed rather than
+ * assumed so the ratio cannot be thrown off by an unsorted response.
+ */
+function selectChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
+  const scored = chunks.filter((c) => c.text.trim() && c.score >= MIN_SCORE);
+  if (scored.length === 0) return [];
+
+  const best = Math.max(...scored.map((c) => c.score));
+  return scored
+    .filter((c) => c.score >= best * SCORE_RATIO)
+    .map((c) => ({ ...c, text: truncateChunk(c.text) }));
+}
+
 // A single shared client. `Pinecone` is safe to construct once per process.
 let pineconeClient: Pinecone | null = null;
 
@@ -158,11 +286,17 @@ export type RetrievalResult = {
  * topic. Never throws: returns empty chunks (and 0 ragTokens) when RAG is
  * disabled, the topic has no configured source, or on any retrieval error, so
  * chat stays available.
+ *
+ * The matches are then put through `selectChunks`, so fewer than `topK` chunks
+ * come back whenever the store has nothing relevant (a greeting returns none at
+ * all) and each chunk is capped at MAX_CHUNK_CHARS. `ragTokens` still reports
+ * the embedding cost even when every match is filtered out — the lookup
+ * happened either way.
  */
 export async function retrieveContext(
   topic: string,
   query: string,
-  topK = 6
+  topK = DEFAULT_TOP_K
 ): Promise<RetrievalResult> {
   const client = getPinecone();
   const src = RAG_SOURCES[topic];
@@ -181,7 +315,7 @@ export async function retrieveContext(
       includeMetadata: true,
     });
 
-    const chunks = (result.matches ?? []).map((match) => ({
+    const matches = (result.matches ?? []).map((match) => ({
       id: match.id,
       score: match.score ?? 0,
       text: extractText(match.metadata),
@@ -189,6 +323,7 @@ export async function retrieveContext(
         ? String(match.metadata.source)
         : undefined,
     }));
+    const chunks = selectChunks(matches);
     return { chunks, ragTokens: tokens, description: src.description };
   } catch (err) {
     console.error(`[rag] retrieveContext failed for topic "${topic}":`, err);
