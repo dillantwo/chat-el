@@ -30,7 +30,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { SUBJECT_LABELS, ROLE_LABELS } from "@/lib/subjects";
+import { SUBJECT_LABELS, ROLE_LABELS, subjectAccent } from "@/lib/subjects";
+import { RoleBadge, SubjectBadgeList } from "@/components/admin/badges";
 import { basePath } from "@/lib/utils";
 
 interface SchoolRow {
@@ -58,6 +59,13 @@ interface UserClass {
 function classLabel(c: { name: string; academicYear: string }) {
   return `${c.name}（${c.academicYear}）`;
 }
+
+/**
+ * Cells wrap and hang from the top. TableCell defaults to nowrap + middle,
+ * which is what forced the table wider than the content area; overriding it
+ * here lets long badge lists reflow inside a fixed column instead.
+ */
+const cellClass = "px-4 py-3 align-top whitespace-normal";
 
 type AuthProviderKind = "local" | "edconnect";
 
@@ -96,7 +104,11 @@ function TeacherDataAccess({ user }: { user: UserRow }) {
   }
 
   if (!user.canViewStudentData) {
-    return <Badge variant="outline">已關閉</Badge>;
+    return (
+      <Badge variant="outline" className="border-rose-300 bg-rose-100 text-rose-700">
+        已關閉
+      </Badge>
+    );
   }
 
   if (user.subjects.length === 0) {
@@ -105,7 +117,79 @@ function TeacherDataAccess({ user }: { user: UserRow }) {
     return <span className="text-muted-foreground">無科目</span>;
   }
 
-  return <span className="text-muted-foreground">同科目權限</span>;
+  return (
+    <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-700">
+      同科目權限
+    </Badge>
+  );
+}
+
+/**
+ * Name, login route and the two identifiers, stacked.
+ *
+ * These were four separate columns and together they were most of the reason
+ * the table needed a horizontal scrollbar. They all answer "who is this
+ * account", so they read fine as one block.
+ */
+function UserIdentity({ user }: { user: UserRow }) {
+  return (
+    <div className="min-w-0 space-y-0.5">
+      <div className="flex items-center gap-2">
+        <span className="font-medium">{user.displayName}</span>
+        {/* EdCity accounts are the ones an administrator can't reset a password
+            for, so they get the saturated badge; local accounts stay quiet. */}
+        <Badge
+          variant="outline"
+          className={
+            user.authProvider === "edconnect"
+              ? "border-sky-300 bg-sky-100 text-sky-700"
+              : "border-border bg-muted text-muted-foreground"
+          }
+        >
+          {AUTH_PROVIDER_LABELS[user.authProvider]}
+        </Badge>
+      </div>
+      {/* An EdCity account's username is an opaque profile_id, so the readable
+          EdCity login name is shown beneath it when known — that is the
+          identifier on the school's roster. */}
+      <p className="break-all font-mono text-xs text-muted-foreground">{user.username}</p>
+      {user.edcityLoginId && (
+        <p className="break-all text-xs text-muted-foreground">{user.edcityLoginId}</p>
+      )}
+    </div>
+  );
+}
+
+function SubjectBadges({ user }: { user: UserRow }) {
+  if (user.role === "admin") {
+    return <Badge className="bg-primary/12 text-primary border-primary/30">全部</Badge>;
+  }
+  return <SubjectBadgeList subjects={user.subjects} />;
+}
+
+/** School on the first line, its classes beneath — one placement, one cell. */
+function PlacementCell({ user }: { user: UserRow }) {
+  if (user.role === "admin") return <span className="text-muted-foreground">—</span>;
+  return (
+    <div className="space-y-1">
+      <p className="font-medium text-foreground/80">{user.schoolName ?? "—"}</p>
+      {user.classes.length === 0 ? (
+        <p className="text-xs text-amber-600">未指派班級</p>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {user.classes.map((c) => (
+            <Badge
+              key={c.id}
+              variant="outline"
+              className="border-indigo-200 bg-indigo-50 text-indigo-700"
+            >
+              {classLabel(c)}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function UsersPage() {
@@ -291,15 +375,15 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto w-full max-w-7xl space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">使用者管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             為各校老師與學生設定可存取的科目。
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {/* buttonVariants rather than <Button asChild>: this Button does not
               render a Slot, so wrapping a Link in it would nest <a> in <button>. */}
           <Link href="/admin/users/import" className={buttonVariants({ variant: "outline" })}>
@@ -384,7 +468,7 @@ export default function UsersPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜尋用戶名、姓名或 EdCity 登入名"
-          className="h-9 max-w-xs"
+          className="h-9 w-full min-w-[16rem] flex-1 sm:max-w-xs"
         />
       </div>
 
@@ -397,98 +481,107 @@ export default function UsersPage() {
           沒有符合條件的使用者。
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-background">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="px-4">姓名</TableHead>
-                <TableHead className="px-4">用戶名</TableHead>
-                <TableHead className="px-4">登入方式</TableHead>
-                <TableHead className="px-4">角色</TableHead>
-                <TableHead className="px-4">學校</TableHead>
-                <TableHead className="px-4">班級</TableHead>
-                <TableHead className="px-4">科目權限</TableHead>
-                <TableHead className="px-4">學生數據</TableHead>
-                <TableHead className="px-4" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell className="px-4 py-3 font-medium">{u.displayName}</TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">
-                    {/* An EdCity account's username is an opaque profile_id, so
-                        the readable EdCity login name is shown beneath it when
-                        known — that is the identifier on the school's roster. */}
-                    <span className="block font-mono text-xs">{u.username}</span>
-                    {u.edcityLoginId && (
-                      <span className="mt-0.5 block text-xs">{u.edcityLoginId}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <Badge variant={u.authProvider === "edconnect" ? "default" : "outline"}>
-                      {AUTH_PROVIDER_LABELS[u.authProvider]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <Badge variant={u.role === "admin" ? "default" : "secondary"}>
-                      {ROLE_LABELS[u.role]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">{u.schoolName ?? "—"}</TableCell>
-                  <TableCell className="px-4 py-3">
-                    {u.role === "admin" ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : u.classes.length === 0 ? (
-                      <span className="text-muted-foreground">未指派</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {u.classes.map((c) => (
-                          <Badge key={c.id} variant="outline">
-                            {classLabel(c)}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {u.role === "admin" ? (
-                        <span className="text-muted-foreground">全部</span>
-                      ) : u.subjects.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        u.subjects.map((sub) => (
-                          <Badge key={sub} variant="outline">
-                            {SUBJECT_LABELS[sub] ?? sub}
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <TeacherDataAccess user={u} />
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
-                        編輯
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => remove(u)}
-                        aria-label="刪除"
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
+        <>
+          {/* Five columns that wrap instead of nine that don't, so the table
+              fits the content area without a horizontal scrollbar. Below lg
+              even that is too tight, and the card list below takes over. */}
+          <div className="hidden overflow-hidden rounded-lg border bg-background lg:block">
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="w-[26%] px-4">使用者</TableHead>
+                  <TableHead className="w-[9%] px-4">角色</TableHead>
+                  <TableHead className="w-[24%] px-4">學校與班級</TableHead>
+                  <TableHead className="w-[22%] px-4">科目權限</TableHead>
+                  <TableHead className="w-[9%] px-4">學生數據</TableHead>
+                  <TableHead className="w-[10%] px-4" />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {users.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell className={cellClass}>
+                      <UserIdentity user={u} />
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      <RoleBadge role={u.role} />
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      <PlacementCell user={u} />
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      <SubjectBadges user={u} />
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      <TeacherDataAccess user={u} />
+                    </TableCell>
+                    <TableCell className={cellClass}>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+                          編輯
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => remove(u)}
+                          aria-label="刪除"
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="space-y-3 lg:hidden">
+            {users.map((u) => (
+              <div key={u.id} className="rounded-lg border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <UserIdentity user={u} />
+                  <RoleBadge role={u.role} className="shrink-0" />
+                </div>
+
+                <dl className="mt-3 space-y-2 border-t pt-3 text-sm">
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">學校班級</dt>
+                    <dd className="min-w-0 flex-1">
+                      <PlacementCell user={u} />
+                    </dd>
+                  </div>
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">科目權限</dt>
+                    <dd className="min-w-0 flex-1">
+                      <SubjectBadges user={u} />
+                    </dd>
+                  </div>
+                  <div className="flex gap-3">
+                    <dt className="w-20 shrink-0 text-muted-foreground">學生數據</dt>
+                    <dd className="min-w-0 flex-1">
+                      <TeacherDataAccess user={u} />
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-3 flex items-center justify-end gap-1">
+                  <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+                    編輯
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => remove(u)}
+                    aria-label="刪除"
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -637,16 +730,28 @@ export default function UsersPage() {
                     <div className="flex flex-wrap gap-2">
                       {availableSubjects.map((sub) => {
                         const on = subjects.includes(sub);
+                        const accent = subjectAccent(sub);
                         return (
                           <button
                             key={sub}
                             type="button"
                             onClick={() => toggleSubject(sub)}
+                            aria-pressed={on}
                             className={
-                              "rounded-md border px-3 py-1.5 text-sm transition-colors " +
-                              (on
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted")
+                              "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors " +
+                              (on ? "" : "text-muted-foreground hover:bg-muted")
+                            }
+                            // Selected chips take the subject's own colour, the
+                            // same hue the badge in the table will use, so the
+                            // picker and the result match.
+                            style={
+                              on
+                                ? {
+                                    backgroundColor: `${accent}1f`,
+                                    borderColor: accent,
+                                    color: accent,
+                                  }
+                                : undefined
                             }
                           >
                             {SUBJECT_LABELS[sub] ?? sub}

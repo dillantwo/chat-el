@@ -30,6 +30,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { SUBJECTS, SUBJECT_LABELS } from "@/lib/subjects";
+import { SubjectBadge } from "@/components/admin/badges";
 import { MATERIAL_AUDIENCES, MATERIAL_AUDIENCE_LABELS, formatFileSize } from "@/lib/learning-materials";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 import { basePath } from "@/lib/utils";
@@ -233,11 +234,19 @@ export default function AdminMaterialsPage() {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">
-                    {SUBJECT_LABELS[m.subject] ?? m.subject}
+                  <TableCell className="px-4 py-3">
+                    <SubjectBadge subject={m.subject} />
                   </TableCell>
                   <TableCell className="px-4 py-3">
-                    <Badge variant="secondary">
+                    {/* 對象 mirrors the role colours used on 使用者管理. */}
+                    <Badge
+                      variant="outline"
+                      className={
+                        m.audience === "teacher"
+                          ? "border-violet-300 bg-violet-100 font-medium text-violet-700"
+                          : "border-teal-300 bg-teal-100 font-medium text-teal-700"
+                      }
+                    >
                       {MATERIAL_AUDIENCE_LABELS[m.audience] ?? m.audience}
                     </Badge>
                   </TableCell>

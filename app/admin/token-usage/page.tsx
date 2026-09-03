@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SUBJECTS, SUBJECT_LABELS } from "@/lib/subjects";
+import { RoleBadge, SubjectBadgeList } from "@/components/admin/badges";
 import { USAGE_TOPICS } from "@/lib/usage-topics";
 import { basePath, cn } from "@/lib/utils";
 
@@ -191,26 +192,54 @@ function daysAgo(days: number): string {
 // Small presentational pieces
 // ---------------------------------------------------------------------------
 
+/**
+ * One colour per headline metric, shared with 總覽 so 估算成本 is the same blue
+ * on both pages.
+ */
+const STAT_ACCENTS = {
+  cost: "#146ef5",
+  tokens: "#7a3dff",
+  users: "#ed52cb",
+  schools: "#0891b2",
+} as const;
+
 function StatCard({
   icon: Icon,
   title,
   value,
   hint,
+  accent,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   value: string;
   hint?: string;
+  /** Colour identifying this metric across the page. */
+  accent: string;
 }) {
   return (
-    <Card>
+    <Card className="relative overflow-hidden" style={{ backgroundColor: `${accent}0a` }}>
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: accent }}
+      />
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Icon className="size-4" /> {title}
+          <span
+            aria-hidden
+            className="flex size-7 items-center justify-center rounded-md"
+            style={{ backgroundColor: `${accent}24`, color: accent }}
+          >
+            <Icon className="size-4" />
+          </span>
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-2xl font-semibold tabular-nums">{value}</p>
+        <p className="text-2xl font-semibold tabular-nums" style={{ color: accent }}>
+          {value}
+        </p>
         {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>
@@ -226,9 +255,18 @@ function ShareBar({ share }: { share: number }) {
         className="h-1.5 w-16 overflow-hidden rounded-full bg-muted"
         role="presentation"
       >
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${pct}%`,
+            backgroundImage: `linear-gradient(to right, ${STAT_ACCENTS.cost}, ${STAT_ACCENTS.tokens})`,
+          }}
+        />
       </div>
-      <span className="text-xs tabular-nums text-muted-foreground">
+      <span
+        className="text-xs font-medium tabular-nums"
+        style={{ color: STAT_ACCENTS.cost }}
+      >
         {pct.toFixed(1)}%
       </span>
     </div>
@@ -263,8 +301,13 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
             return (
               <div
                 key={p.date}
-                className="group relative flex-1 rounded-t bg-primary/70 transition-colors hover:bg-primary"
-                style={{ height: `${height}%` }}
+                // Bars fade from the blue at the top to the violet at the
+                // baseline, so a wall of 30 bars is not one flat block.
+                className="group relative flex-1 rounded-t opacity-85 transition-opacity hover:opacity-100"
+                style={{
+                  height: `${height}%`,
+                  backgroundImage: `linear-gradient(to bottom, ${STAT_ACCENTS.cost}, ${STAT_ACCENTS.tokens}99)`,
+                }}
               >
                 <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background group-hover:block">
                   {p.date} · {formatCost(p.cost)} · {formatTokens(p.totalTokens)} tokens
@@ -652,24 +695,28 @@ export default function TokenUsagePage() {
               title="估算成本"
               value={formatCost(summary.cost)}
               hint={`快取節省 ${formatCost(summary.cacheSavings)}`}
+              accent={STAT_ACCENTS.cost}
             />
             <StatCard
               icon={Gauge}
               title="總 tokens"
               value={formatTokens(summary.totalTokens)}
               hint={`輸入 ${formatCompact(summary.inputTokens)} · 輸出 ${formatCompact(summary.completionTokens)}`}
+              accent={STAT_ACCENTS.tokens}
             />
             <StatCard
               icon={Users}
               title="使用人數"
               value={formatTokens(summary.activeUsers)}
               hint={`${formatTokens(summary.requests)} 次請求`}
+              accent={STAT_ACCENTS.users}
             />
             <StatCard
               icon={Building2}
               title="涵蓋學校"
               value={formatTokens(summary.activeSchools)}
               hint={`${formatTokens(summary.activeTopics)} 個主題有使用記錄`}
+              accent={STAT_ACCENTS.schools}
             />
           </div>
 
@@ -910,21 +957,13 @@ function UserTable({
                 </span>
               </TableCell>
               <TableCell className="px-4 py-3">
-                <Badge variant={row.role === "student" ? "secondary" : "outline"}>
-                  {row.roleLabel}
-                </Badge>
+                <RoleBadge role={row.role} />
               </TableCell>
               <TableCell className="px-4 py-3 text-muted-foreground">
                 {row.schoolName ?? "—"}
               </TableCell>
               <TableCell className="px-4 py-3">
-                <div className="flex flex-wrap gap-1">
-                  {row.subjects.map((s) => (
-                    <Badge key={s} variant="outline" className="text-xs">
-                      {s}
-                    </Badge>
-                  ))}
-                </div>
+                <SubjectBadgeList subjects={row.subjects} />
               </TableCell>
               <TableCell className="px-4 py-3 text-right tabular-nums">
                 {row.topicCount}

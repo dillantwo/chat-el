@@ -28,6 +28,25 @@ function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+/**
+ * The three headline counts, each with the accent of the section it belongs to
+ * in the sidebar: 學校 violet, 使用者 orange. Following the nav rather than
+ * inventing a third palette keeps one colour per concept across the backend.
+ */
+const STATS = [
+  { key: "schools", label: "學校總數", icon: Building2, accent: "#7a3dff" },
+  { key: "activeSchools", label: "啟用中學校", icon: Building2, accent: "#00a81b" },
+  { key: "users", label: "使用者總數", icon: Users, accent: "#ff6b00" },
+] as const;
+
+/** The four usage figures, coloured to match the 用量分析 charts. */
+const USAGE_METRICS = [
+  { key: "cost", label: "估算成本", accent: "#146ef5" },
+  { key: "totalTokens", label: "總 tokens", accent: "#7a3dff" },
+  { key: "requests", label: "請求數", accent: "#0891b2" },
+  { key: "activeUsers", label: "使用人數", accent: "#ed52cb" },
+] as const;
+
 export default function AdminOverviewPage() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -67,36 +86,57 @@ export default function AdminOverviewPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Building2 className="size-4" /> 學校總數
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-3xl font-semibold">{schools.length}</CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Building2 className="size-4" /> 啟用中學校
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-3xl font-semibold">{activeSchools}</CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                  <Users className="size-4" /> 使用者總數
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-3xl font-semibold">{totalUsers}</CardContent>
-            </Card>
+            {STATS.map(({ key, label, icon: Icon, accent }) => (
+              <Card
+                key={key}
+                className="relative overflow-hidden"
+                // Faint wash of the stat's own colour so the three cards are
+                // distinguishable before the labels are read.
+                style={{ backgroundColor: `${accent}0a` }}
+              >
+                {/* Colour rail down the leading edge, the cheapest way to give a
+                    card an identity without tinting the numerals. */}
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-1"
+                  style={{ backgroundColor: accent }}
+                />
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-muted-foreground">
+                    <span
+                      aria-hidden
+                      className="flex size-7 items-center justify-center rounded-md"
+                      style={{ backgroundColor: `${accent}24`, color: accent }}
+                    >
+                      <Icon className="size-4" strokeWidth={2.25} />
+                    </span>
+                    {label}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent
+                  className="text-3xl font-semibold tabular-nums"
+                  style={{ color: accent }}
+                >
+                  {key === "schools"
+                    ? schools.length
+                    : key === "activeSchools"
+                      ? activeSchools
+                      : totalUsers}
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-4">
               <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                <Coins className="size-4" /> 近 30 天 token 用量
+                <span
+                  aria-hidden
+                  className="flex size-7 items-center justify-center rounded-md bg-amber-100 text-amber-600"
+                >
+                  <Coins className="size-4" strokeWidth={2.25} />
+                </span>
+                近 30 天 token 用量
               </CardTitle>
               <Link
                 href="/admin/token-usage"
@@ -110,30 +150,23 @@ export default function AdminOverviewPage() {
                 <p className="text-sm text-muted-foreground">載入中…</p>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">估算成本</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {formatCost(usage.cost)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">總 tokens</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {usage.totalTokens.toLocaleString("en-US")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">請求數</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {usage.requests.toLocaleString("en-US")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">使用人數</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {usage.activeUsers.toLocaleString("en-US")}
-                    </p>
-                  </div>
+                  {USAGE_METRICS.map(({ key, label, accent }) => (
+                    <div
+                      key={key}
+                      className="rounded-lg border-l-[3px] pl-3"
+                      style={{ borderLeftColor: accent }}
+                    >
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p
+                        className="mt-1 text-2xl font-semibold tabular-nums"
+                        style={{ color: accent }}
+                      >
+                        {key === "cost"
+                          ? formatCost(usage.cost)
+                          : usage[key].toLocaleString("en-US")}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SUBJECT_LABELS, ROLE_LABELS } from "@/lib/subjects";
+import { RoleBadge, SubjectBadgeList } from "@/components/admin/badges";
 import { currentAcademicYear, isValidAcademicYear } from "@/lib/academic-year";
 import { basePath } from "@/lib/utils";
 
@@ -658,13 +659,16 @@ export default function UserImportPage() {
                       {row.line}
                     </TableCell>
                     <TableCell className="px-4 py-2">
+                      {/* Traffic-light reading of the dry run: green will be
+                          created, amber is skipped, red is a row to fix. */}
                       <Badge
-                        variant={
+                        variant="outline"
+                        className={
                           row.action === "create"
-                            ? "default"
+                            ? "border-emerald-300 bg-emerald-100 font-medium text-emerald-700"
                             : row.action === "skip"
-                              ? "secondary"
-                              : "destructive"
+                              ? "border-amber-300 bg-amber-100 font-medium text-amber-700"
+                              : "border-rose-300 bg-rose-100 font-medium text-rose-700"
                         }
                       >
                         {ACTION_LABELS[row.action]}
@@ -680,7 +684,11 @@ export default function UserImportPage() {
                     </TableCell>
                     <TableCell className="px-4 py-2">{row.displayName || "—"}</TableCell>
                     <TableCell className="px-4 py-2 text-sm">
-                      {row.role ? ROLE_LABELS[row.role] : "—"}
+                      {row.role ? (
+                        <RoleBadge role={row.role} />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     {plan.accountType === "local" && (
                       // The source, never the password: it is not sent to the
@@ -696,25 +704,19 @@ export default function UserImportPage() {
                       </TableCell>
                     )}
                     <TableCell className="px-4 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {row.subjects.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          row.subjects.map((s) => (
-                            <Badge key={s} variant="outline">
-                              {SUBJECT_LABELS[s] ?? s}
-                            </Badge>
-                          ))
-                        )}
-                      </div>
+                      <SubjectBadgeList subjects={row.subjects} />
                     </TableCell>
                     <TableCell className="px-4 py-2">
                       <div className="flex flex-wrap gap-1">
                         {row.classes.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">未指派</span>
+                          <span className="text-xs text-amber-600">未指派</span>
                         ) : (
                           row.classes.map((c) => (
-                            <Badge key={c.id} variant="outline">
+                            <Badge
+                              key={c.id}
+                              variant="outline"
+                              className="border-indigo-200 bg-indigo-50 text-indigo-700"
+                            >
                               {c.name}
                             </Badge>
                           ))

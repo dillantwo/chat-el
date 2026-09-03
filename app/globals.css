@@ -118,6 +118,89 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ----------------------------------------------------------------------- */
+/* 管理後台 palette                                                         */
+/*                                                                         */
+/* The shared shadcn tokens above are the zero-chroma neutral set: --primary */
+/* is near-black and every surface is pure grey, which made the whole admin  */
+/* area read as black-on-white. This scope re-points the same tokens at a    */
+/* blue family built around #146ef5 — the blue the pupil-facing subject      */
+/* tiles already use — so every Button, Badge, Card, Table and Input inside  */
+/* the admin area picks up colour without any per-page changes.              */
+/*                                                                          */
+/* Applied by app/admin/layout.tsx to <html>, not to its own wrapper, because */
+/* Dialog/Select/Popover content is portalled to <body> and would otherwise   */
+/* fall back to the neutral set mid-form.                                    */
+/* ----------------------------------------------------------------------- */
+
+.admin-theme {
+  --background: oklch(0.981 0.007 264);
+  /* Deep navy ink rather than #000: still ~15:1 on white, but it stops the
+     page reading as pure black. */
+  --foreground: oklch(0.245 0.031 264);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.245 0.031 264);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.245 0.031 264);
+  --primary: oklch(0.575 0.222 264);
+  --primary-foreground: oklch(0.99 0.005 264);
+  --secondary: oklch(0.954 0.019 264);
+  --secondary-foreground: oklch(0.4 0.135 264);
+  --muted: oklch(0.966 0.012 264);
+  --muted-foreground: oklch(0.525 0.038 264);
+  --accent: oklch(0.944 0.03 264);
+  --accent-foreground: oklch(0.44 0.16 264);
+  --destructive: oklch(0.577 0.225 22);
+  --border: oklch(0.906 0.016 264);
+  --input: oklch(0.906 0.016 264);
+  --ring: oklch(0.575 0.222 264);
+  /* Spread across the wheel so the 用量分析 charts read as separate series
+     instead of five shades of the same blue. */
+  --chart-1: oklch(0.6 0.201 264);
+  --chart-2: oklch(0.618 0.192 301);
+  --chart-3: oklch(0.7 0.128 195);
+  --chart-4: oklch(0.762 0.152 70);
+  --chart-5: oklch(0.632 0.204 351);
+  --sidebar: oklch(0.993 0.005 264);
+  --sidebar-foreground: oklch(0.245 0.031 264);
+  --sidebar-primary: oklch(0.575 0.222 264);
+  --sidebar-primary-foreground: oklch(0.99 0.005 264);
+  --sidebar-accent: oklch(0.944 0.03 264);
+  --sidebar-accent-foreground: oklch(0.44 0.16 264);
+  --sidebar-border: oklch(0.906 0.016 264);
+  --sidebar-ring: oklch(0.575 0.222 264);
+}
+
+.dark.admin-theme,
+.dark .admin-theme {
+  --background: oklch(0.185 0.024 264);
+  --foreground: oklch(0.972 0.008 264);
+  --card: oklch(0.238 0.028 264);
+  --card-foreground: oklch(0.972 0.008 264);
+  --popover: oklch(0.238 0.028 264);
+  --popover-foreground: oklch(0.972 0.008 264);
+  --primary: oklch(0.685 0.176 264);
+  --primary-foreground: oklch(0.18 0.04 264);
+  --secondary: oklch(0.305 0.043 264);
+  --secondary-foreground: oklch(0.94 0.02 264);
+  --muted: oklch(0.295 0.036 264);
+  --muted-foreground: oklch(0.735 0.03 264);
+  --accent: oklch(0.335 0.062 264);
+  --accent-foreground: oklch(0.95 0.02 264);
+  --destructive: oklch(0.704 0.191 22);
+  --border: oklch(0.78 0.06 264 / 18%);
+  --input: oklch(0.78 0.06 264 / 24%);
+  --ring: oklch(0.62 0.15 264);
+  --sidebar: oklch(0.222 0.027 264);
+  --sidebar-foreground: oklch(0.972 0.008 264);
+  --sidebar-primary: oklch(0.685 0.176 264);
+  --sidebar-primary-foreground: oklch(0.18 0.04 264);
+  --sidebar-accent: oklch(0.335 0.062 264);
+  --sidebar-accent-foreground: oklch(0.95 0.02 264);
+  --sidebar-border: oklch(0.78 0.06 264 / 18%);
+  --sidebar-ring: oklch(0.62 0.15 264);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

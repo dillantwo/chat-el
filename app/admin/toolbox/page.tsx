@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Building2, Check, Loader2, Pencil, Wrench, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -13,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/admin/badges";
 import { basePath } from "@/lib/utils";
 
 type SchoolScope = "all" | "selected";
@@ -335,9 +335,11 @@ export default function AdminToolboxPage() {
                             </button>
                           </>
                         )}
-                        <Badge variant={g.isActive ? "default" : "outline"}>
-                          {g.isActive ? "上線" : "隱藏"}
-                        </Badge>
+                        <StatusBadge
+                          active={g.isActive}
+                          activeLabel="上線"
+                          inactiveLabel="隱藏"
+                        />
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">{g.description}</p>
                     </div>

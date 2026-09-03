@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/admin/badges";
 import { currentAcademicYear, isValidAcademicYear } from "@/lib/academic-year";
 import { basePath } from "@/lib/utils";
 
@@ -223,22 +224,27 @@ export default function ClassesPage() {
               {classes.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="px-4 py-3 font-medium">{row.name}</TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">
-                    {row.academicYear}
+                  <TableCell className="px-4 py-3">
+                    <Badge
+                      variant="outline"
+                      className="border-indigo-200 bg-indigo-50 font-medium text-indigo-700 tabular-nums"
+                    >
+                      {row.academicYear}
+                    </Badge>
                   </TableCell>
                   <TableCell className="px-4 py-3 text-muted-foreground">
                     {row.schoolName ?? "—"}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">
+                  {/* Head-counts coloured to match the role badges on 使用者管理:
+                      violet for teachers, teal for students. */}
+                  <TableCell className="px-4 py-3 font-medium tabular-nums text-violet-700">
                     {row.teacherCount}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">
+                  <TableCell className="px-4 py-3 font-medium tabular-nums text-teal-700">
                     {row.studentCount}
                   </TableCell>
                   <TableCell className="px-4 py-3">
-                    <Badge variant={row.active ? "secondary" : "outline"}>
-                      {row.active ? "啟用" : "停用"}
-                    </Badge>
+                    <StatusBadge active={row.active} />
                   </TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex justify-end gap-2">

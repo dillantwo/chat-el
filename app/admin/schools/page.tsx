@@ -22,7 +22,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { SUBJECTS, SUBJECT_LABELS, type SubjectValue } from "@/lib/subjects";
+import { SUBJECTS, subjectAccent, type SubjectValue } from "@/lib/subjects";
+import { StatusBadge, SubjectBadgeList } from "@/components/admin/badges";
 import { SUBJECT_TOPICS, topicKey } from "@/lib/topics";
 import { basePath } from "@/lib/utils";
 
@@ -188,27 +189,22 @@ export default function SchoolsPage() {
                   <TableCell className="px-4 py-3 text-muted-foreground">{s.code}</TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {s.enabledSubjects.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        s.enabledSubjects.map((sub) => (
-                          <Badge key={sub} variant="secondary">
-                            {SUBJECT_LABELS[sub] ?? sub}
-                          </Badge>
-                        ))
-                      )}
+                      <SubjectBadgeList subjects={s.enabledSubjects} />
                       {(s.disabledTopics?.length ?? 0) > 0 && (
-                        <Badge variant="outline" className="text-muted-foreground">
+                        <Badge
+                          variant="outline"
+                          className="border-amber-300 bg-amber-100 text-amber-700"
+                        >
                           已關閉 {s.disabledTopics.length} 個主題
                         </Badge>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-muted-foreground">{s.userCount}</TableCell>
+                  <TableCell className="px-4 py-3 font-medium tabular-nums">
+                    {s.userCount}
+                  </TableCell>
                   <TableCell className="px-4 py-3">
-                    <Badge variant={s.active ? "default" : "outline"}>
-                      {s.active ? "啟用" : "停用"}
-                    </Badge>
+                    <StatusBadge active={s.active} />
                   </TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex justify-end gap-2">
@@ -257,16 +253,27 @@ export default function SchoolsPage() {
               <div className="flex flex-wrap gap-2">
                 {SUBJECTS.map((s) => {
                   const on = subjects.includes(s.value);
+                  const accent = subjectAccent(s.value);
                   return (
                     <button
                       key={s.value}
                       type="button"
                       onClick={() => toggleSubject(s.value)}
+                      aria-pressed={on}
                       className={
-                        "rounded-md border px-3 py-1.5 text-sm transition-colors " +
-                        (on
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-muted")
+                        "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors " +
+                        (on ? "" : "text-muted-foreground hover:bg-muted")
+                      }
+                      // Each subject in its own colour, matching the badge it
+                      // will produce in the table and the pupil-facing tile.
+                      style={
+                        on
+                          ? {
+                              backgroundColor: `${accent}1f`,
+                              borderColor: accent,
+                              color: accent,
+                            }
+                          : undefined
                       }
                     >
                       {s.label}
@@ -285,31 +292,56 @@ export default function SchoolsPage() {
                   取消勾選的主題不會在該科目頁面出現，學生和老師也無法直接開啟。
                 </p>
                 <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
-                  {SUBJECTS.filter((s) => subjects.includes(s.value)).map((s) => (
-                    <div key={s.value} className="space-y-1.5">
-                      <p className="text-xs font-medium text-muted-foreground">{s.label}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {(SUBJECT_TOPICS[s.value as SubjectValue] ?? []).map((t) => {
-                          const on = !disabledTopics.includes(topicKey(s.value, t.key));
-                          return (
-                            <button
-                              key={t.key}
-                              type="button"
-                              onClick={() => toggleTopic(s.value, t.key)}
-                              className={
-                                "rounded-md border px-2.5 py-1 text-xs transition-colors " +
-                                (on
-                                  ? "border-primary bg-primary/10 text-primary"
-                                  : "text-muted-foreground line-through hover:bg-muted")
-                              }
-                            >
-                              {t.label}
-                            </button>
-                          );
-                        })}
+                  {SUBJECTS.filter((s) => subjects.includes(s.value)).map((s) => {
+                    const accent = subjectAccent(s.value);
+                    return (
+                      <div key={s.value} className="space-y-1.5">
+                        {/* Subject heading carries a dot in its accent, so a long
+                            topic list stays visually grouped by subject. */}
+                        <p
+                          className="flex items-center gap-1.5 text-xs font-semibold"
+                          style={{ color: accent }}
+                        >
+                          <span
+                            aria-hidden
+                            className="size-2 rounded-full"
+                            style={{ backgroundColor: accent }}
+                          />
+                          {s.label}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {(SUBJECT_TOPICS[s.value as SubjectValue] ?? []).map((t) => {
+                            const on = !disabledTopics.includes(topicKey(s.value, t.key));
+                            return (
+                              <button
+                                key={t.key}
+                                type="button"
+                                onClick={() => toggleTopic(s.value, t.key)}
+                                aria-pressed={on}
+                                className={
+                                  "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors " +
+                                  (on
+                                    ? ""
+                                    : "text-muted-foreground line-through hover:bg-muted")
+                                }
+                                style={
+                                  on
+                                    ? {
+                                        backgroundColor: `${accent}1a`,
+                                        borderColor: `${accent}80`,
+                                        color: accent,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {t.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
