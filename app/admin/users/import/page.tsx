@@ -42,10 +42,16 @@ interface ClassRow {
   schoolId: string | null;
 }
 
-type ImportAction = "create" | "skip" | "error";
+type ImportAction = "create" | "update" | "skip" | "error";
 
 /** Which login route the imported accounts will use. */
 type AccountType = "local" | "edconnect";
+
+/** Whether this run provisions accounts or corrects existing ones. */
+type ImportMode = "create" | "update";
+
+/** The only fields update mode writes. Mirrors UpdatableField server-side. */
+type UpdatableField = "displayName" | "subjects" | "classes" | "edcityLoginId";
 
 interface ImportRowResult {
   line: number;
@@ -57,11 +63,14 @@ interface ImportRowResult {
   edcityLoginId: string | null;
   /** Where the initial password came from. Never the password itself. */
   passwordSource: "row" | "default" | null;
+  /** Which fields an update row would actually change. Empty in create mode. */
+  updatedFields: UpdatableField[];
   action: ImportAction;
   messages: string[];
 }
 
 interface ImportPlan {
+  mode: ImportMode;
   accountType: AccountType;
   schoolId: string;
   schoolName: string;
@@ -69,12 +78,13 @@ interface ImportPlan {
   defaultSubjects: string[];
   rows: ImportRowResult[];
   ignoredColumns: string[];
-  summary: { total: number; create: number; skip: number; error: number };
+  summary: { total: number; create: number; update: number; skip: number; error: number };
   committed: boolean;
 }
 
 const ACTION_LABELS: Record<ImportAction, string> = {
   create: "將新增",
+  update: "將更新",
   skip: "略過",
   error: "錯誤",
 };
@@ -82,6 +92,18 @@ const ACTION_LABELS: Record<ImportAction, string> = {
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   local: "密碼帳戶",
   edconnect: "EdCity 帳戶",
+};
+
+const MODE_LABELS: Record<ImportMode, string> = {
+  create: "只新增帳戶",
+  update: "只更新現有帳戶",
+};
+
+const UPDATABLE_FIELD_LABELS: Record<UpdatableField, string> = {
+  displayName: "姓名",
+  subjects: "科目",
+  classes: "班級",
+  edcityLoginId: "登入名",
 };
 
 const PASSWORD_SOURCE_LABELS: Record<"row" | "default", string> = {
@@ -104,6 +126,17 @@ const TEMPLATE_COLUMNS: Record<AccountType, readonly string[]> = {
 };
 
 /**
+ * Update mode drops the password column, and the server refuses a file that
+ * still carries one, so the template must not hand out the very column that
+ * would be rejected.
+ */
+function templateColumns(accountType: AccountType, mode: ImportMode): readonly string[] {
+  return TEMPLATE_COLUMNS[accountType].filter(
+    (column) => !(mode === "update" && column === "password")
+  );
+}
+
+/**
  * Example rows, minus the header. The second row leaves the last cell empty on
  * purpose: for a password account that shows the batch default filling in, and
  * for EdCity that the readable login name is optional. Both also leave subjects
@@ -120,11 +153,33 @@ const SAMPLE_ROWS: Record<AccountType, string[][]> = {
   ],
 };
 
+/**
+ * The same idea for update mode, where an empty cell means something different
+ * and more important: leave that field as it is. The second row is deliberately
+ * almost empty — username plus classes only — because reassigning a class
+ * without restating anything else is the case this mode exists for, and the one
+ * an administrator most needs to see is allowed.
+ */
+const UPDATE_SAMPLE_ROWS: Record<AccountType, string[][]> = {
+  local: [
+    ["chan.siuming", "陳小明", "student", "math|chinese", "6A"],
+    ["lee.teacher", "", "", "", "6A|6B"],
+  ],
+  edconnect: [
+    ["TYPNY8NJAOOH", "陳小明", "student", "math|chinese", "6A", "hke-stud001"],
+    ["QWRTY7HJKLM2", "", "", "", "6A|6B", ""],
+  ],
+};
+
+function sampleRows(accountType: AccountType, mode: ImportMode): string[][] {
+  return (mode === "update" ? UPDATE_SAMPLE_ROWS : SAMPLE_ROWS)[accountType];
+}
+
 /** Tab-separated, which is what pasting out of Excel produces. */
-function buildSample(accountType: AccountType): string {
+function buildSample(accountType: AccountType, mode: ImportMode): string {
   return [
-    TEMPLATE_COLUMNS[accountType].join("\t"),
-    ...SAMPLE_ROWS[accountType].map((r) => r.join("\t")),
+    templateColumns(accountType, mode).join("\t"),
+    ...sampleRows(accountType, mode).map((r) => r.join("\t")),
   ].join("\n");
 }
 
@@ -154,6 +209,7 @@ function csvCell(value: string): string {
  */
 function buildTemplateCsv(
   accountType: AccountType,
+  mode: ImportMode,
   sampleClasses: string[],
   enabledSubjects: string[]
 ): string {
@@ -163,11 +219,16 @@ function buildTemplateCsv(
   const twoClasses = sampleClasses.slice(0, 2).join("|") || "6A|6B";
   const twoSubjects = enabledSubjects.slice(0, 2).join("|") || "math|chinese";
 
-  const [first, second] = SAMPLE_ROWS[accountType];
   const rows: string[][] = [
-    [...TEMPLATE_COLUMNS[accountType]],
-    [first[0], first[1], first[2], twoSubjects, klass, first[5]],
-    [second[0], second[1], second[2], "", twoClasses, second[5]],
+    [...templateColumns(accountType, mode)],
+    // Columns 3 and 4 are subjects and classes. A cell the sample leaves empty
+    // stays empty: that emptiness is the example.
+    ...sampleRows(accountType, mode).map((cells, i) => {
+      const row = [...cells];
+      if (row[3]) row[3] = twoSubjects;
+      row[4] = i === 0 ? klass : twoClasses;
+      return row;
+    }),
   ];
 
   return "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
@@ -181,6 +242,9 @@ export default function UserImportPage() {
   const [academicYear, setAcademicYear] = useState("");
   const [defaultRole, setDefaultRole] = useState<"student" | "teacher">("student");
   const [accountType, setAccountType] = useState<AccountType>("edconnect");
+  // Create is the default because it is the far more common and the safer of the
+  // two: it cannot change an account that already exists.
+  const [mode, setMode] = useState<ImportMode>("create");
   // Used for rows whose password cell is empty. Password accounts only.
   const [defaultPassword, setDefaultPassword] = useState("");
   const [text, setText] = useState("");
@@ -240,6 +304,7 @@ export default function UserImportPage() {
         text,
         schoolId,
         academicYear,
+        mode,
         defaultRole,
         accountType,
         defaultPassword,
@@ -266,14 +331,13 @@ export default function UserImportPage() {
 
   async function commit() {
     if (!plan) return;
-    if (
-      !confirm(
-        `將為「${plan.schoolName}」新增 ${plan.summary.create} 個` +
-          `${ACCOUNT_TYPE_LABELS[plan.accountType]}，確定執行？`
-      )
-    ) {
-      return;
-    }
+    const message =
+      plan.mode === "update"
+        ? `將更新「${plan.schoolName}」${plan.summary.update} 個` +
+          `${ACCOUNT_TYPE_LABELS[plan.accountType]}的資料，確定執行？`
+        : `將為「${plan.schoolName}」新增 ${plan.summary.create} 個` +
+          `${ACCOUNT_TYPE_LABELS[plan.accountType]}，確定執行？`;
+    if (!confirm(message)) return;
 
     setCommitting(true);
     setError(null);
@@ -291,6 +355,7 @@ export default function UserImportPage() {
   function downloadTemplate() {
     const csv = buildTemplateCsv(
       accountType,
+      mode,
       availableClasses.map((c) => c.name),
       selectedSchool?.enabledSubjects ?? []
     );
@@ -298,6 +363,7 @@ export default function UserImportPage() {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const parts = [
       accountType === "local" ? "users" : "edcity-users",
+      mode === "update" ? "update" : null,
       selectedSchool?.code,
       academicYear,
     ].filter(Boolean);
@@ -325,14 +391,20 @@ export default function UserImportPage() {
   const yearValid =
     academicYears.length > 0 ? Boolean(academicYear) : isValidAcademicYear(academicYear);
   const isLocal = accountType === "local";
-  const sample = buildSample(accountType);
+  const isUpdate = mode === "update";
+  // Update mode never writes a password, so the field is not shown and cannot
+  // block validation.
+  const wantsPassword = isLocal && !isUpdate;
+  const sample = buildSample(accountType, mode);
   // An empty default is allowed: it means every row carries its own password,
   // and any row that does not is reported as an error in the preview.
   const passwordValid =
-    !isLocal || !defaultPassword || defaultPassword.length >= MIN_PASSWORD_LENGTH;
+    !wantsPassword || !defaultPassword || defaultPassword.length >= MIN_PASSWORD_LENGTH;
   const canValidate =
     Boolean(schoolId && text.trim()) && yearValid && passwordValid && !validating;
-  const canCommit = Boolean(plan && !plan.committed && plan.summary.create > 0) && !committing;
+  /** How many rows the commit would actually write, in whichever mode. */
+  const pending = plan ? (plan.mode === "update" ? plan.summary.update : plan.summary.create) : 0;
+  const canCommit = Boolean(plan && !plan.committed && pending > 0) && !committing;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -343,16 +415,47 @@ export default function UserImportPage() {
         >
           <ArrowLeft className="size-4" /> 返回使用者管理
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight">批量匯入使用者</h1>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight">
+          {isUpdate ? "批量更新使用者" : "批量匯入使用者"}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {isLocal
-            ? "一次建立多個密碼帳戶。使用者以下方名單的用戶名與密碼在登入頁登入。已存在的用戶名一律略過，不會覆寫或重設任何現有帳戶的密碼。"
-            : "預先建立 EdConnect 帳戶。使用者按「EdCity 登入」時，系統以 EdConnect 回傳的 profile_id 比對這裡的用戶名；比對不到就無法登入，所以名單要先匯入。"}
+          {isUpdate
+            ? "以名單一次修改多個現有帳戶的姓名、科目與班級。只認得已存在的用戶名，名單上沒有的帳戶不會被建立，用戶名、角色與密碼一律不變。"
+            : isLocal
+              ? "一次建立多個密碼帳戶。使用者以下方名單的用戶名與密碼在登入頁登入。已存在的用戶名一律略過，不會覆寫或重設任何現有帳戶的密碼。"
+              : "預先建立 EdConnect 帳戶。使用者按「EdCity 登入」時，系統以 EdConnect 回傳的 profile_id 比對這裡的用戶名；比對不到就無法登入，所以名單要先匯入。"}
         </p>
       </div>
 
       <div className="space-y-5 rounded-lg border bg-background p-5">
         <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>匯入模式</Label>
+            <Select
+              value={mode}
+              onValueChange={(v) => {
+                setMode(v as ImportMode);
+                // The password field disappears in update mode, so anything
+                // typed into it has to go with it rather than sit there unused.
+                setDefaultPassword("");
+                invalidatePlan();
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{(v) => MODE_LABELS[v as ImportMode] ?? "選擇模式"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="create">只新增帳戶</SelectItem>
+                <SelectItem value="update">只更新現有帳戶</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {isUpdate
+                ? "只改動已存在的帳戶；找不到的用戶名會被略過，不會新增。"
+                : "只建立新帳戶；已存在的用戶名會被略過，不會改動。"}
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label>帳戶類型</Label>
             <Select
@@ -455,31 +558,34 @@ export default function UserImportPage() {
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label>預設角色</Label>
-            <Select
-              value={defaultRole}
-              onValueChange={(v) => {
-                setDefaultRole(v as "student" | "teacher");
-                invalidatePlan();
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>
-                  {(v) => ROLE_LABELS[v as "teacher" | "student"] ?? "選擇角色"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="student">學生</SelectItem>
-                <SelectItem value="teacher">老師</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              名單沒有 role 欄位時採用。管理員角色不能由此匯入。
-            </p>
-          </div>
+          {/* Update mode never writes a role, so there is nothing to default. */}
+          {!isUpdate && (
+            <div className="space-y-2">
+              <Label>預設角色</Label>
+              <Select
+                value={defaultRole}
+                onValueChange={(v) => {
+                  setDefaultRole(v as "student" | "teacher");
+                  invalidatePlan();
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(v) => ROLE_LABELS[v as "teacher" | "student"] ?? "選擇角色"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">學生</SelectItem>
+                  <SelectItem value="teacher">老師</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                名單沒有 role 欄位時採用。管理員角色不能由此匯入。
+              </p>
+            </div>
+          )}
 
-          {isLocal && (
+          {wantsPassword && (
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="default-password">預設密碼</Label>
               <Input
@@ -504,7 +610,9 @@ export default function UserImportPage() {
 
         {selectedSchool && (
           <p className="text-xs text-muted-foreground">
-            未填 subjects 的資料列會取得此校已啟用的全部科目：
+            {isUpdate
+              ? "科目只能在此校已啟用的範圍內設定："
+              : "未填 subjects 的資料列會取得此校已啟用的全部科目："}
             {selectedSchool.enabledSubjects.length === 0
               ? "（此校尚未啟用任何科目）"
               : selectedSchool.enabledSubjects
@@ -557,20 +665,53 @@ export default function UserImportPage() {
             className="w-full rounded-md border bg-background p-3 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
           <div className="space-y-1 text-xs text-muted-foreground">
-            <p>
-              第一行必須是標題列。必填欄位：
-              <code className="mx-1">{isLocal ? "username" : "profileId"}</code>
-              （或「用戶名」）、
-              <code className="mx-1">displayName</code>（或「姓名」）。選填：
-              <code className="mx-1">role</code>
-              <code className="mx-1">subjects</code>
-              <code className="mx-1">classes</code>
-              <code className="mx-1">{isLocal ? "password" : "edcityLoginId"}</code>。
-            </p>
+            {isUpdate ? (
+              <>
+                <p>
+                  第一行必須是標題列。必填欄位只有
+                  <code className="mx-1">{isLocal ? "username" : "profileId"}</code>
+                  （或「用戶名」），用來對應要修改的帳戶。可修改的欄位：
+                  <code className="mx-1">displayName</code>
+                  <code className="mx-1">subjects</code>
+                  <code className="mx-1">classes</code>
+                  {!isLocal && <code className="mx-1">edcityLoginId</code>}。
+                </p>
+                <p>
+                  <strong className="font-medium text-foreground">留空即不改動</strong>
+                  該欄位；填了就會整欄取代原有內容，例如
+                  <code className="mx-1">classes</code>填
+                  <code className="mx-1">6A|6B</code>
+                  表示這個帳戶之後只屬於這兩個班，原有的班級指派會被取代。要清空某個欄位，請到使用者管理逐一修改。
+                </p>
+                <p>
+                  用戶名、角色與密碼都不會被更新。
+                  <code className="mx-1">role</code>
+                  欄位只作核對用：填了而與現有帳戶不符，該列會被視為錯誤，方便及早發現貼錯名單。
+                  名單若含
+                  <code className="mx-1">password</code>
+                  欄位會整份拒絕，避免誤以為可以批量重設密碼。
+                </p>
+              </>
+            ) : (
+              <p>
+                第一行必須是標題列。必填欄位：
+                <code className="mx-1">{isLocal ? "username" : "profileId"}</code>
+                （或「用戶名」）、
+                <code className="mx-1">displayName</code>（或「姓名」）。選填：
+                <code className="mx-1">role</code>
+                <code className="mx-1">subjects</code>
+                <code className="mx-1">classes</code>
+                <code className="mx-1">{isLocal ? "password" : "edcityLoginId"}</code>。
+              </p>
+            )}
             {isLocal && (
               <p>
                 用戶名只接受英文字母、數字與 <code>. _ - @</code>，會統一轉成小寫。
-                <code className="mx-1">password</code> 留空的資料列會用上面的預設密碼。
+                {!isUpdate && (
+                  <>
+                    <code className="mx-1">password</code> 留空的資料列會用上面的預設密碼。
+                  </>
+                )}
               </p>
             )}
             <p>
@@ -602,8 +743,8 @@ export default function UserImportPage() {
             ) : (
               <Upload className="size-4" />
             )}
-            確認匯入
-            {plan && !plan.committed ? `（${plan.summary.create}）` : ""}
+            {isUpdate ? "確認更新" : "確認匯入"}
+            {plan && !plan.committed ? `（${pending}）` : ""}
           </Button>
           {plan && !plan.committed && (
             <span className="text-xs text-muted-foreground">
@@ -618,14 +759,23 @@ export default function UserImportPage() {
           {plan.committed ? (
             <p className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
               <CheckCircle2 className="size-4 text-primary" />
-              匯入完成：新增 {plan.summary.create} 筆，略過 {plan.summary.skip} 筆，
-              失敗 {plan.summary.error} 筆。
+              {plan.mode === "update" ? "更新" : "匯入"}完成：
+              {plan.mode === "update"
+                ? `更新 ${plan.summary.update} 筆`
+                : `新增 ${plan.summary.create} 筆`}
+              ，略過 {plan.summary.skip} 筆，失敗 {plan.summary.error} 筆。
             </p>
           ) : (
             <p className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
-              共 {plan.summary.total} 筆：將新增 {plan.summary.create} 筆，略過{" "}
-              {plan.summary.skip} 筆，錯誤 {plan.summary.error} 筆。
-              {plan.summary.error > 0 && "　錯誤的資料列不會被匯入，其餘仍會照常新增。"}
+              共 {plan.summary.total} 筆：
+              {plan.mode === "update"
+                ? `將更新 ${plan.summary.update} 筆`
+                : `將新增 ${plan.summary.create} 筆`}
+              ，略過 {plan.summary.skip} 筆，錯誤 {plan.summary.error} 筆。
+              {plan.summary.error > 0 &&
+                (plan.mode === "update"
+                  ? "　錯誤的資料列不會被更新，其餘仍會照常更新。"
+                  : "　錯誤的資料列不會被匯入，其餘仍會照常新增。")}
             </p>
           )}
 
@@ -646,9 +796,12 @@ export default function UserImportPage() {
                   </TableHead>
                   <TableHead className="px-4">姓名</TableHead>
                   <TableHead className="px-4">角色</TableHead>
-                  {plan.accountType === "local" && <TableHead className="px-4">密碼</TableHead>}
+                  {plan.accountType === "local" && plan.mode === "create" && (
+                    <TableHead className="px-4">密碼</TableHead>
+                  )}
                   <TableHead className="px-4">科目</TableHead>
                   <TableHead className="px-4">班級</TableHead>
+                  {plan.mode === "update" && <TableHead className="px-4">變更欄位</TableHead>}
                   <TableHead className="px-4">說明</TableHead>
                 </TableRow>
               </TableHeader>
@@ -660,15 +813,18 @@ export default function UserImportPage() {
                     </TableCell>
                     <TableCell className="px-4 py-2">
                       {/* Traffic-light reading of the dry run: green will be
-                          created, amber is skipped, red is a row to fix. */}
+                          created, blue will be changed, amber is skipped, red is
+                          a row to fix. */}
                       <Badge
                         variant="outline"
                         className={
                           row.action === "create"
                             ? "border-emerald-300 bg-emerald-100 font-medium text-emerald-700"
-                            : row.action === "skip"
-                              ? "border-amber-300 bg-amber-100 font-medium text-amber-700"
-                              : "border-rose-300 bg-rose-100 font-medium text-rose-700"
+                            : row.action === "update"
+                              ? "border-sky-300 bg-sky-100 font-medium text-sky-700"
+                              : row.action === "skip"
+                                ? "border-amber-300 bg-amber-100 font-medium text-amber-700"
+                                : "border-rose-300 bg-rose-100 font-medium text-rose-700"
                         }
                       >
                         {ACTION_LABELS[row.action]}
@@ -690,7 +846,7 @@ export default function UserImportPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    {plan.accountType === "local" && (
+                    {plan.accountType === "local" && plan.mode === "create" && (
                       // The source, never the password: it is not sent to the
                       // browser at all.
                       <TableCell className="px-4 py-2 text-sm">
@@ -723,6 +879,28 @@ export default function UserImportPage() {
                         )}
                       </div>
                     </TableCell>
+                    {plan.mode === "update" && (
+                      // The columns to the left show the state the account ends
+                      // up in; this one is the only place that says which of
+                      // them the file is actually changing.
+                      <TableCell className="px-4 py-2">
+                        {row.updatedFields.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {row.updatedFields.map((field) => (
+                              <Badge
+                                key={field}
+                                variant="outline"
+                                className="border-sky-200 bg-sky-50 text-sky-700"
+                              >
+                                {UPDATABLE_FIELD_LABELS[field]}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="px-4 py-2 text-xs text-muted-foreground">
                       {row.messages.join("；") || "—"}
                     </TableCell>
