@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ClipboardList, ExternalLink, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import type { SubjectValue } from "@/lib/subjects";
-import type { SurveyGroupDTO, SurveyPhase } from "@/lib/surveys";
+import { SURVEY_PHASES, type SurveyGroupDTO, type SurveyPhase } from "@/lib/surveys";
 import { basePath } from "@/lib/utils";
 
 export interface SurveyBrowserProps {
@@ -33,6 +33,11 @@ const COPY = {
     embedHint: "如果右邊一片空白，按「在新視窗開啟」也可以完成問卷。",
     launchHint: "這份問卷需要在新視窗開啟。完成後回到這裏就可以繼續學習。",
     launch: "開始問卷",
+    expandGroup: (name: string) => `展開類別「${name}」`,
+    collapseGroup: (name: string) => `收合類別「${name}」`,
+    /** e.g. 「2 份前測 · 1 份後測」 */
+    phaseCount: (n: number, phase: string) => `${n} 份${phase}`,
+    groupJoin: " · ",
   },
   en: {
     phases: { pre: "Pre-test", post: "Post-test" } as Record<SurveyPhase, string>,
@@ -47,8 +52,40 @@ const COPY = {
     launchHint:
       "This questionnaire opens in a new window. Come back here when you have finished it.",
     launch: "Start the questionnaire",
+    expandGroup: (name: string) => `Expand ${name}`,
+    collapseGroup: (name: string) => `Collapse ${name}`,
+    phaseCount: (n: number, phase: string) => `${n} ${phase}${n === 1 ? "" : "s"}`,
+    groupJoin: " · ",
   },
 } as const;
+
+/**
+ * How many 類別 stay open on arrival. A page with one or two 類別 reads better
+ * fully open; beyond that the list is long enough that only the 類別 being
+ * answered is worth showing.
+ */
+const AUTO_OPEN_GROUP_LIMIT = 2;
+
+/**
+ * One colour per phase, so 前測 and 後測 are told apart at a glance instead of by
+ * reading two similar labels. Blue and amber both sit far enough from the teal
+ * page colour to be read as a category rather than as page furniture, and neither
+ * carries a right/wrong meaning the way green and red would.
+ *
+ * The same badge is used on the selected row, whose background is dark teal — a
+ * light fill with dark text stays legible either way, so the phase never loses
+ * its colour just because it is the one open.
+ */
+const PHASE_BADGE: Record<SurveyPhase, string> = {
+  pre: "border-[#b6cdec] bg-[#e6effb] text-[#1b4b8c]",
+  post: "border-[#eecfa0] bg-[#fcf1de] text-[#8a5000]",
+};
+
+/** Phase colour for plain text, e.g. the 「2 份前測」 counts under a 類別. */
+const PHASE_TEXT: Record<SurveyPhase, string> = {
+  pre: "text-[#1b4b8c]",
+  post: "text-[#8a5000]",
+};
 
 /**
  * The 前測-後測 page every subject lands on.
@@ -62,6 +99,10 @@ const COPY = {
  * The picker lives in a sidebar rather than above the questionnaire: a survey is a
  * tall form in a frame, and rows of tabs stacked on top of it cost the height that
  * matters most. On narrow screens the same list collapses into one bar.
+ *
+ * The sidebar mirrors the 後台 structure: one collapsible section per 類別, each
+ * holding its own 前測／後測. A course with several units otherwise turns into one
+ * long run of similarly named links.
  *
  * Two things about embedding a third-party questionnaire are worth knowing:
  *  1. Providers may refuse to be framed (X-Frame-Options / CSP), which shows up
@@ -88,6 +129,8 @@ export default function SurveyBrowser({
   const [surveyIndex, setSurveyIndex] = useState(0);
   // Narrow screens only: the collapsed list above the questionnaire.
   const [navOpen, setNavOpen] = useState(false);
+  // Which 類別 sections are expanded, by index.
+  const [openGroups, setOpenGroups] = useState<number[]>([0]);
 
   useEffect(() => {
     let active = true;
@@ -102,11 +145,13 @@ export default function SurveyBrowser({
         }
         const data = await res.json();
         if (!active) return;
-        setGroups(data.groups ?? []);
+        const list: SurveyGroupDTO[] = data.groups ?? [];
+        setGroups(list);
         // The first questionnaire of the first 類別: the admin controls both
         // orders, so the first thing listed is the one meant to be answered first.
         setGroupIndex(0);
         setSurveyIndex(0);
+        setOpenGroups(list.length <= AUTO_OPEN_GROUP_LIMIT ? list.map((_, i) => i) : [0]);
       } catch {
         if (active) setFailed(true);
       } finally {
@@ -129,50 +174,126 @@ export default function SurveyBrowser({
     setNavOpen(false);
   }
 
-  /** The whole picker, used by both the sidebar and the collapsed mobile bar. */
-  const navList = (
-    <ul className="space-y-1">
-      {groups.map((g, gi) => (
-        <li key={`${g.name}-${gi}`}>
-          {showGroupNames && (
-            <p className="px-2 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-[#5c736c]">
-              {g.name}
-            </p>
-          )}
-          <ul className="space-y-1">
-            {g.surveys.map((s, si) => {
-              const isActive = gi === groupIndex && si === surveyIndex;
-              return (
-                <li key={`${s.url}-${si}`}>
-                  <button
-                    type="button"
-                    onClick={() => select(gi, si)}
-                    aria-current={isActive ? "true" : undefined}
-                    className={[
-                      "flex w-full items-center gap-2 rounded-[6px] border-2 px-2.5 py-2 text-left transition duration-200",
-                      isActive
-                        ? "border-[#123c34] bg-[#0f766e] text-white"
-                        : "border-transparent text-[#2f4c45] hover:border-[#cadfd9] hover:bg-[#f1f8f6]",
-                    ].join(" ")}
-                  >
-                    <span
-                      className={[
-                        "shrink-0 rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold",
-                        isActive ? "bg-white/20 text-white" : "bg-[#e5f2ef] text-[#0b5c55]",
-                      ].join(" ")}
-                    >
-                      {copy.phases[s.phase]}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[14px] font-medium">
-                      {s.title}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </li>
-      ))}
+  function toggleGroup(gi: number) {
+    setOpenGroups((open) => (open.includes(gi) ? open.filter((i) => i !== gi) : [...open, gi]));
+  }
+
+  /**
+   * What a 類別 says about itself, e.g. 「1 份前測 · 2 份後測」, each count in its
+   * phase colour so a collapsed 類別 still shows what it holds.
+   */
+  function groupSummary(g: SurveyGroupDTO) {
+    const parts = SURVEY_PHASES.filter((phase) =>
+      g.surveys.some((s) => s.phase === phase),
+    ).map((phase) => (
+      <span key={phase} className={PHASE_TEXT[phase]}>
+        {copy.phaseCount(g.surveys.filter((s) => s.phase === phase).length, copy.phases[phase])}
+      </span>
+    ));
+
+    return parts.flatMap((part, i) =>
+      i === 0 ? [part] : [<span key={`sep-${i}`}>{copy.groupJoin}</span>, part],
+    );
+  }
+
+  /** The 前測／後測 pill, in the phase's own colour wherever it appears. */
+  function phaseBadge(phase: SurveyPhase, size: "sm" | "md" = "sm") {
+    return (
+      <span
+        className={[
+          "shrink-0 rounded-[4px] border px-1.5 font-semibold",
+          size === "sm" ? "py-0.5 text-[11px]" : "py-[3px] text-[12px]",
+          PHASE_BADGE[phase],
+        ].join(" ")}
+      >
+        {copy.phases[phase]}
+      </span>
+    );
+  }
+
+  /** The questionnaires of one 類別. Also the whole list when there is only one. */
+  function surveyList(g: SurveyGroupDTO, gi: number) {
+    return (
+      <ul className="space-y-1">
+        {g.surveys.map((s, si) => {
+          const isActive = gi === groupIndex && si === surveyIndex;
+          return (
+            <li key={`${s.url}-${si}`}>
+              <button
+                type="button"
+                onClick={() => select(gi, si)}
+                aria-current={isActive ? "true" : undefined}
+                className={[
+                  "flex w-full items-center gap-2 rounded-[6px] border-2 px-2.5 py-2 text-left transition duration-200",
+                  isActive
+                    ? "border-[#123c34] bg-[#0f766e] text-white"
+                    : "border-transparent text-[#2f4c45] hover:border-[#cadfd9] hover:bg-[#f1f8f6]",
+                ].join(" ")}
+              >
+                {phaseBadge(s.phase)}
+                <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{s.title}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  /**
+   * The whole picker, used by both the sidebar and the collapsed mobile bar.
+   *
+   * With a single 類別 there is nothing to separate, so its questionnaires are
+   * listed flat — a lone section header would only be a label with no siblings.
+   */
+  const navList = !showGroupNames ? (
+    // groups may still be empty while loading, before this list is ever shown.
+    groups.length === 1 && surveyList(groups[0], 0)
+  ) : (
+    <ul className="space-y-2">
+      {groups.map((g, gi) => {
+        const open = openGroups.includes(gi);
+        const holdsActive = gi === groupIndex;
+        return (
+          <li
+            key={`${g.name}-${gi}`}
+            className={[
+              "overflow-hidden rounded-[8px] border-2",
+              holdsActive ? "border-[#123c34] bg-white" : "border-[#cadfd9] bg-[#fbfdfc]",
+            ].join(" ")}
+          >
+            <button
+              type="button"
+              onClick={() => toggleGroup(gi)}
+              aria-expanded={open}
+              aria-label={open ? copy.collapseGroup(g.name) : copy.expandGroup(g.name)}
+              className={[
+                "flex w-full items-center gap-1.5 px-2 py-2 text-left transition-colors duration-200",
+                holdsActive ? "bg-[#e5f2ef]" : "hover:bg-[#f1f8f6]",
+              ].join(" ")}
+            >
+              <ChevronDown
+                className={[
+                  "size-4 shrink-0 text-[#0f766e] transition-transform duration-200",
+                  open ? "" : "-rotate-90",
+                ].join(" ")}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-bold tracking-[-0.01em] text-[#12312b]">
+                  {g.name}
+                </span>
+                {/* Kept visible when open too: it is the only place the make-up
+                    of a 類別 is stated, and it costs one line. */}
+                <span className="block truncate text-[11px] font-medium text-[#5c736c]">
+                  {groupSummary(g)}
+                </span>
+              </span>
+            </button>
+            {open && <div className="border-t-2 border-[#dceae6] p-1.5">{surveyList(g, gi)}</div>}
+          </li>
+        );
+      })}
     </ul>
   );
 
@@ -236,10 +357,13 @@ export default function SurveyBrowser({
                     <span className="block truncate text-[14px] font-semibold text-[#12312b]">
                       {active.title}
                     </span>
-                    <span className="block truncate text-[12px] text-[#5c736c]">
-                      {showGroupNames && group
-                        ? `${group.name} · ${copy.phases[active.phase]}`
-                        : copy.phases[active.phase]}
+                    <span className="mt-0.5 flex items-center gap-1.5">
+                      {phaseBadge(active.phase)}
+                      {showGroupNames && group && (
+                        <span className="min-w-0 truncate text-[12px] text-[#5c736c]">
+                          {group.name}
+                        </span>
+                      )}
                     </span>
                   </span>
                   <ChevronDown
@@ -266,11 +390,14 @@ export default function SurveyBrowser({
                     <h2 className="truncate text-[17px] font-bold tracking-[-0.02em] text-[#12312b] sm:text-[19px]">
                       {active.title}
                     </h2>
-                    <p className="mt-0.5 truncate text-[12px] font-medium text-[#4c645d]">
-                      {showGroupNames && group
-                        ? `${group.name} · ${copy.phases[active.phase]}`
-                        : copy.phases[active.phase]}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      {phaseBadge(active.phase, "md")}
+                      {showGroupNames && group && (
+                        <span className="min-w-0 truncate text-[12px] font-medium text-[#4c645d]">
+                          {group.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {/* Always offered, even when the frame works: a provider can
                       start refusing to be framed without anyone editing a link. */}
