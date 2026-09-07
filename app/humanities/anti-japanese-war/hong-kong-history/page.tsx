@@ -4,8 +4,10 @@ import { useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 
-const EMBED_URL =
-  "https://script.google.com/a/macros/s.eduhk.hk/s/AKfycbz2hophOgaHh-MfGcJCjGrM7Igtkz56f-NmoeSGtY7PYWYL_2qNXsHB0cDAkqpsgSdIHw/exec";
+// Served straight out of public/ instead of the old Apps Script deployment:
+// the page is a static self-contained document, so hosting it locally drops the
+// third-party round trip and the Google sign-in prompt students used to hit.
+const EMBED_URL = "/humanities/humanities-war.html";
 
 export default function HongKongHistoryLearningPage() {
   const [loaded, setLoaded] = useState(false);

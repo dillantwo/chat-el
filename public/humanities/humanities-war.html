@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Dr. Cora Ka Yuk SIU">
+    <meta name="description" content="Designed by Dr. Cora Ka Yuk SIU, Artificial Intelligence and Digital Competency Centre (AIDCEC), The Education University of Hong Kong (EdUHK). All rights reserved.">
+    <title>國家的蛻變：認識香港的歷史 ──「抗日戰爭」</title>
+    <script>
+  
+  document.addEventListener('contextmenu', event => event.preventDefault());
+
+  
+  document.onkeydown = function(e) {
+    if (e.ctrlKey && (e.keyCode === 67 || e.keyCode === 85 || e.keyCode === 83)) {
+      return false;
+    }
+  };
+</script>
+
+<style>
+     
+    body {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+</style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&amp;display=swap" rel="stylesheet">
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #F3F4F6;
+        }
+         
+        section {
+            scroll-margin-top: 80px;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin: 1.5rem auto;
+            height: 300px;
+            background: #ffffff;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: #E5E7EB;
+            transform: translateX(-50%);
+        }
+        .bg-primary { background-color: #991B1B; }
+        .text-primary { color: #991B1B; }
+        
+        .map-card {
+            width: 100%;
+            max-width: 800px;
+            margin: 2rem auto;
+            border: 4px solid #374151;
+            border-radius: 0.5rem;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            background-color: #111827;
+            background-image: linear-gradient(rgba(17, 24, 39, 0.5), rgba(17, 24, 39, 0.5)), url('./map.png');
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+            height: 400px;
+        }
+        .map-card:hover {
+            transform: scale(1.02);
+        }
+        .map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .content-block h2 { color: #991B1B; font-weight: 900; margin-top: 2.5rem; margin-bottom: 1rem; border-left: 6px solid #991B1B; padding-left: 1rem; }
+        .content-block h3 { color: #1F2937; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; padding-left: 1.4rem; }
+        .content-block p { margin-bottom: 1rem; line-height: 1.8; color: #374151; }
+        .content-block ul { margin-bottom: 1rem; padding-left: 2.5rem; list-style-type: disc; }
+        .content-block li { margin-bottom: 0.5rem; color: #4B5563; }
+        .chart-caption { text-align: center; font-size: 0.875rem; color: #6B7280; margin-top: -0.5rem; margin-bottom: 1.5rem; }
+        
+         
+        .res-content-block { text-align: left; background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }
+        .res-content-block h2 { color: #FBBF24; font-size: 1.875rem; font-weight: 900; margin-bottom: 1.5rem; border-bottom: 2px solid #FBBF24; padding-bottom: 0.5rem; }
+        .res-content-block h3 { color: #FDE68A; font-size: 1.25rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        .res-content-block p { color: #E5E7EB; line-height: 1.8; margin-bottom: 1rem; }
+        .res-content-block ul { list-style-type: none; padding-left: 1rem; margin-bottom: 1.5rem; }
+        .res-content-block li { position: relative; padding-left: 1.5rem; margin-bottom: 0.5rem; color: #D1D5DB; }
+        .res-content-block li::before { content: "•"; color: #FBBF24; position: absolute; left: 0; font-weight: bold; }
+
+         
+        #game-container { background: #1F2937; border-radius: 1rem; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .quiz-option { cursor: pointer; transition: all 0.2s; border: 2px solid #374151; }
+        .quiz-option:hover { border-color: #FBBF24; background: rgba(251, 191, 36, 0.1); }
+        .quiz-option.correct { border-color: #10B981; background: rgba(16, 185, 129, 0.1); }
+        .quiz-option.wrong { border-color: #EF4444; background: rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body id="top" class="text-gray-800">
+
+    
+    <header class="bg-primary text-white shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="#top" class="text-base md:text-base font-black tracking-wider hover:text-amber-300 transition">認識香港歷史 ──「抗日戰爭」</a>
+            <nav class="hidden md:flex space-x-6 text-xs font-bold">
+                <a href="#intro" class="hover:text-amber-300 transition">導言</a>
+                <a href="#timeline" class="hover:text-amber-300 transition">時間軸</a>
+                <a href="#history-details" class="hover:text-amber-300 transition">淪陷史實</a>
+                <a href="#resistance" class="hover:text-amber-300 transition">抗戰精神</a>
+                <a href="#map" class="hover:text-amber-300 transition">歷史地圖</a>
+                <a href="#game" class="hover:text-amber-300 transition">小小挑戰</a>
+                <!-- Platform's own 抗戰歷史小嚮導 instead of the Moodle LTI launch.
+                     target="_top" for the same reason as the map link below: this
+                     document runs inside an iframe. -->
+                <a href="/humanities/anti-japanese-war/chat" target="_top" class="hover:text-amber-300 transition">小嚮導</a>
+            </nav>
+        </div>
+    </header>
+
+    
+    <section id="intro" class="relative bg-white overflow-hidden">
+        <div class="container mx-auto px-4 py-16 text-center">
+            <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">抗日戰爭與香港的歲月</h2>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">1941年至1945年，香港經歷了「三年零八個月」的黑暗時期。這不僅僅是一段關於戰爭的記憶，更是香港人展現堅強意志與保家衛國精神的重要歷史。</p>
+        </div>
+    </section>
+    
+    <section id="timeline" class="py-12 bg-gray-400">
+         <div class="container mx-auto px-4">
+            <div class="text-center mb-10">
+                <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">⏳ 香港歷史的關鍵時刻</h2>
+            </div>
+            <div class="relative max-w-4xl mx-auto">
+                <div class="timeline-line hidden md:block"></div>
+
+                  <div class="md:flex justify-between items-center mb-12 relative z-10">
+                    <div class="md:w-5/12 text-center md:text-right px-4">
+                        <h4 class="text-2xl font-black text-primary">1931年</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">中國十四年抗戰的開端</span>
+                    </div>
+                    <div class="w-8 h-8 bg-primary rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">1</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-red-800">
+                            <h5 class="text-lg font-bold mb-2">「九一八事變」</h5>
+                            <p class="text-sm text-gray-600">日軍在瀋陽柳條湖炸毀鐵路並誣指中國軍隊所為，隨即佔領東北三省。這激起了全國抗日救亡熱潮，標誌著十四年抗戰的開端。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="md:flex justify-between items-center mb-12 relative z-10 flex-row-reverse">
+                    <div class="md:w-5/12 text-center md:text-left px-4">
+                        <h4 class="text-2xl font-black text-gray-800">1937年</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">全面抗戰開始</span>
+                    </div>
+                    <div class="w-8 h-8 bg-gray-800 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">2</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-gray-800">
+                            <h5 class="text-lg font-bold mb-2">「七七事變」</h5>
+                            <p class="text-sm text-gray-600">日軍發動全面侵華戰爭，中華民族開啟了長達八年的艱苦抗戰。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:flex justify-between items-center mb-12 relative z-10">
+                    <div class="md:w-5/12 text-center md:text-right px-4">
+                        <h4 class="text-2xl font-black text-amber-600">1941年12月</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">黑色聖誕節</span>
+                    </div>
+                    <div class="w-8 h-8 bg-amber-500 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">3</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-amber-500">
+                            <h5 class="text-lg font-bold mb-2">「香港淪陷」</h5>
+                            <p class="text-sm text-gray-600">經過18天的頑強抵抗後，香港正式被日軍佔領，黑暗的「三年零八個月」開始了。</p>
+                        </div>
+                    </div>
+                </div>
+
+                 <div class="md:flex justify-between items-center mb-12 relative z-10 flex-row-reverse">
+                    <div class="md:w-5/12 text-center md:text-left px-4">
+                        <h4 class="text-2xl font-black text-purple-700">1942 - 1944年</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">保家衛國</span>
+                    </div>
+                    <div class="w-8 h-8 bg-purple-600 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">4</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-purple-600">
+                            <h5 class="text-lg font-bold mb-2">「東江縱隊」英勇抗敵</h5>
+                            <p class="text-sm text-gray-600">抗日游擊隊在香港郊區展開行動，營救文化人士並打擊日軍。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:flex justify-between items-center mb-12 relative z-10">
+                    <div class="md:w-5/12 text-center md:text-left px-4">
+                        <h4 class="text-2xl font-black text-green-700">1945年8月</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">和平降臨</span>
+                    </div>
+                    <div class="w-8 h-8 bg-green-500 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">5</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-green-600">
+                            <h5 class="text-lg font-bold mb-2">日本宣布無條件投降</h5>
+                            <p class="text-sm text-gray-600">日本宣佈無條件投降，香港抗戰宣告勝利。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    
+    <section id="history-details" class="py-16 bg-white border-t">
+        <div class="container mx-auto px-4 max-w-4xl">
+            <div class="text-center mb-12">
+                    <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">香港淪陷史：黑暗歲月與民眾苦難</h2>
+            </div>    
+               
+            <div class="content-block">
+                <h4 class="text-2xl font-black text-gray-800">日軍在香港的暴行</h4>
+                <p class="text-lg text-gray-600">1941年12月25日，日軍正式接管香港，這一天被歷史學家稱為「黑色聖誕節」。</p>
+                <h2>一、 日軍統治下的民生慘狀</h2>
+                <p>日軍佔領後，為了鞏固統治，對香港市民採取了極端嚴酷的手段。</p>
+                <p>日軍在香港實施戒嚴，任意搜查民居和逮捕、殺害平民。為了減輕糧食壓力，也實行了疏散人口的政策，強迫香港居民返鄉。大批香港居民離開這個人間地獄，返回內地。日軍用帆船將市民運送到華南海岸，這是完全不負責任的遣送，許多帆船，在途中被洗劫，有的帆船拖到公海後，便遭日寇擊沉或放火燒毀，事後有不少燒焦了的屍體飄浮到海岸來。在逃難回鄉的路上，沿途有倒斃的老人和被棄的嬰孩。</p>
+                <p>另一方面，以滿足日軍的獸慾，灣仔駱克道一帶，則成了日軍慰安所集中地。李樹芬醫生當時在九龍開辦一家醫院，他估計在日治時期至少治療了一萬名強姦受害者  (香港大公文匯，2025)。</p>
+                <p>根據《當代中國》(2021) 的記載，當時香港人口從戰前的約160萬人，急劇下降到1945年日本投降時的僅約60萬人。這百萬人口的流失，主要是因為戰亂導致的死亡、飢荒，以及日軍為了減少糧食負擔而強制進行的人口遣返。</p>
+
+<span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/T7yyQMOWAnc" target="_blank">微短劇《抗戰》第二集：犠牲</a>)</strong></span>
+</p>
+                
+                
+                <div class="chart-container">
+                    <canvas id="populationChart"></canvas>
+                </div>
+                <p class="chart-caption">圖 1.1：1941年至1945年香港人口劇降趨勢圖 (數據來源：當代中國)</p>
+
+                <h3>日軍對市民的暴行：</h3>
+                <ul>
+                    <li><strong>嚴酷手段：</strong> 日軍常對懷疑反抗的人員施加酷刑，如灌水、毒打等，令當時社會充滿恐懼 (香港大學，2025)。</li>
+                    <li><strong>銀礦灣慘案：</strong> 即便在1945年8月日本宣佈投降後，部分殘留日軍仍在大嶼山銀礦灣無理搜捕村民，造成無辜傷亡。</li>
+                </ul>
+                <br>
+                <p>戰後，香港憲兵隊隊長野間賢之助因其暴行被判處戰爭罪，最終在赤柱監獄伏法，這也象徵了正義的伸張 (大公文匯，2025)。</p>
+
+                <h2>二、 經濟掠奪：軍票帶來的災難</h2>
+                <p>日佔政府為了洗劫香港市民的財富，實施了「軍票」政策：</p>
+                <ul>
+                    <li><strong>強行取代港幣：</strong> 1943年起日軍強制規定只能使用「軍票」，若發現市民持有港幣會遭到重罰。</li>
+                    <li><strong>財產化為廢紙：</strong> 日本投降後，日方拒絕贖回軍票。這導致無數香港家庭的積蓄一夜之間歸零，對戰後民生造成了極大的打擊。</li>
+                </ul>
+
+                <h2>三、 資源匱乏：飢餓的記憶</h2>
+                <p>日軍將物資優先供應軍隊，導致平民生活極其困苦：</p>
+                <ul>
+                    <li><strong>「六兩四」配給：</strong> 市民每日領取的糧食配給量極少（僅約六兩四錢米），許多人因營養不良或飢餓而病倒，甚至在街頭餓死 <strong>(大公報，2025)</strong>。</li>
+                    <li><strong>搶奪金屬：</strong> 為了軍事生產，日軍拆除了滙豐銀行的銅獅子和許多維多利亞時代的銅像。</li>
+                </ul>
+
+                <h2>四、 文化摧殘：強推日化教育</h2>
+                <p>為了消滅中國文化認同，日軍強行推動日化政策：</p>
+                <ul>
+                    <li><strong>強迫學日語：</strong> 學校被要求教授日語，甚至將地名改為日本名字，例如皇后大道被改為「中明治通」。</li>
+                    <li><strong>教育荒廢：</strong> 大部分學校因戰爭停辦，導致整整一代兒童失去了正常的受教育機會。</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    
+    <section id="resistance" class="py-16 bg-gray-800 text-white">
+        <div class="container mx-auto px-4">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl md:text-5xl font-bold">⚔️ 英勇抵抗：保家衛國的精神</h2>
+                <p class="mt-4 text-gray-400 max-w-2xl mx-auto mb-8">在日佔時期的封鎖下，有一群英雄在香港的郊野與城市間，與侵略者展開了長達數年的英勇鬥爭。</p>
+            </div>
+
+            
+            <div class="max-w-4xl mx-auto res-content-block">
+                <h2 id="res-intro"># 抗日烽火：港九大隊的敵後英雄傳</h2>
+
+                <h3 class="mb-4">一、 華南抗戰與東江縱隊的誕生</h3>
+                <p>1938年日軍侵佔廣東，激發了當地民眾組織游擊隊，其成員主要由農民、學生、海員等基層群眾組成，體現了以廣泛群眾為基礎的自衛力量。游擊隊是一種非正規軍事組織，具有靈活機動的特點，善於利用地形優勢對抗敵軍。主要任務包括搜集情報、救援行動、破壞日軍補給設施從而削弱其戰鬥力。游擊隊展現了高度的愛國精神與民族團結意識。他們在艱苦的環境下，依然保持了頑強的抗爭意志，充分體現了中華民族在苦難中的堅韌與不屈。</p>
+                <p> 1938年10月，日軍登陸廣東惠陽大亞灣，國民黨守軍迅速潰敗，廣州及東江下游地區大片國土淪陷。當時中共在惠陽、東莞、寶安等地組建了多支游擊隊，包括惠寶人民抗日游擊總隊和東寶惠邊人民抗日游擊大隊等。這些隊伍在1939年4月至5月間接受「國民革命軍」的番号，被整編爲「國民革命軍」第四戰區東江遊擊指揮所下轄的兩個大隊。1940年9月這兩個大隊整編爲廣東人民抗日遊擊隊，1942年1月整編爲廣東人民抗日遊擊總隊。根據中共中央指示，中共廣東省委在東江地區日佔區的後方建立游擊區，組織人民抗日武裝力量，逐步發展為後來的東江縱隊。</p>
+                <p>1943年12月，由多支民間武裝力量合併而成的「東江縱隊」正式宣告成立。東江縱隊全稱為「廣東人民抗日游擊隊東江縱隊」，是中國抗日戰爭時期中國共產黨領導的一支抗日游擊隊。</p>
+                
+                
+                <div class="my-8 rounded-lg overflow-hidden border-2 border-gray-700 shadow-2xl relative bg-gray-900">
+                    <img src="https://dw-media.tkww.hk/dams/dwproduct/image/202508/22/68a7b250e4b0dd0b099089d4.jpg" 
+                         alt="東江縱隊港九獨立大隊" class="w-full h-auto opacity-90">
+                    <div class="p-3 bg-gray-900/90 text-center">
+                        <p class="text-amber-400 font-bold text-lg italic">「在黑暗中，東江縱隊港九獨立大隊英勇抗敵，保家衛國。」</p>
+                        <p class="text-[10px] text-gray-500 mt-1">
+                            <a href="https://dw-media.tkww.hk/dams/dwproduct/image/202508/22/68a7b250e4b0dd0b099089d4.jpg" target="_blank" class="hover:text-amber-300 transition-colors">圖片來源：大公報 (2025)</a>
+                        </p>
+                    </div>
+                </div>
+
+                <p>這支部隊在廣東沿海和山區展開游擊戰，成功破壞了日軍的運輸線路，不僅保護了當地百姓，也配合了全國的抗日反攻大局。<span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/s46yoU7VK5Y" target="_blank">微短劇《抗戰》第五集：偷襲</a>)</strong></span></p>
+
+                <h3>二、 港九獨立大隊：身邊的抗日英雄</h3>
+                <p>1942年2月，為了專門保衛香港，港九大隊在西貢黃毛應村成立。這支部隊最特別的地方在於，它的成員大多數都是香港本地的熱血青年與普通市民。<span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/pv3_oHoZm-w" target="_blank">微短劇《抗戰》第四集：救援</a>)</strong></span></p>
+                <p><strong>他們的英勇事蹟包括：</strong></p>
+                <ul>
+                    <li><strong>城市突擊：</strong> 派遣短槍隊在市區伏擊日軍據點。</li>
+                    <li><strong>海上破壞：</strong> 利用漁船掩護，攻擊日軍的海上物資運輸。</li>
+                    <li><strong>心理戰：</strong> 在街頭巷尾派發抗日傳單，告訴市民「我們一定會贏」，鼓舞了大家的信心。</li>
+                </ul>
+                <h3>三、 偉大的「文化人大營救」</h3>
+                <p>港九大隊完成過一項令人敬佩的任務：在日軍的嚴密搜索下，成功從香港秘密營救出數百名知名的文化界人士和愛國人士，保護了國家的文化火種。<span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/9cucrTlfDAA" target="_blank">微短劇《抗戰》第一集：營救</a>)</strong></span></p>
+                <h3>四、 勝利後的無私貢獻</h3>
+                <p>1945年日本投降後，港九大隊並未立即離開。應當時社會需求，他們自發在新界協助維持治安，保護鄉村免受盜匪騷擾，直到社會秩序恢復正常。這種保家衛國的責任感，至今仍被香港人銘記。</p>
+                <p class="mt-6 italic border-t border-gray-600 pt-4 text-amber-200 text-center">雖然當時環境艱難，但港九大隊的精神向我們證明：只要心懷家國，勇於承擔，每個人都能成為守護家園的英雄。</p>
+            </div>
+        </div>    
+    </section>   
+ 
+    <section id="map" class="py-12 bg-gray-400" >
+            
+            <div class="text-center mt-12 mb-20">
+                <h4 class="text-xl font-bold text-amber-400 mb-4">📍 互動學習：香港戰役地圖探索</h4>
+                <!-- Points at the platform's own 互動地圖 part instead of the Moodle page.
+                     target="_top" because this document is embedded in an iframe: it
+                     navigates the whole app (keeping the header and back link) rather
+                     than loading the map inside this frame or spawning a new tab. -->
+                <a href="/humanities/anti-japanese-war/heritage-trail-map" target="_top" class="block">
+                    <div class="map-card">
+                        <div class="map-overlay">
+                            <div class="text-center p-8 bg-gray-900/80 rounded-xl backdrop-blur-sm border border-gray-700">
+                                <svg class="w-16 h-16 text-amber-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+                                </svg>
+                                <h5 class="text-2xl font-bold mb-2 text-white">點擊進入歷史地圖</h5>
+                                <p class="text-amber-200 text-sm mb-4">看看當年「東江縱隊」及「港九大隊」在香港哪些地方英勇抗日、保衛我們的家園</p>
+                                <p class="text-gray-400 text-xs mb-6">由香港教育大學人工智能及數碼能力教育中心團隊製作</p>
+                                <span class="inline-block bg-amber-500 text-gray-900 px-8 py-3 rounded-full font-bold hover:bg-amber-400 transition shadow-lg">立即進入瀏覽</span>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+    </section>        
+    
+    
+    
+    <section id="game" class="relative bg-white overflow-hidden">
+        <div class="container mx-auto px-4 py-16 text-center">
+            <div class="max-w-3xl mx-auto mb-16">
+                <div id="game-container">
+                    <div id="game-intro" class="text-center">
+                        <div class="w-20 h-20 bg-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
+                            <svg class="w-10 h-10 text-gray-900" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"></path></svg>
+                        </div>
+                        <h2 class="text-3xl font-black text-amber-400 mb-4">抗戰歷史小學堂</h2>
+                        <p class="text-gray-300 mb-8 leading-relaxed">挑戰你的記憶力！你能通過所有的歷史關卡，成為「小小歷史學家」嗎？</p>
+                        <button onclick="startGame()" class="bg-amber-500 hover:bg-amber-400 text-gray-900 px-12 py-4 rounded-full font-black text-xl transition transform hover:scale-105 shadow-lg">開始挑戰</button>
+                    </div>
+
+                    <div id="game-play" class="hidden">
+                        <div class="flex justify-between items-center mb-6 text-sm font-bold border-b border-gray-700 pb-4">
+                            <span class="text-amber-400">問題 <span id="current-q">1</span> / 5</span>
+                            <span class="text-white">目前積分：<span id="game-score">0</span></span>
+                        </div>
+                        <h3 id="question-text" class="text-2xl font-bold text-white mb-8">問題載入中...</h3>
+                        <div id="options-grid" class="grid grid-cols-1 gap-4 mb-8">
+                            
+                        </div>
+                        <div id="explanation" class="hidden p-4 rounded-lg bg-gray-700 border-l-4 border-amber-500 mb-6">
+                            <p class="text-sm text-gray-200" id="explanation-text"></p>
+                        </div>
+                        <button id="next-btn" onclick="nextQuestion()" class="hidden w-full bg-white text-gray-900 py-3 rounded-lg font-bold hover:bg-gray-200 transition">下一題</button>
+                    </div>
+
+                    <div id="game-result" class="hidden text-center">
+                        <h3 class="text-4xl font-black text-white mb-4">挑戰結束！</h3>
+                        <p class="text-2xl text-amber-400 mb-6">你的總分：<span id="final-score">0</span></p>
+                        <p id="result-message" class="text-gray-300 mb-8"></p>
+                        <button onclick="startGame()" class="bg-amber-500 hover:bg-amber-400 text-gray-900 px-10 py-3 rounded-full font-bold transition">再玩一次</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    
+    <footer class="bg-gray-900 text-gray-400 py-12 text-center border-t border-gray-800">
+        <div class="container mx-auto px-4 text-left">
+            <div class="max-w-4xl mx-auto">
+                <h5 class="text-white font-bold mb-4 border-b border-gray-700 pb-2">內容參考與引述來源 (Academic References)</h5>
+                <ul class="text-xs space-y-2 list-disc pl-5">
+                    <li><strong>香港政府新聞公報 (2025)</strong>。〈行政長官出席東江縱隊港九大隊烈士紀念碑紀念儀式致辭內容〉。檢索自 <a href="https://www.info.gov.hk/gia/general/202508/30/P2025083000278.htm" target="_blank">https://www.info.gov.hk/gia/general/202508/30/P2025083000278.htm</a></li>
+                    <li><strong>香港政府中國人民抗日戰爭暨世界反法西斯戰爭勝利80周年網頁 (2025)</strong>。〈香港中共抗戰遺址〉。檢索自<a href="https://www.80avictory.gov.hk/tc/site.html" target="_blank">https://www.80avictory.gov.hk/tc/site.html</a></li>
+                    <li><strong>香港特區政府新聞處 (2025)</strong>。〈微短劇《抗戰》〉。檢索自 <a href="https://www.80avictory.gov.hk/tc/mini-drama.html" target="_blank">https://www.80avictory.gov.hk/tc/mini-drama.html</a></li>
+                    <li><strong>香港大學 (2025)</strong>。〈香港戰爭罪行審判計劃〉。檢索自 <a href="https://hkwctc.lib.hku.edu.hk/" target="_blank">https://hkwctc.lib.hku.edu.hk/</a></li>
+                    <li><strong>大公報 (2025)</strong>。〈香港在日寇鐵蹄下的悲慘世界〉。檢索自 <a href="https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html" target="_blank">https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html</a></li>
+                    <li><strong>中國文化研究院 (2025a)</strong>。〈（四）苦難的三年零八個月〉。檢索自 <a href="https://chiculture.org.hk/tc/photo-story/3049" target="_blank">https://chiculture.org.hk/tc/photo-story/3049</a></li>
+                    <li><strong>中國文化研究院 (2025b)</strong>。〈（五）強迫歸鄉〉。檢索自 <a href="https://chiculture.org.hk/tc/photo-story/3050" target="_blank">https://chiculture.org.hk/tc/photo-story/3050</a></li>
+                    <li><strong>香港特別行政區政府政府檔案處 (2025)</strong>。〈日化政策〉。檢索自 <a href="https://www.grs.gov.hk/ws/erp/japanocc/chi/eve03.htm" target="_blank">https://www.grs.gov.hk/ws/erp/japanocc/chi/eve03.htm#</a></li>
+                    <li><strong>香港大公文匯 (2025)</strong>。〈香港在日寇鐵蹄下的悲慘世界〉。檢索自 <a href="https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html" target="_blank">https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html</a></li>
+                    <li><strong>文匯報 (2025)</strong>。〈（有片）香港抗戰有段古｜滙豐銅獅　仍可見日軍炮彈痕跡〉。檢索自 <a href="https://www.wenweipo.com/a/202508/15/AP689f0a5ce4b0aefee15724c4.html" target="_blank">https://www.wenweipo.com/a/202508/15/AP689f0a5ce4b0aefee15724c4.html</a></li>
+                </ul>
+            </div>
+            <div class="text-[10px] mt-8 pt-8 border-t border-gray-800 text-center">
+                <p class="mb-2">本網頁及資源由香港教育大學人工智能及數碼能力教育中心（AIDCEC）團隊設計，旨在支援小學人文學科的學習。</p>
+                <p>@ AIDCEC EdUHK</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        
+        const ctxPop = document.getElementById('populationChart').getContext('2d');
+        new Chart(ctxPop, {
+            type: 'line',
+            data: {
+                labels: ['1941年 (淪陷前)', '1945年 (光復時)'],
+                datasets: [{
+                    label: '估計人口 (單位：萬人)',
+                    data: [160, 60],
+                    borderColor: '#991B1B',
+                    backgroundColor: 'rgba(153, 27, 27, 0.2)',
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 8,
+                    pointBackgroundColor: '#991B1B'
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) { return context.raw + ' 萬人'; }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: '人口數量 (萬人)' } }
+                }
+            }
+        });
+
+        
+        const questions = [
+            {
+                q: "香港淪陷期間被稱為「三年零八個月」，這段黑暗時期是從哪一年開始的？",
+                options: ["1937年", "1941年", "1945年", "1949年"],
+                correct: 1,
+                exp: "正確答案是1941年。日軍在12月25日（黑色聖誕節）正式佔領香港。"
+            },
+            {
+                q: "日佔時期，日軍強制市民使用哪種貨幣，導致戰後市民財產變為廢紙？",
+                options: ["港幣", "日元", "軍票", "金圓券"],
+                correct: 2,
+                exp: "日軍強制推行『軍票』取代港幣。日本投降後，日方不承認軍票，令許多家庭積蓄歸零。"
+            },
+            {
+                q: "哪一支游擊隊在香港郊區展開抗戰，並營救了數百名文化界人士？",
+                options: ["飛虎隊", "義勇軍", "東江縱隊港九獨立大隊", "紅軍"],
+                correct: 2,
+                exp: "東江縱隊港九獨立大隊主要由香港熱血青年組成，負責敵後游擊及營救任務。"
+            },
+            {
+                q: "日佔時期，市民每日領取的糧食配給被稱為「六兩四」，這反映了什麼情況？",
+                options: ["生活極度富裕", "糧食極度匱乏", "運動量充足", "政府非常慷慨"],
+                correct: 1,
+                exp: "「六兩四」米糧配給量非常少，許多市民因此長期處於飢餓狀態。"
+            },
+            {
+                q: "日本在哪一年正式宣布無條件投降，香港歷史重見光明？",
+                options: ["1941年", "1943年", "1944年", "1945年"],
+                correct: 3,
+                exp: "1945年8月，日本無條件投降，抗戰勝利，香港重獲自由。"
+            }
+        ];
+
+        let currentQIndex = 0;
+        let score = 0;
+        let canAnswer = true;
+
+        function startGame() {
+            currentQIndex = 0;
+            score = 0;
+            document.getElementById('game-intro').classList.add('hidden');
+            document.getElementById('game-result').classList.add('hidden');
+            document.getElementById('game-play').classList.remove('hidden');
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            canAnswer = true;
+            const q = questions[currentQIndex];
+            document.getElementById('current-q').innerText = currentQIndex + 1;
+            document.getElementById('game-score').innerText = score;
+            document.getElementById('question-text').innerText = q.q;
+            document.getElementById('explanation').classList.add('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+            
+            const optionsGrid = document.getElementById('options-grid');
+            optionsGrid.innerHTML = '';
+            
+            q.options.forEach((opt, index) => {
+                const btn = document.createElement('div');
+                btn.className = "quiz-option p-4 rounded-lg bg-gray-800 text-white font-medium text-center hover:shadow-lg";
+                btn.innerText = opt;
+                btn.onclick = () => selectOption(index, btn);
+                optionsGrid.appendChild(btn);
+            });
+        }
+
+        function selectOption(index, element) {
+            if (!canAnswer) return;
+            canAnswer = false;
+            
+            const q = questions[currentQIndex];
+            const allOptions = document.querySelectorAll('.quiz-option');
+            
+            if (index === q.correct) {
+                element.classList.add('correct');
+                score += 20;
+                document.getElementById('game-score').innerText = score;
+            } else {
+                element.classList.add('wrong');
+                allOptions[q.correct].classList.add('correct');
+            }
+            
+            document.getElementById('explanation-text').innerText = q.exp;
+            document.getElementById('explanation').classList.remove('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
+
+        function nextQuestion() {
+            currentQIndex++;
+            if (currentQIndex < questions.length) {
+                loadQuestion();
+            } else {
+                showResult();
+            }
+        }
+
+        function showResult() {
+            document.getElementById('game-play').classList.add('hidden');
+            document.getElementById('game-result').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+            
+            let msg = "";
+            if (score === 100) msg = "太厲害了！你完全掌握了這段歷史，你是真正的歷史小學家！";
+            else if (score >= 60) msg = "表現不錯！你對香港抗戰歷史有很好的了解，繼續加油！";
+            else msg = "別灰心，再仔細閱讀一遍網頁內容，下次一定能拿高分！";
+            
+            document.getElementById('result-message').innerText = msg;
+        }
+    </script>
+</body>
+</html>
