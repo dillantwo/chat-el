@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -462,7 +463,7 @@ export default function AdminToolboxPage() {
             </p>
           )}
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             <div className="space-y-2">
               {(["all", "selected"] as const).map((mode) => (
                 <button
@@ -540,7 +541,7 @@ export default function AdminToolboxPage() {
                 )}
               </div>
             )}
-          </div>
+          </DialogBody>
 
           <DialogFooter className="flex-row justify-end gap-2">
             <Button variant="outline" disabled={scopeSaving} onClick={() => setScopeTarget(null)}>

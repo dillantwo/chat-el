@@ -49,8 +49,13 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        // Capped to the viewport because the popup is `fixed` and centred: with
+        // no cap, content taller than the screen overflows off both edges and
+        // scrolling the page behind cannot bring it back. The cap alone only
+        // clips, so a tall dialog must put its body in `DialogBody` to get the
+        // scroll. dvh, not vh, so mobile browser chrome does not eat the footer.
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 flex w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-xl border bg-background bg-clip-padding p-6 text-sm shadow-lg transition duration-200 ease-in-out data-ending-style:opacity-0 data-ending-style:scale-95 data-starting-style:opacity-0 data-starting-style:scale-95",
+          "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-xl border bg-background bg-clip-padding p-6 text-sm shadow-lg transition duration-200 ease-in-out data-ending-style:opacity-0 data-ending-style:scale-95 data-starting-style:opacity-0 data-starting-style:scale-95",
           className
         )}
         {...props}
@@ -81,6 +86,28 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-header"
       className={cn("flex flex-col gap-0.5", className)}
+      {...props}
+    />
+  )
+}
+
+/**
+ * The scrolling middle of a dialog, for forms tall enough to exceed the viewport.
+ * Header and footer stay put, so the save button is always reachable.
+ *
+ * `min-h-0` is what actually lets it shrink: a flex child defaults to
+ * `min-height: auto`, which would keep the body at its full content height and
+ * push the footer out of the capped popup instead of scrolling.
+ *
+ * The negative margin pulls the scroll container out to the popup's edges so the
+ * scrollbar sits against the border, and the matching padding gives focus rings
+ * on the outermost fields room to draw instead of being clipped.
+ */
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn("-mx-6 min-h-0 flex-1 overflow-y-auto px-6 py-1", className)}
       {...props}
     />
   )
@@ -127,6 +154,7 @@ export {
   DialogOverlay,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogFooter,
   DialogTitle,
   DialogDescription,

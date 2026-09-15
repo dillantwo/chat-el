@@ -28,6 +28,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { SUBJECT_LABELS, ROLE_LABELS, subjectAccent } from "@/lib/subjects";
@@ -590,7 +591,9 @@ export default function UsersPage() {
             <DialogTitle>{editing ? "編輯使用者" : "新增使用者"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          {/* Scrolls on its own: editing a teacher shows every section at once
+              (登入方式 through 學生數據), which is taller than a laptop viewport. */}
+          <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label>登入方式</Label>
               <Select
@@ -820,7 +823,7 @@ export default function UsersPage() {
             )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-          </div>
+          </DialogBody>
 
           <DialogFooter className="flex-row justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>

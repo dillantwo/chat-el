@@ -20,6 +20,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { SUBJECTS, subjectAccent, type SubjectValue } from "@/lib/subjects";
@@ -234,7 +235,7 @@ export default function SchoolsPage() {
             <DialogTitle>{editing ? "編輯學校" : "新增學校"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label>學校名稱</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：聖保羅書院" />
@@ -356,7 +357,7 @@ export default function SchoolsPage() {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-          </div>
+          </DialogBody>
 
           <DialogFooter className="flex-row justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>

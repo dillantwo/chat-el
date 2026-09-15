@@ -27,6 +27,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { SUBJECTS, SUBJECT_LABELS } from "@/lib/subjects";
@@ -287,7 +288,7 @@ export default function AdminMaterialsPage() {
             <DialogTitle>{editing ? "編輯資源" : "上傳資源"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             {!editing && (
               <div className="space-y-2">
                 <Label>科目</Label>
@@ -366,7 +367,7 @@ export default function AdminMaterialsPage() {
             )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-          </div>
+          </DialogBody>
 
           <DialogFooter className="flex-row justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
