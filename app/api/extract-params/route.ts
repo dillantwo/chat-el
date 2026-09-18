@@ -63,7 +63,10 @@ export async function POST(req: Request) {
     const validated = extractor.validate
       ? (() => {
           try {
-            return extractor.validate!(result.object);
+            return extractor.validate!(result.object, {
+              question: question ?? "",
+              toolKey,
+            });
           } catch (validateErr) {
             // 校验失败通常是因为用户选了不匹配的工具，AI 只能返回「空壳」参数。
             // 不抛 500，让前端用默认值渲染 HTML。

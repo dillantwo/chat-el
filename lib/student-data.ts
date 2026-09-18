@@ -106,9 +106,9 @@ const CHINESE_ESSAY_TOPICS: TopicOption[] = [
 ];
 
 const ENGLISH_TOPICS: TopicOption[] = [
-  { value: "thank-you-letter", label: "感謝信" },
-  { value: "reading-comprehension", label: "閱讀理解" },
-  { value: "location-direction", label: "位置與方向" },
+  { value: "thank-you-letter", label: "Thank-you Letter" },
+  { value: "reading-comprehension", label: "Reading Comprehension" },
+  { value: "location-direction", label: "location and Direction" },
 ];
 
 const SCIENCE_TOPICS: TopicOption[] = [
