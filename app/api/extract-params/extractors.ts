@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeMathText, parseFractionsInText } from "@/lib/math-word-problem";
 
 /**
  * 参数提取器注册表
@@ -84,7 +85,7 @@ const fractionOperation: Extractor = {
     operation: z.enum(["add", "sub", "mul", "div"]).describe("運算類型"),
     contextText: z.string().describe("題目情境描述（簡短）"),
     unit: z.string().describe("單位，如 L、kg、cm，沒有就留空"),
-    questionTemplate: z.string().describe("題目完整文字，將第一個分數替換為 [FRAC1]、第二個分數替換為 [FRAC2]，例如：[FRAC1] 的橙汁可以倒滿一杯，倒半杯需要多少橙汁？"),
+    questionTemplate: z.string().describe("題目完整文字（純文字，不可用 LaTeX），將第一個分數替換為 [FRAC1]、第二個分數替換為 [FRAC2]，其餘分數寫成 分子/分母，例如：[FRAC1] 的橙汁可以倒滿一杯，倒半杯需要多少橙汁？"),
   }),
   system: `你是一位數學題目參數提取專家。從題目中提取分數運算的參數。
 
@@ -96,13 +97,16 @@ const fractionOperation: Extractor = {
 - contextText 是題目的情境描述（例如「店員把橙汁倒進玻璃杯」），用於在練習工具中顯示
 - unit 是題目中使用的單位（例如 L、kg、cm），如果沒有單位就留空
 - questionTemplate 是題目的完整文字，但把第一個分數（含帶分數）替換成 [FRAC1]、第二個分數替換成 [FRAC2]；若題目只有一個分數，第二處用 [FRAC2] 佔位；例如原題「½ 的橙汁可以倒滿一杯，倒半杯需要多少橙汁？」→ 輸出「[FRAC1] 的橙汁可以倒滿一杯，倒半杯需要多少橙汁？」
+- questionTemplate 只能使用 [FRAC1] 和 [FRAC2] 兩個佔位符，不要出現 [FRAC3]、[FRAC4]
+- questionTemplate 必須是純文字，不可使用 LaTeX（不要出現 \\frac、$、\\(）。題目中第三個之後的分數，直接寫成「分子/分母」，帶分數寫成「整數 分子/分母」
+  - 例如題目「浩明吃了 1/8 個，柏森吃了 4/8 個，詩恩吃了 2/8 個，三人共吃了多少個？」→ 輸出「浩明吃了 [FRAC1] 個，柏森吃了 [FRAC2] 個，詩恩吃了 2/8 個，三人共吃了多少個？」（不可寫成 \\frac{2}{8}）
 - 分母（den1, den2）不可為 0
 - 如果題目是圖片，請從圖片中識別題目`,
   buildUserMessage: ({ question, toolKey }) => {
     const operation = toolKey.split("-")[1] ?? "";
     return `請從以下題目提取分數運算參數。工具類型：${operation}。題目：${question || "（見圖片）"}`;
   },
-  validate: (v) => {
+  validate: (v, ctx) => {
     if (v.den1 === 0 || v.den2 === 0) {
       throw new Error("分母不能為 0");
     }
@@ -110,9 +114,34 @@ const fractionOperation: Extractor = {
     if (v.operation === "div" && v.whole2 === 0 && v.num2 === 0) {
       throw new Error("除數不能為 0");
     }
-    return v;
+    return { ...v, questionTemplate: normalizeQuestionTemplate(v.questionTemplate, ctx.question) };
   },
 };
+
+/**
+ * 題目文字（questionTemplate）清理：工具只有兩組分數輸入框，所以 [FRAC1]/[FRAC2]
+ * 之外的分數會原樣留在文字裡。AI 很常把它們寫成 LaTeX（\frac{2}{8}），工具直接
+ * 顯示就會露出原始碼，所以這裡統一轉成純文字 2/8，交由工具渲染成堆疊分數。
+ *
+ * 另外，AI 偶爾會違規用 [FRAC3]、[FRAC4]（工具沒有對應的值）。這時按題目中分數
+ * 出現的順序回填文字，真的對不上才把佔位符去掉。
+ */
+function normalizeQuestionTemplate(template: string, question: string): string {
+  if (!template) return template;
+
+  let out = normalizeMathText(template);
+
+  if (/\[FRAC[3-9]\]/.test(out)) {
+    const fromQuestion = parseFractionsInText(question);
+    out = out.replace(/\[FRAC([3-9])\]/g, (_m, idx) => {
+      const f = fromQuestion[Number(idx) - 1];
+      if (!f) return "";
+      return f.whole > 0 ? `${f.whole} ${f.num}/${f.den}` : `${f.num}/${f.den}`;
+    });
+  }
+
+  return out;
+}
 
 // ---------- Fraction: 比較大小 ----------
 const fractionComparison: Extractor = {

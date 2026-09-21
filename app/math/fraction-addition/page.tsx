@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { renderWordProblemHtml } from "@/lib/math-word-problem";
 
 /**
  * 異分母分數加法 (Addition of fractions with unlike denominators).
@@ -1520,9 +1521,14 @@ export default function FractionAdditionPage() {
       if (currentWordProblemTemplate) {
         const frac1Html = `<b>${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}</b>`;
         const frac2Html = `<b>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</b>`;
-        wpEl.innerHTML = currentWordProblemTemplate
-          .replace(/\[FRAC1\]/g, frac1Html)
-          .replace(/\[FRAC2\]/g, frac2Html);
+        // [FRAC1]/[FRAC2] 用工具的兩組輸入值；題目若有第三個之後的分數（工具只算
+        // 兩個，其餘留在文字裡），renderWordProblemHtml 會把它們也畫成堆疊分數，
+        // 不會露出 \frac{2}{8} 這種原始寫法。
+        wpEl.innerHTML = renderWordProblemHtml(
+          currentWordProblemTemplate,
+          [frac1Html, frac2Html],
+          ({ whole, num, den }) => getDisplayHtml(whole, num, den, "var(--dark)")
+        );
         wpEl.style.display = "block";
       } else {
         wpEl.style.display = "none";

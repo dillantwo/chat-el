@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { renderWordProblemHtml } from "@/lib/math-word-problem";
 
 /**
  * 異分母分數減法 (Subtraction of fractions with unlike denominators).
@@ -1532,9 +1533,16 @@ export default function FractionSubtractionPage() {
 
       const wpEl = $e("word-problem")!;
       if (currentWordProblemTemplate) {
-        wpEl.innerHTML = currentWordProblemTemplate
-          .replace(/\[FRAC1\]/g, `<b>${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}</b>`)
-          .replace(/\[FRAC2\]/g, `<b>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</b>`);
+        // 題目若有第三個之後的分數（工具只算兩個），renderWordProblemHtml 會把
+        // 留在文字裡的分數也畫成堆疊分數，不會露出 \frac{2}{8} 這種原始寫法。
+        wpEl.innerHTML = renderWordProblemHtml(
+          currentWordProblemTemplate,
+          [
+            `<b>${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}</b>`,
+            `<b>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</b>`,
+          ],
+          ({ whole, num, den }) => getDisplayHtml(whole, num, den, "var(--dark)")
+        );
         wpEl.style.display = "block";
       } else wpEl.style.display = "none";
 

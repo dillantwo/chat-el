@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { renderWordProblemHtml } from "@/lib/math-word-problem";
 
 /**
  * 分數除法 (Division of fractions).
@@ -1197,7 +1198,13 @@ export default function FractionDivisionPage() {
       if (currentWordProblemTemplate) {
         const frac1Html = `<b>${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}</b>`;
         const frac2Html = `<b>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</b>`;
-        wpEl.innerHTML = currentWordProblemTemplate.replace(/\[FRAC1\]/g, frac1Html).replace(/\[FRAC2\]/g, frac2Html);
+        // 題目若有第三個之後的分數（工具只算兩個），renderWordProblemHtml 會把
+        // 留在文字裡的分數也畫成堆疊分數，不會露出 \frac{2}{8} 這種原始寫法。
+        wpEl.innerHTML = renderWordProblemHtml(
+          currentWordProblemTemplate,
+          [frac1Html, frac2Html],
+          ({ whole, num, den }) => getDisplayHtml(whole, num, den, "var(--dark)")
+        );
         wpEl.style.display = "block";
       } else {
         wpEl.style.display = "none";
