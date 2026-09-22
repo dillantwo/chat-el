@@ -206,15 +206,10 @@ export default function FractionConvertingPage() {
       contextMenu.style.top = y + "px";
     }
 
-    function setMode(mode: string) {
+    /** 只切換輸入框的顯示型態與按鈕高亮，不動數值。 */
+    function applyMode(mode: string) {
       const wholeInp = $i("inputWhole")!;
-      const numInp = $i("inputNum")!;
-      const denInp = $i("inputDen")!;
       const fracPart = $e("fractionPart")!;
-
-      wholeInp.value = "1";
-      numInp.value = "1";
-      denInp.value = "1";
 
       if (mode === "whole") {
         wholeInp.style.display = "block";
@@ -241,6 +236,52 @@ export default function FractionConvertingPage() {
           btn.style.boxShadow = "";
         }
       });
+    }
+
+    /**
+     * 目前畫面上的數值，換算成「共有幾個 1/den」。
+     * 隱藏的輸入框不算（整數模式看不到分數部分、分數模式看不到整數部分），
+     * 與 updateUI() 判定 actualW / actualN 的規則一致。
+     */
+    function readDisplayedValue() {
+      const wholeVisible = $e("inputWhole")!.style.display !== "none";
+      const fracVisible = $e("fractionPart")!.style.display !== "none";
+
+      let whole = parseInt($i("inputWhole")!.value, 10);
+      if (!Number.isFinite(whole) || whole < 0) whole = 0;
+      let num = parseInt($i("inputNum")!.value, 10);
+      if (!Number.isFinite(num) || num < 0) num = 0;
+      let den = parseInt($i("inputDen")!.value, 10);
+      if (!Number.isFinite(den) || den <= 0) den = 1;
+
+      const w = wholeVisible ? whole : 0;
+      const n = fracVisible ? num : 0;
+      return { total: w * den + n, den };
+    }
+
+    /**
+     * 切換型態時把目前的數值換算過去，而不是重設成 1。
+     * 這個工具的主題就是「互換」：帶分數 3 5/6 按「分數」應該變成假分數 23/6，
+     * 按「帶分數」再換回 3 5/6，分母保持不變。
+     */
+    function setMode(mode: string) {
+      const { total, den } = readDisplayedValue();
+
+      applyMode(mode);
+
+      if (mode === "whole") {
+        // 取整數部分（3 5/6 → 3）；不足 1 個單位時至少顯示 1，長條圖才畫得出來。
+        $i("inputWhole")!.value = String(Math.max(1, Math.floor(total / den)));
+      } else if (mode === "fraction") {
+        // 假分數：3 5/6 → 23/6
+        $i("inputNum")!.value = String(Math.max(1, total));
+        $i("inputDen")!.value = String(den);
+      } else {
+        // 帶分數：23/6 → 3 5/6（整除時分子為 0，解析區會提示可轉成整數）
+        $i("inputWhole")!.value = String(Math.floor(total / den));
+        $i("inputNum")!.value = String(total % den);
+        $i("inputDen")!.value = String(den);
+      }
 
       updateUI();
     }
@@ -513,7 +554,9 @@ export default function FractionConvertingPage() {
     const params = new URLSearchParams(window.location.search);
     const pMode = params.get("mode");
     if (pMode === "whole" || pMode === "fraction" || pMode === "mixed") {
-      setMode(pMode);
+      // 帶入題目的數值，不是使用者在切換型態，所以只調整顯示型態、不做換算
+      // （換算會用到還沒填進去的舊值）。
+      applyMode(pMode);
     }
     const pWhole = params.get("whole");
     if (pWhole !== null && pWhole !== "") $i("inputWhole")!.value = pWhole;
