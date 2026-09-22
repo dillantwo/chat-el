@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  Link2,
+  ExternalLink,
+  FileText,
   Loader2,
   Pencil,
   Plus,
@@ -33,7 +34,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SUBJECTS, SUBJECT_LABELS } from "@/lib/subjects";
-import { MATERIAL_AUDIENCE_LABELS, formatFileSize } from "@/lib/learning-materials";
+import {
+  MATERIAL_AUDIENCE_LABELS,
+  formatFileSize,
+  linkHost,
+  type MaterialKindValue,
+} from "@/lib/learning-materials";
 import { basePath } from "@/lib/utils";
 
 interface SchoolRow {
@@ -53,7 +59,9 @@ interface PoolMaterial {
   title: string;
   description: string;
   audience: string;
+  kind: MaterialKindValue;
   filename: string;
+  url: string;
   size: number;
 }
 
@@ -487,7 +495,7 @@ export default function AdminSchoolMaterialsPage() {
         <div className="space-y-4">
           {pool.length === 0 && (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              此科目的資源庫尚無資源，請先到「上傳資源」上傳，才能加入範本。
+              此科目的資源庫尚無資源，請先到「資源庫」上傳檔案或加入連結，才能加入範本。
             </p>
           )}
           {hasUnnamed && (
@@ -661,12 +669,21 @@ export default function AdminSchoolMaterialsPage() {
                       ) : (
                         group.materialIds.map((mid, mi) => {
                           const m = poolMap.get(mid);
+                          const isLink = m?.kind === "link";
+                          const KindIcon = isLink ? ExternalLink : FileText;
                           return (
                             <li
                               key={mid}
                               className="flex items-center gap-3 border-t border-[#eef1ee] px-5 py-3"
                             >
-                              <Link2 className="size-4 shrink-0 text-[#3aa0c9]" />
+                              {/* The icon is the fastest way to tell an uploaded
+                                  file from an external link in a long group. */}
+                              <KindIcon
+                                className={[
+                                  "size-4 shrink-0",
+                                  isLink ? "text-[#d97706]" : "text-[#3aa0c9]",
+                                ].join(" ")}
+                              />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="truncate text-[15px] font-medium text-[#16a34a]">
@@ -679,8 +696,10 @@ export default function AdminSchoolMaterialsPage() {
                                   )}
                                 </div>
                                 {m && (
-                                  <span className="text-xs text-[#8a938c]">
-                                    {m.filename} · {formatFileSize(m.size)}
+                                  <span className="block truncate text-xs text-[#8a938c]">
+                                    {isLink
+                                      ? linkHost(m.url)
+                                      : `${m.filename} · ${formatFileSize(m.size)}`}
                                   </span>
                                 )}
                               </div>
@@ -734,6 +753,7 @@ export default function AdminSchoolMaterialsPage() {
                         <SelectContent>
                           {available.map((p) => (
                             <SelectItem key={p.id} value={p.id}>
+                              {p.kind === "link" ? "🔗 " : ""}
                               {p.title}（{MATERIAL_AUDIENCE_LABELS[p.audience] ?? p.audience}）
                             </SelectItem>
                           ))}

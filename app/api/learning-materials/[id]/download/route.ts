@@ -49,7 +49,7 @@ export async function GET(
 
   await connectDB();
   const material = await LearningMaterial.findById(id)
-    .select({ fileId: 1, filename: 1, contentType: 1, size: 1, audience: 1, subject: 1 })
+    .select({ kind: 1, fileId: 1, filename: 1, contentType: 1, size: 1, audience: 1, subject: 1 })
     .lean();
 
   if (!material) {
@@ -76,6 +76,14 @@ export async function GET(
     if (!assigned) {
       return NextResponse.json({ error: "無權存取" }, { status: 403 });
     }
+  }
+
+  // A link resource has no stored bytes — the student page links straight to it,
+  // so reaching here means a stale page is asking for a download that never
+  // existed. Checked after the permission gates so this route never reveals more
+  // about a material than it would have anyway.
+  if (material.kind === "link" || !material.fileId) {
+    return NextResponse.json({ error: "這是外部連結，沒有可下載的檔案" }, { status: 404 });
   }
 
   const downloadStream = await openMaterialDownloadStream(

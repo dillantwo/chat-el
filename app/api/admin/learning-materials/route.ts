@@ -6,31 +6,16 @@ import { LearningMaterial, MATERIAL_AUDIENCES, type MaterialAudience } from "@/m
 import { ALL_SUBJECTS, type Subject } from "@/models/User";
 import { uploadMaterialFile, deleteMaterialFile } from "@/lib/gridfs";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
+import { parseLinkUrl, serializeMaterial } from "@/lib/learning-materials";
 
 export const runtime = "nodejs";
 
-function serialize(doc: {
-  _id: unknown;
-  subject: string;
-  title: string;
-  description?: string;
-  audience: string;
-  filename: string;
-  contentType: string;
-  size: number;
-  createdAt: Date;
-}) {
-  return {
-    id: String(doc._id),
-    subject: doc.subject,
-    title: doc.title,
-    description: doc.description ?? "",
-    audience: doc.audience,
-    filename: doc.filename,
-    contentType: doc.contentType,
-    size: doc.size,
-    createdAt: doc.createdAt,
-  };
+/** The fields a file and a link resource have in common. `null` when they pass. */
+function commonFieldError(subject: string, title: string, audience: string): string | null {
+  if (!ALL_SUBJECTS.includes(subject as Subject)) return "科目無效";
+  if (!title) return "標題不能為空";
+  if (!MATERIAL_AUDIENCES.includes(audience as MaterialAudience)) return "對象無效";
+  return null;
 }
 
 // GET /api/admin/learning-materials?subject=english — list pool resources.
@@ -48,16 +33,74 @@ export async function GET(req: NextRequest) {
   }
 
   const docs = await LearningMaterial.find(filter).sort({ createdAt: -1 }).lean();
-  return NextResponse.json(docs.map(serialize));
+  return NextResponse.json(docs.map(serializeMaterial));
 }
 
-// POST /api/admin/learning-materials — multipart upload of a new pool resource.
+/**
+ * POST /api/admin/learning-materials — add a resource to the pool.
+ *
+ * Two transports, because the two kinds carry different things: a file has to be
+ * multipart/form-data, while a link is just metadata and is posted as JSON like
+ * the rest of the admin API. The content type picks the branch rather than a
+ * `kind` field, so a JSON body can never be read as if it held a file.
+ */
 export async function POST(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: "需要管理員權限" }, { status: 403 });
   }
 
+  if ((req.headers.get("content-type") ?? "").includes("application/json")) {
+    return createLink(req, session.userId);
+  }
+  return createFile(req, session.userId);
+}
+
+/** Body: { subject, title, description?, audience?, url } */
+async function createLink(req: NextRequest, userId: string) {
+  try {
+    const body = await req.json();
+    const subject = (body.subject ?? "").toString().trim();
+    const title = (body.title ?? "").toString().trim();
+    const description = (body.description ?? "").toString().trim();
+    const audience = (body.audience ?? "both").toString().trim();
+
+    const invalid = commonFieldError(subject, title, audience);
+    if (invalid) {
+      return NextResponse.json({ error: invalid }, { status: 400 });
+    }
+
+    const link = parseLinkUrl((body.url ?? "").toString());
+    if (!link.ok) {
+      return NextResponse.json({ error: link.error }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const doc = await LearningMaterial.create({
+      subject,
+      title,
+      description,
+      audience,
+      kind: "link",
+      url: link.url,
+      // A link has no file half. Stored empty rather than left unset so the
+      // serialized shape is the same for both kinds.
+      filename: "",
+      contentType: "",
+      size: 0,
+      uploadedBy: userId,
+    });
+
+    return NextResponse.json(serializeMaterial(doc.toObject()), { status: 201 });
+  } catch (err) {
+    console.error("[admin/learning-materials:POST link]", err);
+    return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
+  }
+}
+
+/** Multipart fields: file, subject, title, description, audience */
+async function createFile(req: NextRequest, userId: string) {
   let fileId: mongoose.Types.ObjectId | null = null;
   try {
     const form = await req.formData();
@@ -77,14 +120,10 @@ export async function POST(req: NextRequest) {
         { status: 413 },
       );
     }
-    if (!ALL_SUBJECTS.includes(subject as Subject)) {
-      return NextResponse.json({ error: "科目無效" }, { status: 400 });
-    }
-    if (!title) {
-      return NextResponse.json({ error: "標題不能為空" }, { status: 400 });
-    }
-    if (!MATERIAL_AUDIENCES.includes(audience as MaterialAudience)) {
-      return NextResponse.json({ error: "對象無效" }, { status: 400 });
+
+    const invalid = commonFieldError(subject, title, audience);
+    if (invalid) {
+      return NextResponse.json({ error: invalid }, { status: 400 });
     }
 
     await connectDB();
@@ -98,18 +137,19 @@ export async function POST(req: NextRequest) {
       title,
       description,
       audience,
+      kind: "file",
       fileId,
       filename: file.name,
       contentType,
       size: file.size,
-      uploadedBy: session.userId,
+      uploadedBy: userId,
     });
 
-    return NextResponse.json(serialize(doc.toObject()), { status: 201 });
+    return NextResponse.json(serializeMaterial(doc.toObject()), { status: 201 });
   } catch (err) {
     // Roll back the orphaned GridFS file if metadata creation failed.
     if (fileId) await deleteMaterialFile(fileId);
-    console.error("[admin/learning-materials:POST]", err);
+    console.error("[admin/learning-materials:POST file]", err);
     return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
   }
 }

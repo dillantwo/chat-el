@@ -4,10 +4,14 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { LearningMaterial, MATERIAL_AUDIENCES, type MaterialAudience } from "@/models/LearningMaterial";
 import { MaterialTemplate } from "@/models/MaterialTemplate";
 import { deleteMaterialFile } from "@/lib/gridfs";
+import { parseLinkUrl, serializeMaterial } from "@/lib/learning-materials";
 
 export const runtime = "nodejs";
 
-// PATCH /api/admin/learning-materials/[id] — update metadata (not the file).
+// PATCH /api/admin/learning-materials/[id] — update metadata.
+// An uploaded file is immutable (delete and re-upload to replace it), but a
+// link's url can be corrected in place: that is the whole point of keeping links
+// in the pool, since the same link may be assigned to several templates.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,21 +43,20 @@ export async function PATCH(
     ) {
       material.audience = body.audience as MaterialAudience;
     }
+    if (typeof body.url === "string") {
+      if (material.kind !== "link") {
+        return NextResponse.json({ error: "檔案資源沒有連結網址" }, { status: 400 });
+      }
+      const link = parseLinkUrl(body.url);
+      if (!link.ok) {
+        return NextResponse.json({ error: link.error }, { status: 400 });
+      }
+      material.url = link.url;
+    }
 
     await material.save();
-    const obj = material.toObject();
 
-    return NextResponse.json({
-      id: String(obj._id),
-      subject: obj.subject,
-      title: obj.title,
-      description: obj.description ?? "",
-      audience: obj.audience,
-      filename: obj.filename,
-      contentType: obj.contentType,
-      size: obj.size,
-      createdAt: obj.createdAt,
-    });
+    return NextResponse.json(serializeMaterial(material.toObject()));
   } catch (err) {
     console.error("[admin/learning-materials/[id]:PATCH]", err);
     return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
@@ -79,7 +82,10 @@ export async function DELETE(
       return NextResponse.json({ error: "找不到教材" }, { status: 404 });
     }
 
-    await deleteMaterialFile(material.fileId);
+    // Links have no stored bytes; everything else about deleting them is the same.
+    if (material.fileId) {
+      await deleteMaterialFile(material.fileId);
+    }
     await material.deleteOne();
 
     // Drop the material from every template group that referenced it. The groups

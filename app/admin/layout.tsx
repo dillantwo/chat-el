@@ -22,7 +22,7 @@ const NAV = [
   { href: "/admin/users", label: "使用者管理", icon: Users, accent: "#ff6b00" },
   { href: "/admin/token-usage", label: "用量分析", icon: BarChart3, accent: "#ed52cb" },
   { href: "/admin/toolbox", label: "工具管理", icon: Wrench, accent: "#0891b2" },
-  { href: "/admin/materials", label: "上傳資源", icon: Library, accent: "#d97706" },
+  { href: "/admin/materials", label: "資源庫", icon: Library, accent: "#d97706" },
   { href: "/admin/school-materials", label: "學校資源", icon: FolderDown, accent: "#059669" },
   { href: "/admin/survey-links", label: "問卷範本", icon: ClipboardList, accent: "#e11d48" },
 ];

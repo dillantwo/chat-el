@@ -59,7 +59,16 @@ export async function GET(req: NextRequest) {
   // Resolve all referenced material ids in one query.
   const allIds = template.groups.flatMap((g: IMaterialGroup) => g.materials.map((m) => String(m)));
   const docs = await LearningMaterial.find({ _id: { $in: allIds }, subject })
-    .select({ title: 1, description: 1, audience: 1, filename: 1, contentType: 1, size: 1 })
+    .select({
+      title: 1,
+      description: 1,
+      audience: 1,
+      kind: 1,
+      filename: 1,
+      url: 1,
+      contentType: 1,
+      size: 1,
+    })
     .lean();
 
   const byId = new Map(docs.map((d) => [String(d._id), d]));
@@ -71,14 +80,18 @@ export async function GET(req: NextRequest) {
         .map((mid) => byId.get(String(mid)))
         .filter((d): d is NonNullable<typeof d> => Boolean(d))
         .filter((d) => isAudienceAllowed(session.role, d.audience as MaterialAudience))
+        // `.lean()` skips schema defaults, so a document written before links
+        // existed arrives with no `kind`; it is a file.
         .map((d) => ({
           id: String(d._id),
           title: d.title,
           description: d.description ?? "",
           audience: d.audience,
-          filename: d.filename,
-          contentType: d.contentType,
-          size: d.size,
+          kind: d.kind === "link" ? "link" : "file",
+          filename: d.filename ?? "",
+          url: d.url ?? "",
+          contentType: d.contentType ?? "",
+          size: d.size ?? 0,
         })),
     }))
     // Hide groups that end up empty for this role.

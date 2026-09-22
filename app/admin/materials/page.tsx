@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Download, ExternalLink, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,24 +32,22 @@ import {
 } from "@/components/ui/dialog";
 import { SUBJECTS, SUBJECT_LABELS } from "@/lib/subjects";
 import { SubjectBadge } from "@/components/admin/badges";
-import { MATERIAL_AUDIENCES, MATERIAL_AUDIENCE_LABELS, formatFileSize } from "@/lib/learning-materials";
+import {
+  MATERIAL_AUDIENCES,
+  MATERIAL_AUDIENCE_LABELS,
+  MATERIAL_KINDS,
+  MATERIAL_KIND_LABELS,
+  formatFileSize,
+  linkHost,
+  parseLinkUrl,
+  type MaterialDTO,
+  type MaterialKindValue,
+} from "@/lib/learning-materials";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 import { basePath } from "@/lib/utils";
 
-interface MaterialRow {
-  id: string;
-  subject: string;
-  title: string;
-  description: string;
-  audience: string;
-  filename: string;
-  contentType: string;
-  size: number;
-  createdAt: string;
-}
-
 export default function AdminMaterialsPage() {
-  const [materials, setMaterials] = useState<MaterialRow[]>([]);
+  const [materials, setMaterials] = useState<MaterialDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
   // filter
@@ -57,7 +55,7 @@ export default function AdminMaterialsPage() {
 
   // dialog
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<MaterialRow | null>(null);
+  const [editing, setEditing] = useState<MaterialDTO | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,7 +65,9 @@ export default function AdminMaterialsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audience, setAudience] = useState("both");
+  const [kind, setKind] = useState<MaterialKindValue>("file");
   const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState("");
 
   const loadMaterials = useCallback(async () => {
     setLoading(true);
@@ -91,19 +91,23 @@ export default function AdminMaterialsPage() {
     setTitle("");
     setDescription("");
     setAudience("both");
+    setKind("file");
     setFile(null);
+    setUrl("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
     setDialogOpen(true);
   }
 
-  function openEdit(m: MaterialRow) {
+  function openEdit(m: MaterialDTO) {
     setEditing(m);
     setSubject(m.subject);
     setTitle(m.title);
     setDescription(m.description);
     setAudience(m.audience);
+    setKind(m.kind);
     setFile(null);
+    setUrl(m.url);
     setError(null);
     setDialogOpen(true);
   }
@@ -113,24 +117,49 @@ export default function AdminMaterialsPage() {
     setError(null);
     try {
       if (editing) {
-        // Metadata-only update (the file itself is immutable once uploaded).
+        // Metadata-only update: an uploaded file is immutable once stored, but a
+        // link's url is metadata and can be corrected here.
+        const body: Record<string, string> = { title, description, audience };
+        if (editing.kind === "link") {
+          const link = parseLinkUrl(url);
+          if (!link.ok) {
+            setError(link.error);
+            return;
+          }
+          body.url = link.url;
+        }
         const res = await fetch(`${basePath}/api/admin/learning-materials/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, description, audience }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           setError(data.error ?? "儲存失敗");
           return;
         }
+      } else if (!title.trim()) {
+        setError("標題不能為空");
+        return;
+      } else if (kind === "link") {
+        const link = parseLinkUrl(url);
+        if (!link.ok) {
+          setError(link.error);
+          return;
+        }
+        const res = await fetch(`${basePath}/api/admin/learning-materials`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subject, title, description, audience, url: link.url }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error ?? "新增失敗");
+          return;
+        }
       } else {
         if (!file) {
           setError("請選擇要上傳的檔案");
-          return;
-        }
-        if (!title.trim()) {
-          setError("標題不能為空");
           return;
         }
         // Checked here as well as server-side: past this point the browser has
@@ -162,7 +191,7 @@ export default function AdminMaterialsPage() {
     }
   }
 
-  async function remove(m: MaterialRow) {
+  async function remove(m: MaterialDTO) {
     if (!confirm(`確定刪除「${m.title}」？此操作無法復原，並會從所有學校的分組中移除。`)) return;
     const res = await fetch(`${basePath}/api/admin/learning-materials/${m.id}`, {
       method: "DELETE",
@@ -179,13 +208,13 @@ export default function AdminMaterialsPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">上傳資源</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">資源庫</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            上傳各科的資源檔案到資源庫。上傳後，再到「學校資源」為個別學校分組並指派。
+            上傳各科的資源檔案，或加入指向外部網站的連結。加入後，再到「學校資源」為個別學校分組並指派。
           </p>
         </div>
         <Button onClick={openCreate}>
-          <Plus className="size-4" /> 上傳資源
+          <Plus className="size-4" /> 新增資源
         </Button>
       </div>
 
@@ -210,7 +239,7 @@ export default function AdminMaterialsPage() {
         </div>
       ) : materials.length === 0 ? (
         <p className="rounded-md border border-dashed py-16 text-center text-sm text-muted-foreground">
-          尚未上傳任何資源。
+          尚未加入任何資源。
         </p>
       ) : (
         <div className="overflow-hidden rounded-lg border bg-background">
@@ -220,7 +249,7 @@ export default function AdminMaterialsPage() {
                 <TableHead className="px-4">標題</TableHead>
                 <TableHead className="px-4">科目</TableHead>
                 <TableHead className="px-4">對象</TableHead>
-                <TableHead className="px-4">檔案</TableHead>
+                <TableHead className="px-4">內容</TableHead>
                 <TableHead className="px-4" />
               </TableRow>
             </TableHeader>
@@ -252,13 +281,29 @@ export default function AdminMaterialsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="px-4 py-3">
-                    <a
-                      href={`${basePath}/api/learning-materials/${m.id}/download`}
-                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                    >
-                      <Download className="size-3.5" />
-                      {formatFileSize(m.size)}
-                    </a>
+                    {/* One column for both kinds: what matters is where the
+                        content is, and each kind says that in its own terms. */}
+                    {m.kind === "link" ? (
+                      <a
+                        href={m.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={m.url}
+                        className="inline-flex max-w-[16rem] items-center gap-1.5 text-sm text-primary hover:underline"
+                      >
+                        <ExternalLink className="size-3.5 shrink-0" />
+                        <span className="truncate">{linkHost(m.url)}</span>
+                      </a>
+                    ) : (
+                      <a
+                        href={`${basePath}/api/learning-materials/${m.id}/download`}
+                        title={m.filename}
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                      >
+                        <Download className="size-3.5 shrink-0" />
+                        {formatFileSize(m.size)}
+                      </a>
+                    )}
                   </TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex justify-end gap-2">
@@ -285,26 +330,55 @@ export default function AdminMaterialsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? "編輯資源" : "上傳資源"}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? `編輯${MATERIAL_KIND_LABELS[editing.kind] ?? "資源"}`
+                : "新增資源"}
+            </DialogTitle>
           </DialogHeader>
 
           <DialogBody className="space-y-4">
             {!editing && (
-              <div className="space-y-2">
-                <Label>科目</Label>
-                <Select value={subject} onValueChange={(v) => setSubject(v as string)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue>{(v) => SUBJECT_LABELS[v as string] ?? "選擇科目"}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUBJECTS.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label>科目</Label>
+                  <Select value={subject} onValueChange={(v) => setSubject(v as string)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue>{(v) => SUBJECT_LABELS[v as string] ?? "選擇科目"}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUBJECTS.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Only offered at creation: switching an existing resource
+                    between the two would mean discarding its file or its url. */}
+                <div className="space-y-2">
+                  <Label>類型</Label>
+                  <Select
+                    value={kind}
+                    onValueChange={(v) => setKind(v as MaterialKindValue)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {(v) => MATERIAL_KIND_LABELS[v as string] ?? "選擇類型"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MATERIAL_KINDS.map((k) => (
+                        <SelectItem key={k.value} value={k.value}>
+                          {k.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
@@ -342,9 +416,27 @@ export default function AdminMaterialsPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {kind === "link" && (
+                <p className="text-xs text-muted-foreground">
+                  只影響學生／老師是否看到這個入口。連結本身仍在外部網站上，取得網址的人都打得開。
+                </p>
+              )}
             </div>
 
-            {editing ? (
+            {kind === "link" ? (
+              <div className="space-y-2">
+                <Label>連結網址</Label>
+                <Input
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://…"
+                  inputMode="url"
+                />
+                <p className="text-xs text-muted-foreground">
+                  必須是 https:// 開頭的網址。學生點擊後會在新視窗開啟。
+                </p>
+              </div>
+            ) : editing ? (
               <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                 目前檔案：{editing.filename}（{formatFileSize(editing.size)}）
                 <span className="mt-0.5 block text-xs">如需更換檔案，請刪除後重新上傳。</span>
@@ -376,10 +468,10 @@ export default function AdminMaterialsPage() {
             <Button onClick={save} disabled={saving}>
               {saving ? (
                 <Loader2 className="size-4 animate-spin" />
-              ) : editing ? null : (
+              ) : editing || kind === "link" ? null : (
                 <Upload className="size-4" />
               )}
-              {editing ? "儲存" : "上傳"}
+              {editing ? "儲存" : kind === "link" ? "新增" : "上傳"}
             </Button>
           </DialogFooter>
         </DialogContent>

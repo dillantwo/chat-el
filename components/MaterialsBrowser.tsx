@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Download,
+  ExternalLink,
   File as FileIcon,
   FileAudio,
   FileImage,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import Header from "@/components/Header";
 import type { SubjectValue } from "@/lib/subjects";
+import { linkHost } from "@/lib/learning-materials";
 import { basePath } from "@/lib/utils";
 
 interface MaterialItem {
@@ -22,7 +24,12 @@ interface MaterialItem {
   title: string;
   description: string;
   audience: string;
+  /** "file" is downloaded from this app; "link" opens someone else's site. */
+  kind: "file" | "link";
+  /** Files only. */
   filename: string;
+  /** Links only. */
+  url: string;
   contentType: string;
   size: number;
 }
@@ -50,32 +57,54 @@ const COPY = {
   zh: {
     groupNav: "資源分組",
     all: "全部",
-    fileCount: (n: number) => `${n} 個檔案`,
+    // "資源" rather than "檔案": a group may hold external links too.
+    itemCount: (n: number) => `${n} 個資源`,
     loading: "正在載入資源…",
     loadError: "無法載入學習資源，請稍後再試。",
-    empty: "這一科暫時還沒有可以下載的資源。",
+    empty: "這一科暫時還沒有學習資源。",
     download: "下載",
-    kinds: { image: "圖片", audio: "音訊", video: "影片", archive: "壓縮檔", file: "檔案" },
+    open: "開啟",
+    newWindow: "在新視窗開啟",
+    kinds: {
+      image: "圖片",
+      audio: "音訊",
+      video: "影片",
+      archive: "壓縮檔",
+      file: "檔案",
+      link: "連結",
+    },
   },
   en: {
     groupNav: "Resource groups",
     all: "All",
-    fileCount: (n: number) => `${n} ${n === 1 ? "file" : "files"}`,
+    itemCount: (n: number) => `${n} ${n === 1 ? "item" : "items"}`,
     loading: "Loading resources…",
     loadError: "Could not load the resources. Please try again later.",
-    empty: "There are no resources to download yet.",
+    empty: "There are no resources here yet.",
     download: "Download",
-    kinds: { image: "Image", audio: "Audio", video: "Video", archive: "Archive", file: "File" },
+    open: "Open",
+    newWindow: "opens in a new window",
+    kinds: {
+      image: "Image",
+      audio: "Audio",
+      video: "Video",
+      archive: "Archive",
+      file: "File",
+      link: "Link",
+    },
   },
 } as const;
 
 type Copy = (typeof COPY)[keyof typeof COPY];
 
+/** The badge text and glyph for one resource row. */
+type KindInfo = { label: string; Icon: typeof FileIcon };
+
 /**
  * File-type label + icon, picked from the extension first, then the MIME type.
  * Students recognise "PDF / Word / 圖片" faster than a generic file glyph.
  */
-function fileKind(item: MaterialItem, copy: Copy): { label: string; Icon: typeof FileIcon } {
+function fileKind(item: MaterialItem, copy: Copy): KindInfo {
   const ext = item.filename.split(".").pop()?.toLowerCase() ?? "";
   const type = item.contentType.toLowerCase();
 
@@ -104,12 +133,19 @@ function fileSize(bytes: number): string {
 }
 
 /**
- * Shared learning-material download browser used by every subject.
+ * Shared learning-resource browser used by every subject.
  *
  * The whole materials feature is subject-generic on the server
  * (`/api/learning-materials?subject=…` resolves the caller's school layout and
  * filters by role/audience), so a subject page only needs to pass its own
  * subject key plus the heading copy.
+ *
+ * A group holds two kinds of resource, listed together in the order the admin
+ * set: files, downloaded from this app through the permission-checked download
+ * route, and links, which open the external site in a new tab. They are listed
+ * together rather than split into sections because the admin's ordering is the
+ * teaching order, and where a resource happens to be hosted is not what a
+ * student is choosing between.
  *
  * Presentation notes: one blue palette for every subject (the subject accent is
  * intentionally *not* used here so downloads look and behave the same
@@ -120,7 +156,7 @@ export default function MaterialsBrowser({
   subject,
   backHref,
   backLabel,
-  heading = "學習資源下載",
+  heading = "學習資源",
   lang = "zh",
 }: MaterialsBrowserProps) {
   const copy = COPY[lang];
@@ -232,21 +268,34 @@ export default function MaterialsBrowser({
                         {group.name}
                       </h2>
                       <span className="shrink-0 text-[13px] font-medium text-[#546681]">
-                        {copy.fileCount(group.items.length)}
+                        {copy.itemCount(group.items.length)}
                       </span>
                     </div>
 
                     <ul className="space-y-2.5 p-3 sm:p-4">
                       {group.items.map((m) => {
-                        const { label: kindLabel, Icon } = fileKind(m, copy);
-                        const size = fileSize(m.size);
+                        const isLink = m.kind === "link";
+                        const { label: kindLabel, Icon }: KindInfo = isLink
+                          ? { label: copy.kinds.link, Icon: ExternalLink }
+                          : fileKind(m, copy);
+                        // A file states its size; a link states where it goes, so
+                        // a student knows before tapping that they are leaving.
+                        const meta = isLink ? linkHost(m.url) : fileSize(m.size);
                         return (
                           <li key={m.id}>
                             <a
-                              href={`${basePath}/api/learning-materials/${m.id}/download`}
-                              download={m.filename}
+                              href={
+                                isLink
+                                  ? m.url
+                                  : `${basePath}/api/learning-materials/${m.id}/download`
+                              }
+                              // A link goes to someone else's site: its own tab,
+                              // and no handle back into this one.
+                              {...(isLink
+                                ? { target: "_blank", rel: "noopener noreferrer" }
+                                : { download: m.filename })}
                               className="group flex min-h-[68px] items-center gap-3 rounded-[8px] border-2 border-[#dfe7f2] bg-white px-3 py-3 transition duration-200 hover:border-[#22304a] hover:shadow-[4px_4px_0_#bcd3ee] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3576cf] sm:gap-4 sm:px-4"
-                              title={m.filename}
+                              title={isLink ? m.url : m.filename}
                             >
                               <span
                                 aria-hidden="true"
@@ -268,13 +317,23 @@ export default function MaterialsBrowser({
                                   <span className="rounded-[3px] border border-[#c9dbf3] bg-[#eef4fc] px-1.5 py-0.5 font-semibold text-[#255fac]">
                                     {kindLabel}
                                   </span>
-                                  {size && <span>{size}</span>}
+                                  {meta && <span className="min-w-0 truncate">{meta}</span>}
                                 </span>
                               </span>
 
                               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[6px] border-2 border-[#22304a] bg-white px-3 py-2 text-[14px] font-semibold text-[#255fac] transition-colors group-hover:bg-[#3576cf] group-hover:text-white">
-                                <Download className="size-4" />
-                                <span className="hidden sm:inline">{copy.download}</span>
+                                {isLink ? (
+                                  <ExternalLink className="size-4" />
+                                ) : (
+                                  <Download className="size-4" />
+                                )}
+                                <span className="hidden sm:inline">
+                                  {isLink ? copy.open : copy.download}
+                                </span>
+                                {/* The label is hidden on narrow screens and an
+                                    icon has no accessible name, so state in text
+                                    that this one leaves the app. */}
+                                {isLink && <span className="sr-only">{copy.newWindow}</span>}
                               </span>
                             </a>
                           </li>

@@ -6,6 +6,7 @@ import { MaterialTemplate, type IMaterialGroup } from "@/models/MaterialTemplate
 import { LearningMaterial } from "@/models/LearningMaterial";
 import { School } from "@/models/School";
 import { ALL_SUBJECTS, type Subject } from "@/models/User";
+import type { MaterialKindValue } from "@/lib/learning-materials";
 
 export const runtime = "nodejs";
 
@@ -16,24 +17,31 @@ interface ResolvedMaterial {
   title: string;
   description: string;
   audience: string;
+  /** "file" or "link" — the editor labels the two differently. */
+  kind: MaterialKindValue;
   filename: string;
+  url: string;
   size: number;
 }
 
-/** Every material uploaded for a subject, i.e. what a group can draw from. */
+/** Every resource in a subject's pool, i.e. what a group can draw from. */
 async function loadPool(subject: string): Promise<ResolvedMaterial[]> {
   const docs = await LearningMaterial.find({ subject })
-    .select({ title: 1, description: 1, audience: 1, filename: 1, size: 1 })
+    .select({ title: 1, description: 1, audience: 1, kind: 1, filename: 1, url: 1, size: 1 })
     .sort({ createdAt: -1 })
     .lean();
 
+  // `.lean()` skips schema defaults, so documents written before links existed
+  // arrive with no `kind` at all; they are files.
   return docs.map((d) => ({
     id: String(d._id),
     title: d.title,
     description: d.description ?? "",
     audience: d.audience,
-    filename: d.filename,
-    size: d.size,
+    kind: d.kind === "link" ? "link" : "file",
+    filename: d.filename ?? "",
+    url: d.url ?? "",
+    size: d.size ?? 0,
   }));
 }
 
