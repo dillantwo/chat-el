@@ -260,24 +260,51 @@ export default function FractionConvertingPage() {
     }
 
     /**
+     * 切到「整數」前的完整數值。整數模式只有一個輸入框，3 5/6 只能顯示成 3，
+     * 分數部分無處可放；沒有記住它的話，切回帶分數只剩 3 0/6（分子變 0）。
+     * 使用者在整數模式沒有改過數值時，切回分數／帶分數就還原成原本的 3 5/6。
+     */
+    let valueBeforeWholeMode: { total: number; den: number } | null = null;
+
+    /**
      * 切換型態時把目前的數值換算過去，而不是重設成 1。
      * 這個工具的主題就是「互換」：帶分數 3 5/6 按「分數」應該變成假分數 23/6，
      * 按「帶分數」再換回 3 5/6，分母保持不變。
      */
     function setMode(mode: string) {
-      const { total, den } = readDisplayedValue();
+      const inWholeMode = $e("fractionPart")!.style.display === "none";
+      const current = readDisplayedValue();
+      const den = current.den;
+      let total = current.total;
+
+      if (mode === "whole") {
+        // 從分數／帶分數切進整數模式：記住完整數值。已經在整數模式就別覆蓋，
+        // 否則連按兩次「整數」會把原本的 3 5/6 記成 3。
+        if (!inWholeMode) valueBeforeWholeMode = { total, den };
+      } else if (
+        inWholeMode &&
+        valueBeforeWholeMode &&
+        valueBeforeWholeMode.den === den &&
+        // 整數值沒被改過（還是原數值的整數部分）才還原；使用者自己改了就照他的來
+        Math.floor(valueBeforeWholeMode.total / den) * den === total
+      ) {
+        total = valueBeforeWholeMode.total;
+        valueBeforeWholeMode = null;
+      } else {
+        valueBeforeWholeMode = null;
+      }
 
       applyMode(mode);
 
       if (mode === "whole") {
-        // 取整數部分（3 5/6 → 3）；不足 1 個單位時至少顯示 1，長條圖才畫得出來。
-        $i("inputWhole")!.value = String(Math.max(1, Math.floor(total / den)));
+        // 取整數部分：3 5/6 → 3
+        $i("inputWhole")!.value = String(Math.floor(total / den));
       } else if (mode === "fraction") {
         // 假分數：3 5/6 → 23/6
-        $i("inputNum")!.value = String(Math.max(1, total));
+        $i("inputNum")!.value = String(total);
         $i("inputDen")!.value = String(den);
       } else {
-        // 帶分數：23/6 → 3 5/6（整除時分子為 0，解析區會提示可轉成整數）
+        // 帶分數：23/6 → 3 5/6（數值本來就是整數時分子為 0，解析區會顯示「整數」）
         $i("inputWhole")!.value = String(Math.floor(total / den));
         $i("inputNum")!.value = String(total % den);
         $i("inputDen")!.value = String(den);
