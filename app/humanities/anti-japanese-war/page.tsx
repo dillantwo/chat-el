@@ -38,7 +38,7 @@ const parts: {
   },
   {
     id: "podcast",
-    label: "創建語音博客 (Podcast)",
+    label: "創建語音播客 (Podcast)",
     labelEn: "Voice Podcast",
     description:
       "當一次播客主持人，用你的聲音講述抗戰的故事，錄音會儲存起來，隨時可以重聽。",
@@ -88,7 +88,7 @@ export default function HumanitiesAntiJapaneseWarLandingPage() {
                 抗日戰爭
               </h1>
               <p className="max-w-2xl text-sm leading-7 text-[#5a5a5a]">
-                這個主題分成幾個部分：先透過互動網頁「認識香港歷史」了解抗戰時期香港的故事，用「香港抗戰文物徑互動地圖」探索身邊的歷史遺跡，錄製你自己的「語音博客」講述抗戰故事，也可以隨時與「抗戰歷史小嚮導」聊天，深入探索你感興趣的問題。
+                這個主題分成幾個部分：先透過互動網頁「認識香港歷史」了解抗戰時期香港的故事，用「香港抗戰文物徑互動地圖」探索身邊的歷史遺跡，錄製你自己的「語音播客」講述抗戰故事，也可以隨時與「抗戰歷史小嚮導」聊天，深入探索你感興趣的問題。
               </p>
             </section>
 

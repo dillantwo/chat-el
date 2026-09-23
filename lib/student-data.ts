@@ -239,7 +239,7 @@ export const STUDENT_DATA_CATALOG: StudentDataSubject[] = [
       },
       {
         key: "humanities-podcast",
-        label: "學生語音博客",
+        label: "學生語音播客",
         description: "抗日戰爭單元的錄音與文稿。",
         kind: "podcast",
         endpoint: "/api/humanities-podcast/teacher",
