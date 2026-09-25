@@ -19,10 +19,15 @@ const topics: TopicCard[] = [
     label: "AI 生成圖解",
     labelEn: "AI Diagram Generator",
     description: "AI生成互動或靜態的數學圖解。",
+    // A pupil cannot generate here — /api/generate-html is teacher-only — so the
+    // card describes what they can actually do: open a shared diagram and ask
+    // the AI 助手 about it.
+    studentDescription: "打開老師分享的數學圖解，動手試一試，也可以問 AI 助手。",
     href: "/math/diagram",
     icon: Sparkles,
     accent: "#16a34a",
     cta: "開始生成圖解",
+    studentCta: "打開圖解",
   },
   {
     id: "pre-post-test",

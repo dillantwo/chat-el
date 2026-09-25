@@ -29,6 +29,14 @@ export type TopicCard = {
   label: string;
   labelEn: string;
   description: string;
+  /**
+   * Copy for anyone who is not a teacher, when the topic is a different activity
+   * for them — e.g. AI 生成圖解, where a teacher authors diagrams and a pupil can
+   * only open the ones that were shared. Omitted means both roles read the same
+   * `description`, which is the case for every topic that behaves the same way
+   * for both.
+   */
+  studentDescription?: string;
   /** Where the card goes. Keep in step with the topic's `route` in lib/topics.ts. */
   href: string;
   icon: LucideIcon;
@@ -38,6 +46,8 @@ export type TopicCard = {
   hidden?: boolean;
   /** Overrides the button wording, e.g. for a downloads page. */
   cta?: string;
+  /** Button wording for non-teachers, paired with `studentDescription`. */
+  studentCta?: string;
   /**
    * Which band of the grid the card sits in: 課題 on top, 資源 underneath.
    * Omitted means 課題, so a new activity lands in the right place by default
@@ -133,6 +143,12 @@ export default function TopicPicker({
   const topicBand = visibleTopics.filter((t) => !isResourceCard(t));
   const resourceBand = visibleTopics.filter(isResourceCard);
 
+  // Only a teacher reads the authoring copy. Admins are held to the same
+  // read-only half as pupils by /api/generate-html and by the workspace itself
+  // (`isTeacher` there is also `role === "teacher"`), so they read the pupil
+  // wording rather than being promised something the server will refuse.
+  const teacherCopy = user?.role === "teacher";
+
   // Skeletons stand in the same two bands, so the headings don't jump into
   // place once /api/auth/me answers.
   const pendingCards = topics.filter((t) => !t.hidden);
@@ -144,9 +160,12 @@ export default function TopicPicker({
    * hand-placed tilts keep cycling rather than restarting at 資源.
    */
   function renderCard(topic: TopicCard, index: number) {
-    const { id, label, labelEn, description, href, icon: Icon, accent, cta } = topic;
+    const { id, label, labelEn, href, icon: Icon, accent } = topic;
     const available = topic.available !== false;
     const tilt = TILTS[index % TILTS.length];
+    const description =
+      !teacherCopy && topic.studentDescription ? topic.studentDescription : topic.description;
+    const cta = (!teacherCopy && topic.studentCta) || topic.cta;
 
     const inner = (
       <>
