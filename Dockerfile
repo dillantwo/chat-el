@@ -43,7 +43,7 @@ ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
 
-# ---- Tools (one-off maintenance scripts: backfill, seed, RAG ingest) ----
+# ---- Tools (one-off maintenance scripts: backfill, seed, migrations) ----
 # Deliberately the LAST stage and NOT on the runner's dependency chain, so
 # `docker compose build app` never builds it. It carries the full source plus
 # devDependencies (tsx) and skips `next build`, so it is cheap: the deps layer

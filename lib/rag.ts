@@ -78,6 +78,9 @@ const AEROSPACE_DESCRIPTION = `此信息適用於了解航天技術，包括：
 
 // 水資源 (water resources) — 人文科「4.2 地球是我家」→「4.2.1 地球與國家資源」。
 // Scope of the "water" index, mirroring the topics the persona prompt lists.
+// Currently unused: the water-resources entry in RAG_SOURCES below is commented
+// out while the topic is trialled without retrieval. Kept so re-enabling RAG is
+// a one-line change.
 const WATER_DESCRIPTION = `此資訊適用於小學人文科「水資源」及「國家安全」課題，包括：
 1. 人與水的關係
 2. 水的用途
@@ -100,10 +103,15 @@ const RAG_SOURCES: Record<string, RagSource> = {
   circuit: { index: "science", description: CIRCUIT_DESCRIPTION },
   // Science — 航天科技. Its own index, default namespace.
   aerospace: { index: "aerospace26", description: AEROSPACE_DESCRIPTION },
-  // Humanities — 水資源. The "water" index, default namespace. The persona in
+  // Humanities — 水資源. TEMPORARILY DISABLED: the topic is being trialled
+  // prompt-only, so retrieval is skipped and 「🥛小水文」 answers from its persona
+  // prompt alone. The vectors are still in Pinecone and untouched — uncomment
+  // the line below to reconnect. Nothing else needs to change.
+  //
+  // The "water" index, default namespace. The persona in
   // lib/humanities-prompts.ts keeps referring to the knowledge (document
   // stores) of "water"; this is that store.
-  "water-resources": { index: "water", description: WATER_DESCRIPTION },
+  // "water-resources": { index: "water", description: WATER_DESCRIPTION },
 };
 
 // ---------------------------------------------------------------------------
@@ -152,10 +160,10 @@ const MIN_SCORE = numFromEnv("RAG_MIN_SCORE", 0.3);
 const SCORE_RATIO = numFromEnv("RAG_SCORE_RATIO", 0.7);
 
 /**
- * Per-chunk character cap. Matches CHUNK_SIZE in scripts/ingest-rag.ts, so
- * chunks produced by that script pass through whole; it exists for stores that
- * were upserted elsewhere with much coarser chunking (the aerospace26 index
- * holds chunks over 3,000 characters).
+ * Per-chunk character cap. The knowledge bases are chunked and upserted outside
+ * this repo (in the Pinecone console), so chunk sizes vary per store — the
+ * aerospace26 index holds chunks over 3,000 characters. This cap keeps one
+ * coarse chunk from dominating the prompt budget.
  */
 const MAX_CHUNK_CHARS = numFromEnv("RAG_MAX_CHUNK_CHARS", 800);
 
