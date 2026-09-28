@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>香港抗日戰爭遺址互動地圖</title>
+<meta name="description" content="香港抗日戰爭遺址互動地圖：52 處港九大隊、東江縱隊、秘密大營救及抗日紀念設施，按地區分色標示，可點擊查看圖片與史料，並支援語音導覽。">
+<link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="assets/vendor/leaflet/MarkerCluster.css">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<a class="skip-link" href="#site-list">跳至遺址清單</a>
+
+<!-- ═══════════════ top bar ═══════════════ -->
+<header class="topbar">
+  <div class="topbar__brand">
+    <span class="topbar__star" aria-hidden="true">★</span>
+    <h1 class="topbar__title" data-i18n="appTitle">香港抗日戰爭遺址互動地圖</h1>
+  </div>
+
+  <nav class="districts" id="districtBar" data-i18n-label="districtBarLabel" aria-label="按地區篩選"></nav>
+
+  <div class="topbar__right">
+    <label class="voice" id="voiceWrap">
+      <span class="voice__text" data-i18n="voiceLabel">主語音開關</span>
+      <input type="checkbox" id="voiceToggle" class="voice__input">
+      <span class="voice__track" aria-hidden="true"><span class="voice__knob"></span></span>
+    </label>
+
+    <button type="button" class="bar-btn" id="btnMenu" aria-expanded="false" aria-controls="sidebar">
+      <span class="icon-list" aria-hidden="true"></span>
+      <span class="bar-btn__text" data-i18n="listLabel">清單與搜尋</span>
+    </button>
+
+    <button class="bar-btn bar-btn--icon" id="btnAbout" type="button" data-i18n-title="about" title="關於">
+      <span aria-hidden="true">?</span><span class="sr-only" data-i18n="about">關於</span>
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ═══════════════ map ═══════════════ -->
+  <main class="map-wrap">
+    <div id="map" role="application" aria-label="香港抗日戰爭遺址地圖"></div>
+
+    <div class="notice" id="notice" role="status" aria-live="polite" hidden>
+      <span class="notice__icon" aria-hidden="true">!</span>
+      <p class="notice__text" id="noticeText"></p>
+      <button type="button" class="notice__close" id="btnCloseNotice" aria-label="關閉提示">×</button>
+    </div>
+
+    <div class="map-tools" id="mapTools">
+      <button type="button" class="map-btn" id="btnFit" data-i18n-title="fitAll" title="顯示全部遺址">
+        <span aria-hidden="true">⤢</span><span class="sr-only">顯示全部遺址</span>
+      </button>
+      <button type="button" class="map-btn" id="btnLabels" data-i18n-title="toggleLabels" title="顯示／隱藏名稱">
+        <span aria-hidden="true">🏷</span><span class="sr-only">顯示或隱藏名稱</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- ═══════════════ list panel (slide-over) ═══════════════ -->
+  <aside class="sidebar" id="sidebar" aria-label="遺址清單及篩選">
+    <div class="sidebar__head">
+      <h2 class="sidebar__heading" data-i18n="listLabel">清單與搜尋</h2>
+      <button type="button" class="sidebar__close" id="btnCloseSidebar" aria-label="關閉">×</button>
+    </div>
+
+    <div class="sidebar__search">
+      <span class="sidebar__search-icon" aria-hidden="true">⌕</span>
+      <input type="search" id="search" autocomplete="off"
+             data-i18n-ph="searchPh" placeholder="搜尋遺址、地名、人物…"
+             aria-label="搜尋遺址">
+      <button type="button" class="sidebar__clear" id="btnClearSearch" hidden aria-label="清除搜尋">×</button>
+    </div>
+
+    <div class="filters">
+      <div class="filters__head">
+        <h3 class="filters__title" data-i18n="byCategory">按類別</h3>
+        <button type="button" class="btn-link" id="btnResetCat" data-i18n="all">全部</button>
+      </div>
+      <div class="chips" id="catChips"></div>
+    </div>
+
+    <p class="sidebar__count" id="resultCount" aria-live="polite"></p>
+
+    <ol class="site-list" id="site-list"></ol>
+
+    <p class="sidebar__credit">
+      <span id="creditLabel">史料來源：</span><a id="creditLink"
+         href="https://hk.waranddefence.museum/tc/web/mcd/interactive-map.html"
+         target="_blank" rel="noopener">香港海防博物館</a>
+    </p>
+  </aside>
+
+  <!-- ═══════════════ detail panel ═══════════════ -->
+  <section class="detail" id="detail" aria-labelledby="detailTitle" aria-hidden="true" tabindex="-1">
+    <button type="button" class="detail__close" id="btnCloseDetail" aria-label="關閉">×</button>
+
+    <div class="detail__scroll" id="detailScroll">
+      <figure class="detail__figure">
+        <img id="detailImg" alt="" loading="lazy" decoding="async">
+        <figcaption class="detail__figcap">
+          <span data-i18n="photoCredit">圖片：香港海防博物館</span>
+        </figcaption>
+      </figure>
+
+      <div class="detail__body">
+        <div class="detail__badges">
+          <span class="badge" id="detailDistBadge"></span>
+          <span class="badge badge--plain" id="detailCat"></span>
+          <button type="button" class="badge badge--voice" id="btnSpeak">
+            <span class="badge__icon" aria-hidden="true">🔊</span>
+            <span id="btnSpeakText" data-i18n="voicePlay">朗讀</span>
+          </button>
+        </div>
+
+        <h2 class="detail__title" id="detailTitle"></h2>
+        <p class="detail__subtitle" id="detailSub"></p>
+
+        <div class="detail__text" id="detailText"></div>
+
+        <dl class="detail__meta">
+          <dt data-i18n="coords">座標</dt>
+          <dd id="detailCoords"></dd>
+        </dl>
+
+        <div class="detail__actions">
+          <a class="btn" id="btnDirections" target="_blank" rel="noopener" data-i18n="openInMaps">在 Google 地圖開啟</a>
+          <a class="btn btn--ghost" id="btnSource" target="_blank" rel="noopener" data-i18n="readSource">博物館原文</a>
+        </div>
+      </div>
+    </div>
+
+    <nav class="detail__nav">
+      <button type="button" id="btnPrev" class="detail__navbtn">
+        <span aria-hidden="true">‹</span> <span data-i18n="prev">上一處</span>
+      </button>
+      <button type="button" id="btnNext" class="detail__navbtn">
+        <span data-i18n="next">下一處</span> <span aria-hidden="true">›</span>
+      </button>
+    </nav>
+  </section>
+</div>
+
+<!-- ═══════════════ lightbox ═══════════════ -->
+<div class="lightbox" id="lightbox" hidden>
+  <button type="button" class="lightbox__close" id="btnCloseLightbox" aria-label="關閉">×</button>
+  <img id="lightboxImg" alt="">
+  <p class="lightbox__cap" id="lightboxCap"></p>
+</div>
+
+<!-- ═══════════════ about dialog ═══════════════ -->
+<div class="modal" id="about" hidden>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button type="button" class="modal__close" id="btnCloseAbout" aria-label="關閉">×</button>
+    <h2 id="aboutTitle" data-i18n="aboutTitle">關於本地圖</h2>
+    <div class="modal__body" id="aboutBody"></div>
+  </div>
+</div>
+
+<script src="assets/vendor/leaflet/leaflet.js"></script>
+<script src="assets/vendor/leaflet/leaflet.markercluster.js"></script>
+<script src="assets/data/sites.js"></script>
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
