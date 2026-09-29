@@ -78,9 +78,7 @@ const AEROSPACE_DESCRIPTION = `此信息適用於了解航天技術，包括：
 
 // 水資源 (water resources) — 人文科「4.2 地球是我家」→「4.2.1 地球與國家資源」。
 // Scope of the "water" index, mirroring the topics the persona prompt lists.
-// Currently unused: the water-resources entry in RAG_SOURCES below is commented
-// out while the topic is trialled without retrieval. Kept so re-enabling RAG is
-// a one-line change.
+// Kept for when the "water-resources" entry in RAG_SOURCES is re-enabled.
 const WATER_DESCRIPTION = `此資訊適用於小學人文科「水資源」及「國家安全」課題，包括：
 1. 人與水的關係
 2. 水的用途
@@ -98,20 +96,39 @@ const WATER_DESCRIPTION = `此資訊適用於小學人文科「水資源」及�
 14. 節約用水及保護水資源的日常行動
 15. 水資源與國家安全（資源安全）的關係`;
 
+// 抗日戰爭 (War of Resistance) — 「中國人民抗日戰爭」及「香港保衛戰」。
+// Mirrors the 11 topic groups actually present in the "jap-war" index
+// (metadata field `topic_zh`), so the model knows the scope it may answer from.
+const JAP_WAR_DESCRIPTION = `此資訊適用於小學人文科「中國人民抗日戰爭」及「香港保衛戰」課題，包括：
+1. 概覽：為甚麼要學習香港抗戰歷史、香港抗日戰爭概覽
+2. 國家背景：九一八事變、七七事變與全面抗戰、抗戰勝利、9月3日抗戰勝利紀念日
+3. 戰前香港：香港支援內地抗戰、保衛中國同盟與一碗飯運動、八路軍駐香港辦事處、難民湧入香港、戰前的備戰工作、保衛香港的軍隊
+4. 香港保衛戰：香港保衛戰開始、城門碉堡失守、撤出九龍、日軍登陸香港島、黃泥涌峽激戰、黑色聖誕、陳策將軍突圍，以及奧士本准尉、鄭志平、加拿大士兵等人物
+5. 日佔時期生活：日本怎樣管治香港、區役所與居住證、米票配給、日本軍票、歸鄉政策、街道改名與日本化、日佔時期的學校、交通和燃料、戰俘營及赤柱拘留營、醫院在戰火中堅持
+6. 抗日與營救：東江縱隊港九大隊及其行動、秘密大營救及三條路線、營救國際友人、英軍服務團，以及烏蛟騰村民、沙頭角羅家、西貢村民、李石、鄧德安、楊竹南等人物事跡
+7. 香港重光：香港重光、港九大隊與日本投降、戰後重建與戰犯審判、重光紀念日假期的變化
+8. 時間線：戰爭前（1937至1941年）、香港保衛戰18天（1941年12月）、日佔至重光（1942至1945年）
+9. 歷史遺跡與考察：香港抗戰及海防博物館、香港歷史博物館、黃泥涌峽軍事遺址、城門碉堡、西灣國殤紀念墳場、烏蛟騰及西貢斬竹灣抗日英烈紀念碑、沙頭角抗戰紀念館（羅家大屋）、適廬與玫瑰小堂、東江縱隊文物徑（香港段）、和平紀念碑與大會堂紀念花園
+10. 關鍵詞解釋（如「三年零八個月」、「六兩四」、「軍票」等）
+11. 教學建議（教師參考）：課堂討論問題、延伸學習活動、處理敏感內容的建議、兒童讀物與延伸閱讀
+
+注意：部分內容標明「（教師參考）」，是給老師備課用的資料。回答學生時，這些資料只可用作背景理解，並須按角色設定中的安全規則處理，不可向學生描述血腥或殘酷的細節。`;
+
 const RAG_SOURCES: Record<string, RagSource> = {
   // Science — 電力及電路. Data lives in the "science" index, default namespace.
   circuit: { index: "science", description: CIRCUIT_DESCRIPTION },
   // Science — 航天科技. Its own index, default namespace.
   aerospace: { index: "aerospace26", description: AEROSPACE_DESCRIPTION },
-  // Humanities — 水資源. TEMPORARILY DISABLED: the topic is being trialled
-  // prompt-only, so retrieval is skipped and 「🥛小水文」 answers from its persona
-  // prompt alone. The vectors are still in Pinecone and untouched — uncomment
-  // the line below to reconnect. Nothing else needs to change.
-  //
-  // The "water" index, default namespace. The persona in
-  // lib/humanities-prompts.ts keeps referring to the knowledge (document
-  // stores) of "water"; this is that store.
+  // Humanities — 水資源. Temporarily disabled: the persona prompt now carries
+  // the 教師用書 reference answers inline, so retrieval added little beyond
+  // contradicting them (the index says 海水沖廁 where the handbook says
+  // 海水化淡). Uncomment to point the topic back at the "water" index.
   // "water-resources": { index: "water", description: WATER_DESCRIPTION },
+  // Humanities — 抗日戰爭. The "jap-war" index, default namespace (82 chunks,
+  // text under `chunk_text`). The persona in lib/humanities-prompts.ts keeps
+  // referring to the knowledge (document stores) of "Victory of the War of
+  // Resistance"; this is that store.
+  "anti-japanese-war": { index: "jap-war", description: JAP_WAR_DESCRIPTION },
 };
 
 // ---------------------------------------------------------------------------
@@ -341,9 +358,21 @@ export async function retrieveContext(
 
 // The chunk text may have been stored under a few common metadata keys
 // depending on how it was upserted. Try the usual suspects.
+//
+// A key that is missing from this list is a silent failure: the query still
+// returns its matches, every one of them extracts to "", `selectChunks` drops
+// them all, and the topic quietly falls back to prompt-only answers. The
+// "jap-war" index uses `chunk_text`, which is how that was found.
 function extractText(metadata: Record<string, unknown> | undefined): string {
   if (!metadata) return "";
-  const candidates = ["text", "content", "chunk", "page_content", "body"];
+  const candidates = [
+    "text",
+    "chunk_text",
+    "content",
+    "chunk",
+    "page_content",
+    "body",
+  ];
   for (const key of candidates) {
     const value = metadata[key];
     if (typeof value === "string" && value.trim()) {
