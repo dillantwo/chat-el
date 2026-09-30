@@ -16,6 +16,7 @@ export default function StaticResourceFrame({
   loadingLabel,
   backHref,
   backLabel,
+  showOpenLink = true,
 }: {
   /** Path under public/, starting with a slash, e.g. "/science/foo.html". */
   file: string;
@@ -23,6 +24,11 @@ export default function StaticResourceFrame({
   loadingLabel: string;
   backHref: string;
   backLabel: string;
+  /**
+   * Show the floating "在新分頁開啟" link. Turn off when the embedded resource
+   * has its own controls in the bottom corners that the link would cover.
+   */
+  showOpenLink?: boolean;
 }) {
   const [loaded, setLoaded] = useState(false);
   const src = `${basePath}${file}`;
@@ -48,15 +54,17 @@ export default function StaticResourceFrame({
           allowFullScreen
         />
 
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-[#d8d8d8] bg-white/90 px-3 py-1.5 text-xs font-medium text-[#5a5a5a] shadow-sm backdrop-blur transition hover:border-[#080808] hover:text-[#080808]"
-        >
-          <ExternalLink className="size-3.5" />
-          在新分頁開啟
-        </a>
+        {showOpenLink && (
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-[#d8d8d8] bg-white/90 px-3 py-1.5 text-xs font-medium text-[#5a5a5a] shadow-sm backdrop-blur transition hover:border-[#080808] hover:text-[#080808]"
+          >
+            <ExternalLink className="size-3.5" />
+            在新分頁開啟
+          </a>
+        )}
       </main>
     </>
   );

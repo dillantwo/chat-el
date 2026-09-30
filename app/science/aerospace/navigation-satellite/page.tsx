@@ -8,6 +8,7 @@ export default function ScienceAerospaceNavigationSatellitePage() {
       loadingLabel="正在載入「導航衛星尋寶小遊戲」…"
       backHref="/science/aerospace"
       backLabel="返回航天科技"
+      showOpenLink={false}
     />
   );
 }
