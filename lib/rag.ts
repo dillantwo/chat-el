@@ -78,7 +78,6 @@ const AEROSPACE_DESCRIPTION = `此信息適用於了解航天技術，包括：
 
 // 水資源 (water resources) — 人文科「4.2 地球是我家」→「4.2.1 地球與國家資源」。
 // Scope of the "water" index, mirroring the topics the persona prompt lists.
-// Kept for when the "water-resources" entry in RAG_SOURCES is re-enabled.
 const WATER_DESCRIPTION = `此資訊適用於小學人文科「水資源」及「國家安全」課題，包括：
 1. 人與水的關係
 2. 水的用途
@@ -119,11 +118,11 @@ const RAG_SOURCES: Record<string, RagSource> = {
   circuit: { index: "science", description: CIRCUIT_DESCRIPTION },
   // Science — 航天科技. Its own index, default namespace.
   aerospace: { index: "aerospace26", description: AEROSPACE_DESCRIPTION },
-  // Humanities — 水資源. Temporarily disabled: the persona prompt now carries
-  // the 教師用書 reference answers inline, so retrieval added little beyond
-  // contradicting them (the index says 海水沖廁 where the handbook says
-  // 海水化淡). Uncomment to point the topic back at the "water" index.
-  // "water-resources": { index: "water", description: WATER_DESCRIPTION },
+  // Humanities — 水資源. The "water" index, default namespace. The persona
+  // prompt also carries the 教師用書 reference answers inline and tells the
+  // model they win over retrieved chunks when the two disagree (the index says
+  // 海水沖廁 where the handbook says 海水化淡).
+  "water-resources": { index: "water", description: WATER_DESCRIPTION },
   // Humanities — 抗日戰爭. The "jap-war" index, default namespace (82 chunks,
   // text under `chunk_text`). The persona in lib/humanities-prompts.ts keeps
   // referring to the knowledge (document stores) of "Victory of the War of
