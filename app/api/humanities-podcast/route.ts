@@ -188,6 +188,44 @@ export async function POST(req: Request) {
   }
 }
 
+// Rename a saved recording. Only the title is touched, so the audio in GridFS
+// does not have to be re-uploaded.
+export async function PATCH(req: Request) {
+  try {
+    const session = await getSession();
+    if (!session) return unauthorized();
+
+    const denied = await requireTopicApi("humanities", "anti-japanese-war");
+    if (denied) return denied;
+
+    const { id, title } = (await req.json()) as { id?: string; title?: string };
+    const recordingId = id?.trim();
+    if (!recordingId) return badRequest("id is required");
+    if (typeof title !== "string") return badRequest("title is required");
+
+    await connectDB();
+    const doc = await PodcastRecording.findOneAndUpdate(
+      { userId: session.userId, recordingId },
+      { $set: { title: (title.trim() || "未命名播客").slice(0, 80) } },
+      { returnDocument: "after" },
+    ).lean<RecordingDoc | null>();
+    if (!doc) {
+      return new Response(JSON.stringify({ error: "找不到這個播客" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    return Response.json({ item: serialize(doc) });
+  } catch (error) {
+    console.error("[humanities-podcast] PATCH Error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 export async function DELETE(req: Request) {
   try {
     const session = await getSession();

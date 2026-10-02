@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  Check,
   Loader2,
   Mic,
+  Pencil,
   Podcast,
   Save,
   Square,
   Trash2,
+  X,
 } from "lucide-react";
 import Header from "@/components/Header";
 import { useAuth } from "@/components/AuthProvider";
@@ -93,6 +96,10 @@ export default function PodcastCreatorPage() {
   const [audioCache, setAudioCache] = useState<Record<string, string>>({});
   const [loadingAudioId, setLoadingAudioId] = useState<string>("");
   const [deletingId, setDeletingId] = useState<string>("");
+  const [editingId, setEditingId] = useState<string>("");
+  const [editTitle, setEditTitle] = useState("");
+  const [renamingId, setRenamingId] = useState<string>("");
+  const [renameError, setRenameError] = useState<string>("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -284,6 +291,54 @@ export default function PodcastCreatorPage() {
     }
   }, []);
 
+  const startEditing = useCallback((rec: RecordingMeta) => {
+    setEditingId(rec.id);
+    setEditTitle(rec.title);
+    setRenameError("");
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingId("");
+    setEditTitle("");
+    setRenameError("");
+  }, []);
+
+  const saveTitle = useCallback(
+    async (id: string) => {
+      setRenamingId(id);
+      setRenameError("");
+      try {
+        const res = await fetch(API, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, title: editTitle }),
+        });
+        const json = (await res.json().catch(() => null)) as {
+          item?: RecordingMeta;
+          error?: string;
+        } | null;
+        if (!res.ok || !json?.item) {
+          setRenameError(json?.error || "修改標題失敗，請稍後再試。");
+          return;
+        }
+        const updated = json.item;
+        setRecordings((prev) =>
+          prev.map((r) =>
+            r.id === id ? { ...r, title: updated.title, updatedAt: updated.updatedAt } : r,
+          ),
+        );
+        setEditingId("");
+        setEditTitle("");
+      } catch {
+        setRenameError("修改標題失敗，請檢查網絡後再試。");
+      } finally {
+        setRenamingId("");
+      }
+    },
+    [editTitle],
+  );
+
   const tooBig = recordedBlob ? recordedBlob.size > MAX_BLOB_BYTES : false;
 
   return (
@@ -456,28 +511,89 @@ export default function PodcastCreatorPage() {
                         className="rounded-[10px] border border-[#d8d8d8] bg-white p-4"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-base font-semibold tracking-tight">
-                              🎙️ {rec.title}
-                            </p>
+                          <div className="min-w-0 flex-1">
+                            {editingId === rec.id ? (
+                              <form
+                                className="flex items-center gap-2"
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  saveTitle(rec.id);
+                                }}
+                              >
+                                <input
+                                  type="text"
+                                  value={editTitle}
+                                  onChange={(e) => setEditTitle(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Escape") cancelEditing();
+                                  }}
+                                  maxLength={80}
+                                  autoFocus
+                                  aria-label="播客標題"
+                                  disabled={renamingId === rec.id}
+                                  className="min-w-0 flex-1 rounded-[6px] border border-[#d8d8d8] px-3 py-1.5 text-sm outline-none transition focus:border-[#080808] disabled:opacity-60"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={renamingId === rec.id}
+                                  aria-label="儲存標題"
+                                  className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-[#146ef5] transition hover:bg-[#eef4ff] disabled:opacity-50"
+                                >
+                                  {renamingId === rec.id ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <Check className="size-4" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelEditing}
+                                  disabled={renamingId === rec.id}
+                                  aria-label="取消修改"
+                                  className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#f2f2f2] hover:text-[#080808] disabled:opacity-50"
+                                >
+                                  <X className="size-4" />
+                                </button>
+                              </form>
+                            ) : (
+                              <p className="truncate text-base font-semibold tracking-tight">
+                                🎙️ {rec.title}
+                              </p>
+                            )}
+                            {editingId === rec.id && renameError && (
+                              <p className="mt-1 text-xs text-[#b42318]">{renameError}</p>
+                            )}
                             <p className="mt-0.5 text-xs text-[#ababab]">
                               時長 {formatTime(rec.durationSec)} · {formatBytes(rec.sizeBytes)} ·{" "}
                               {new Date(rec.updatedAt).toLocaleDateString("zh-HK")}
                             </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => deleteRecording(rec.id)}
-                            disabled={deletingId === rec.id}
-                            aria-label="刪除播客"
-                            className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#fef2f2] hover:text-[#ef4444] disabled:opacity-50"
-                          >
-                            {deletingId === rec.id ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="size-4" />
-                            )}
-                          </button>
+                          {editingId !== rec.id && (
+                            <div className="flex shrink-0 items-center">
+                              <button
+                                type="button"
+                                onClick={() => startEditing(rec)}
+                                aria-label="修改標題"
+                                title="修改標題"
+                                className="inline-flex items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#eef4ff] hover:text-[#146ef5]"
+                              >
+                                <Pencil className="size-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteRecording(rec.id)}
+                                disabled={deletingId === rec.id}
+                                aria-label="刪除播客"
+                                className="inline-flex items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#fef2f2] hover:text-[#ef4444] disabled:opacity-50"
+                              >
+                                {deletingId === rec.id ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {rec.script && (
