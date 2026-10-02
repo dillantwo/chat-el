@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 
 // Self-hosted static map app (public/humanities/heritage-trail-map/).
@@ -71,16 +71,6 @@ export default function HeritageTrailMapPage() {
           className="block h-full w-full flex-1 border-0"
           allow="fullscreen"
         />
-
-        <a
-          href={EMBED_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-[#d8d8d8] bg-white/90 px-3 py-1.5 text-xs font-medium text-[#5a5a5a] shadow-sm backdrop-blur transition hover:border-[#080808] hover:text-[#080808]"
-        >
-          <ExternalLink className="size-3.5" />
-          在新分頁開啟
-        </a>
       </main>
     </>
   );
