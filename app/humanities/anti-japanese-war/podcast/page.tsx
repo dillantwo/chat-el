@@ -311,7 +311,7 @@ export default function PodcastCreatorPage() {
               當一次小小播客主持人吧！用你的聲音講述抗戰的故事，錄好之後會儲存起來，隨時可以重聽。先想想要說什麼，準備好就按下錄音按鈕。✨
             </p>
             <div className="mt-4 rounded-[8px] border border-[#e5e5e5] bg-[#faf9f6] p-4">
-              <p className="text-sm font-semibold text-[#080808]">💡 播客主題點子</p>
+              <p className="text-sm font-semibold text-[#080808]">💡 播客主題例子</p>
               <ul className="mt-2 space-y-1.5 text-sm leading-6 text-[#5a5a5a]">
                 {SCRIPT_IDEAS.map((idea) => (
                   <li key={idea} className="flex gap-2">
