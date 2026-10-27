@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { GraduationCap, LayoutGrid, Loader2, Plus, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -48,9 +48,15 @@ interface ClassRow {
   studentCount: number;
 }
 
+interface MemberStats {
+  teachers: number;
+  students: number;
+}
+
 export default function ClassesPage() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [stats, setStats] = useState<MemberStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [filterSchool, setFilterSchool] = useState("");
@@ -71,8 +77,13 @@ export default function ClassesPage() {
     try {
       const params = new URLSearchParams();
       if (filterSchool) params.set("school", filterSchool);
-      const res = await fetch(`${basePath}/api/admin/classes?${params.toString()}`);
-      setClasses(res.ok ? await res.json() : []);
+      const query = params.toString();
+      const [classesRes, statsRes] = await Promise.all([
+        fetch(`${basePath}/api/admin/classes?${query}`),
+        fetch(`${basePath}/api/admin/classes/stats?${query}`),
+      ]);
+      setClasses(classesRes.ok ? await classesRes.json() : []);
+      setStats(statsRes.ok ? await statsRes.json() : null);
     } finally {
       setLoading(false);
     }
@@ -178,6 +189,52 @@ export default function ClassesPage() {
         <Button onClick={openCreate}>
           <Plus className="size-4" /> 新增班級
         </Button>
+      </div>
+
+      {/* Head-counts follow the school filter. Teachers and students are counted
+          once each, so they are not the column totals of the table below. */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            label: "班級",
+            value: classes.length,
+            Icon: LayoutGrid,
+            className: "border-l-indigo-500 text-indigo-700",
+            iconClass: "bg-indigo-50 text-indigo-600",
+          },
+          {
+            label: "老師",
+            value: stats?.teachers,
+            Icon: UserRound,
+            className: "border-l-violet-500 text-violet-700",
+            iconClass: "bg-violet-50 text-violet-600",
+          },
+          {
+            label: "學生",
+            value: stats?.students,
+            Icon: GraduationCap,
+            className: "border-l-teal-500 text-teal-700",
+            iconClass: "bg-teal-50 text-teal-600",
+          },
+        ].map(({ label, value, Icon, className, iconClass }) => (
+          <div
+            key={label}
+            className={`flex items-center gap-3 rounded-lg border border-l-4 bg-background px-4 py-3 ${className}`}
+          >
+            <span
+              aria-hidden
+              className={`flex size-9 items-center justify-center rounded-md ${iconClass}`}
+            >
+              <Icon className="size-5" strokeWidth={2.25} />
+            </span>
+            <div>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="text-2xl font-semibold tabular-nums">
+                {loading || value === undefined ? "—" : value.toLocaleString("en-US")}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
