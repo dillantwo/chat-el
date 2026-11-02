@@ -624,6 +624,10 @@ export default function FractionMultiplicationPage() {
     }
 
     function getDisplayHtml(w: number, n: number, d: number, color: string) {
+      // 純整數（例如題目的「2 公斤」）只顯示整數，不要顯示成 2 0/1。
+      if (w > 0 && n === 0) {
+        return `<span style="color:${color}; font-size:1.8rem; font-weight:bold; line-height:1;">${w}</span>`;
+      }
       if (w > 0) {
         return `<div style="display:inline-flex; align-items:center;">
                     <span style="color:${color}; font-size:1.8rem; font-weight:bold; margin-right:4px; line-height:1;">${w}</span>
@@ -1067,8 +1071,11 @@ export default function FractionMultiplicationPage() {
             thinLine.className = "abs-thin-line";
             thinLine.style.left = `${(k / (B * D)) * 100}%`;
             thinLine.style.height = "0%";
-            thinLine.style.borderLeft = "2px dashed var(--dark)";
-            thinLine.style.background = "transparent";
+            // 用固定間距的漸層畫虛線，不用 border dashed：瀏覽器會依線長重新分配 border 虛線的間距，
+            // 高度每長 1px 虛線就跳一次，往下長的動畫會一直閃。漸層從頂端固定，長高時只是多露出一段。
+            thinLine.style.width = "2px";
+            thinLine.style.background =
+              "repeating-linear-gradient(to bottom, var(--dark) 0 6px, transparent 6px 10px)";
             thinLine.style.transform = "translateX(-50%)";
             unit.appendChild(thinLine);
             dashedLines.push(thinLine);
@@ -1383,12 +1390,13 @@ export default function FractionMultiplicationPage() {
         return clamped;
       };
 
-      setInt("n1", "num1", 1, 10);
-      setInt("d1", "den1", 1, 10);
-      setInt("n2", "num2", 1, 10);
-      setInt("d2", "den2", 1, 10);
       const w1 = setInt("w1", "whole1", 0, 10);
       const w2 = setInt("w2", "whole2", 0, 10);
+      // 純整數（例如 2）以 whole=2、num=0 帶入，所以有整數部分時分子可以是 0。
+      setInt("n1", "num1", w1 > 0 ? 0 : 1, 10);
+      setInt("d1", "den1", 1, 10);
+      setInt("n2", "num2", w2 > 0 ? 0 : 1, 10);
+      setInt("d2", "den2", 1, 10);
       // 整數部分為 0 就留空，輸入框顯示 "0" 會誤導。
       if (w1 === 0) $i("w1")!.value = "";
       if (w2 === 0) $i("w2")!.value = "";

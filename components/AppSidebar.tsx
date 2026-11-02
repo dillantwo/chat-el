@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/components/AuthProvider";
 import { useToolbox, toolIconMap } from "@/contexts/ToolboxContext";
+import { describeStepNumbers } from "@/lib/math-tool-steps";
 import {
   Tooltip,
   TooltipContent,
@@ -86,6 +87,7 @@ function ToolItem({
   isActive,
   onClick,
   groupLabel,
+  detail,
 }: {
   toolKey: string;
   label: string;
@@ -95,6 +97,8 @@ function ToolItem({
   isActive: boolean;
   onClick: () => void;
   groupLabel?: string;
+  /** Second line under the label, e.g. a recommended step's numbers (1/4 + 3/8). */
+  detail?: string;
 }) {
   const Icon = toolIconMap[icon] ?? Variable;
   return (
@@ -122,11 +126,16 @@ function ToolItem({
             >
               <Icon className="size-3" strokeWidth={2.5} />
             </span>
-            <span className="truncate text-xs">
-              {groupLabel && (
-                <span className="text-muted-foreground">{groupLabel} · </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-xs">
+                {groupLabel && (
+                  <span className="text-muted-foreground">{groupLabel} · </span>
+                )}
+                {label}
+              </span>
+              {detail && (
+                <span className="truncate text-[10px] font-normal text-muted-foreground">{detail}</span>
               )}
-              {label}
             </span>
           </SidebarMenuSubButton>
       </TooltipTrigger>
@@ -148,7 +157,6 @@ export function AppSidebar() {
   const tools = toolbox?.tools ?? [];
   const selectedTool = toolbox?.selectedTool ?? null;
   const question = toolbox?.question ?? "";
-  const recommendedToolKeys = toolbox?.recommendedToolKeys ?? [];
   const isMathDashboard = pathname.startsWith('/math/dashboard');
   /** AI 生成圖解 — its own topic, with 圖解生成記錄 inline in this sidebar. */
   const isMathDiagram = pathname.startsWith('/math/diagram');
@@ -173,7 +181,12 @@ export function AppSidebar() {
   // Recommended tools may come from any group (e.g. 四則運算 vs 分數概念), so match
   // against every available tool, not just the current group's `tools`.
   const recommendCandidates = allToolGroups.length > 0 ? allToolGroups.flatMap((g) => g.tools) : tools;
-  const recommendedTools = recommendCandidates.filter((t) => recommendedToolKeys.includes(t.key));
+  const selectedStepIndex = toolbox?.selectedStepIndex ?? null;
+  // AI 拆好的解題步驟，依解題順序；同一個工具可以出現在多個步驟。
+  const recommendedSteps = (toolbox?.recommendedSteps ?? []).flatMap((step, index) => {
+    const tool = recommendCandidates.find((t) => t.key === step.toolKey);
+    return tool ? [{ step, index, tool }] : [];
+  });
   const [savedAiTools, setSavedAiTools] = useState<SavedAiTool[]>([]);
   /** The toolKey of the 圖解 the workspace currently has open, for highlighting. */
   const [activeDiagramKey, setActiveDiagramKey] = useState<string | null>(null);
@@ -508,21 +521,28 @@ export function AppSidebar() {
               <Sparkles className="size-3.5" />
               AI 推薦工具
             </SidebarGroupLabel>
-            {recommendedTools.length > 0 ? (
+            {recommendedSteps.length > 0 ? (
               <SidebarMenuSub>
-                {recommendedTools.map((t) => (
-                  <ToolItem
-                    key={t.key}
-                    toolKey={t.key}
-                    label={t.label}
-                    sub={t.sub}
-                    icon={t.icon}
-                    iconBg={t.iconBg}
-                    isActive={selectedTool === t.key}
-                    onClick={() => toolbox?.setSelectedTool(t.key)}
-                    groupLabel={toolGroupLabelMap[t.key]}
-                  />
-                ))}
+                {recommendedSteps.map(({ step, index, tool }) => {
+                  const numbers = describeStepNumbers(step);
+                  return (
+                    <ToolItem
+                      key={`${index}-${step.toolKey}`}
+                      toolKey={tool.key}
+                      label={tool.label}
+                      sub={[step.title, numbers].filter(Boolean).join(" ") || tool.sub}
+                      icon={tool.icon}
+                      iconBg={tool.iconBg}
+                      isActive={selectedTool === tool.key && selectedStepIndex === index}
+                      onClick={() => toolbox?.setSelectedTool(tool.key, index)}
+                      // 只有一個步驟時不標「步驟 1」，改回顯示工具分類（例如「四則運算」）
+                      groupLabel={
+                        recommendedSteps.length > 1 ? `步驟 ${index + 1}` : toolGroupLabelMap[tool.key]
+                      }
+                      detail={numbers}
+                    />
+                  );
+                })}
               </SidebarMenuSub>
             ) : isAnalyzingTools ? (
               <p className="text-xs text-muted-foreground px-2 py-1 animate-pulse">

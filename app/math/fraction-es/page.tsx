@@ -115,8 +115,8 @@ const STYLES = `
 .fes-root .divider-thin .anim-line,
 .fes-root .divider-anim-slot .anim-line{ position:absolute; top:0; left:0; width:100%; background:var(--grid-dark); }
 .fes-root .divider-thin .anim-line.anim-line-dashed,
-.fes-root .divider-anim-slot .anim-line.anim-line-dashed{ left:50%; width:0; transform:translateX(-50%);
-  border-left:2px dashed var(--grid-dark); background:transparent; }
+.fes-root .divider-anim-slot .anim-line.anim-line-dashed{ left:50%; width:2px; transform:translateX(-50%);
+  background:repeating-linear-gradient(to bottom, var(--grid-dark) 0 6px, transparent 6px 10px); }
 
 /* 約分 (simplify) sliding / merging overlay */
 .fes-root .simplify-anim-overlay{ display:block; }
@@ -126,6 +126,10 @@ const STYLES = `
 .fes-root .simplify-anim-overlay .simplify-abs-thick{ width:3px; height:100%; background:var(--grid-dark); z-index:4; }
 .fes-root .simplify-anim-overlay .simplify-removed-line,
 .fes-root .simplify-anim-overlay .simplify-retained-line{ width:1px; background:var(--grid-dark); z-index:3; }
+/* 約分：組內的線變成虛線，由下往上慢慢收回。
+   虛線用固定間距的漸層，不用 border dashed（border 的虛線間距會隨線長重新分配，動畫中會一直跳）。 */
+.fes-root .simplify-anim-overlay .simplify-dashed-line{ position:absolute; top:0; width:2px; transform:translateX(-50%);
+  background:repeating-linear-gradient(to bottom, var(--grid-dark) 0 6px, transparent 6px 10px); z-index:3; }
 
 /* number line */
 .fes-root .number-line-wrapper{ padding:0 2px; margin-top:5px; transition:width var(--bar-anim-duration,0.3s) ease; }
@@ -583,6 +587,40 @@ function FractionESInner() {
       );
     };
 
+    // 約分：每 groupSize 格合併成 1 格。組與組之間的界線保留為粗線，
+    // 組內的線一律先變成虛線，再由下往上慢慢收回（不再左右滑動）。
+    const applySimplifyGridAnimation = (
+      g: HTMLElement,
+      drawSegments: number,
+      groupSize: number,
+      timing: { animDurationMs: number },
+      generation: number,
+      onComplete: () => void,
+    ) => {
+      const groups = drawSegments / groupSize;
+      let html = '<div class="grid-overlay simplify-anim-overlay">';
+      for (let k = 1; k < groups; k++) {
+        html += `<div class="simplify-abs-thick" style="left:${(k / groups) * 100}%;"></div>`;
+      }
+      for (let i = 1; i < drawSegments; i++) {
+        if (i % groupSize === 0) continue;
+        html += `<div class="simplify-dashed-line" style="left:${(i / drawSegments) * 100}%; height:100%;"></div>`;
+      }
+      html += "</div>";
+      g.innerHTML = html;
+
+      // 先停留一下讓學生看到「變成虛線」，再開始往上收回
+      const holdMs = timing.animDurationMs * 0.3;
+      animTimeoutRef.current = window.setTimeout(() => {
+        if (generation !== genRef.current) return;
+        const lines = g.querySelectorAll(".simplify-dashed-line");
+        animateLineHeights(lines, 0, timing.animDurationMs, generation).then(() => {
+          if (generation !== genRef.current) return;
+          onComplete();
+        });
+      }, holdMs);
+    };
+
     const scheduleGridLineAnimation = (
       g: HTMLElement,
       o: Op,
@@ -680,11 +718,12 @@ function FractionESInner() {
       if (isSimplifyStep) {
         animTimeoutRef.current = window.setTimeout(() => {
           if (generation !== genRef.current) return;
-          applyMergeGridAnimation(g, drawSegments, fd, prevFd, generation, () => {
+          applySimplifyGridAnimation(g, drawSegments, fd, timing, generation, () => {
             if (generation !== genRef.current) return;
             const finalMaxGrid = dd2;
             const finalDrawSegments = Math.max(finalMaxGrid, Math.round(finalMaxGrid * (dn2 / dd2)));
-            g.innerHTML = buildGridHtml(finalDrawSegments, fd, o, false);
+            // 結束畫面與動畫最後一格一致：每條分隔線都是粗線，避免收回後線條突然變樣
+            g.innerHTML = buildGridHtml(finalDrawSegments, 1, o, false);
           });
         }, 50);
         return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useEffect, useState, useCallback } from "react";
+import { Suspense, useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useToolbox, type ToolFromDB } from "@/contexts/ToolboxContext";
+import { buildStepToolPath, describeStepNumbers, type MathToolStep } from "@/lib/math-tool-steps";
 import { basePath, stripTextModeLatex } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
@@ -140,8 +141,12 @@ interface DashboardSession {
   selectedTool?: string | null;
   /** Stored only while it matches the open tool, so its params survive the trip. */
   toolUrl?: string | null;
-  /** Cached so resuming doesn't pay for the recommendation call a second time. */
+  /** Written by older builds (keys only, no steps); still read on resume. */
   recommendedToolKeys?: string[];
+  /** Cached so resuming doesn't pay for the recommendation call a second time. */
+  recommendedSteps?: MathToolStep[];
+  /** Which recommended step the open tool came from (null = opened from 全部工具). */
+  selectedStepIndex?: number | null;
   /** The tool panels (volume/clock) restore their own transcript from these. */
   toolChatSessionIds?: Partial<Record<ToolChatKey, string>>;
 }
@@ -266,7 +271,7 @@ function MathDashboardContent() {
    */
   const canPersistRef = useRef(false);
   /** Tool recommendations carried over from the resumed session. */
-  const restoredRecommendationsRef = useRef<{ question: string; keys: string[] } | null>(null);
+  const restoredRecommendationsRef = useRef<{ question: string; steps: MathToolStep[] } | null>(null);
   const [toolChatSessionIds, setToolChatSessionIds] = useState<Record<"volume-cubes" | "clock-24hrs" | "clock-time-difference", string>>({
     "volume-cubes": createMathChatId(),
     "clock-24hrs": createMathChatId(),
@@ -417,12 +422,17 @@ function MathDashboardContent() {
       .catch(() => {});
   }, [type]);
 
-  // Fetch AI-recommended tools
-  const [recommendedToolKeys, setRecommendedToolKeys] = useState<string[]>([]);
+  // Fetch AI-recommended tools. The AI reads the whole question first and splits
+  // it into steps, each with its own tool and numbers (see lib/math-tool-steps).
+  const [recommendedSteps, setRecommendedSteps] = useState<MathToolStep[]>([]);
+  const recommendedToolKeys = useMemo(
+    () => [...new Set(recommendedSteps.map((s) => s.toolKey))],
+    [recommendedSteps]
+  );
   const [isAnalyzingTools, setIsAnalyzingTools] = useState(false);
   useEffect(() => {
     if (suppressHistoryAnalysisRef.current) {
-      setRecommendedToolKeys([]);
+      setRecommendedSteps([]);
       setIsAnalyzingTools(false);
       return;
     }
@@ -433,7 +443,7 @@ function MathDashboardContent() {
     // loads; it is dropped as soon as the question changes.
     const restoredRecommendations = restoredRecommendationsRef.current;
     if (restoredRecommendations && restoredRecommendations.question === question) {
-      setRecommendedToolKeys(restoredRecommendations.keys);
+      setRecommendedSteps(restoredRecommendations.steps);
       setIsAnalyzingTools(false);
       return;
     }
@@ -448,7 +458,7 @@ function MathDashboardContent() {
     const candidateTools = mathConfigs.flatMap((c) => c.tools);
 
     if (!question || candidateTools.length === 0) {
-      setRecommendedToolKeys([]);
+      setRecommendedSteps([]);
       setIsAnalyzingTools(false);
       return;
     }
@@ -465,10 +475,10 @@ function MathDashboardContent() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) setRecommendedToolKeys(data.recommendedKeys ?? []);
+        if (!cancelled) setRecommendedSteps(Array.isArray(data.steps) ? data.steps : []);
       })
       .catch(() => {
-        if (!cancelled) setRecommendedToolKeys([]);
+        if (!cancelled) setRecommendedSteps([]);
       })
       .finally(() => {
         if (!cancelled) setIsAnalyzingTools(false);
@@ -493,10 +503,20 @@ function MathDashboardContent() {
         question,
         questionImage,
         recommendedToolKeys,
+        recommendedSteps,
         isAnalyzingTools,
       });
     }
-  }, [register, toolboxConfig, allToolboxConfigs, question, questionImage, recommendedToolKeys, isAnalyzingTools]);
+  }, [register, toolboxConfig, allToolboxConfigs, question, questionImage, recommendedToolKeys, recommendedSteps, isAnalyzingTools]);
+
+  // The recommended step the open tool came from. Only counts while it still
+  // points at the open tool (the steps are replaced when the question changes).
+  const selectedStepIndex = toolbox?.selectedStepIndex ?? null;
+  const activeStep =
+    selectedStepIndex !== null && recommendedSteps[selectedStepIndex]?.toolKey === selectedTool
+      ? recommendedSteps[selectedStepIndex]
+      : null;
+  const activeStepPath = activeStep ? buildStepToolPath(activeStep) : null;
 
   // React to tool selection from sidebar
   useEffect(() => {
@@ -512,6 +532,15 @@ function MathDashboardContent() {
       suppressHistoryAnalysisRef.current = false;
       setIsExtractingParams(false);
       setPreviewUrl(restoredToolUrl);
+      return;
+    }
+
+    // Opened from a recommended step that already carries its own numbers: no
+    // need to have the AI re-read the whole question (which only ever picks up
+    // the first two numbers and gets multi-step questions wrong).
+    if (activeStepPath) {
+      setIsExtractingParams(false);
+      setPreviewUrl(`${basePath}${activeStepPath}`);
       return;
     }
 
@@ -649,11 +678,14 @@ function MathDashboardContent() {
           if (!cancelled) setPreviewUrl(`${basePath}/math/fraction-converting?${qs.toString()}`);
         } else if (fractionOpRoute) {
           const qs = new URLSearchParams();
-          // 分子默認 1（AI 回傳 0 通常代表純整數題目，0/1 顯示醜，改用 1）
-          qs.set("num1", String(params.num1 && params.num1 !== 0 ? params.num1 : 1));
+          // 分子為 0：有整數部分就是純整數（例如 2 → whole=2, num=0），保留 0；
+          // 沒有整數部分代表 AI 沒抓到這個數，改用 1 避免 0/1。
+          const safeNum = (num: unknown, whole: unknown) =>
+            typeof num === "number" && num > 0 ? num : typeof whole === "number" && whole > 0 ? 0 : 1;
+          qs.set("num1", String(safeNum(params.num1, params.whole1)));
           // 分母為 0 通常代表題目缺少對應分數，使用默認 1 避免除零
           qs.set("den1", String(params.den1 && params.den1 !== 0 ? params.den1 : 1));
-          qs.set("num2", String(params.num2 && params.num2 !== 0 ? params.num2 : 1));
+          qs.set("num2", String(safeNum(params.num2, params.whole2)));
           qs.set("den2", String(params.den2 && params.den2 !== 0 ? params.den2 : 1));
           if (params.whole1 != null) qs.set("whole1", String(params.whole1));
           if (params.whole2 != null) qs.set("whole2", String(params.whole2));
@@ -686,7 +718,7 @@ function MathDashboardContent() {
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [selectedTool, question, questionImage, toolPreviewRefreshKey]);
+  }, [selectedTool, question, questionImage, toolPreviewRefreshKey, activeStepPath]);
 
   // Resume the session that was open before the user navigated away. Runs once,
   // before anything can auto-send: the transcript comes back from the database
@@ -717,18 +749,29 @@ function MathDashboardContent() {
     if (stored.toolChatSessionIds) {
       setToolChatSessionIds((prev) => ({ ...prev, ...stored.toolChatSessionIds }));
     }
-    if (stored.recommendedToolKeys?.length) {
+    // Older snapshots only kept the keys; they come back as steps without numbers.
+    const storedSteps: MathToolStep[] = Array.isArray(stored.recommendedSteps)
+      ? stored.recommendedSteps
+      : (stored.recommendedToolKeys ?? []).map((toolKey) => ({
+          toolKey,
+          title: "",
+          operand1: null,
+          operand2: null,
+          convertMode: null,
+          context: null,
+        }));
+    if (storedSteps.length) {
       restoredRecommendationsRef.current = {
         question: storedQuestion,
-        keys: stored.recommendedToolKeys,
+        steps: storedSteps,
       };
-      setRecommendedToolKeys(stored.recommendedToolKeys);
+      setRecommendedSteps(storedSteps);
     }
     if (stored.selectedTool) {
       // The tool effect consumes this instead of running the parameter
       // extraction again, which would be a second needless model call.
       restoredToolUrlRef.current = stored.toolUrl ?? null;
-      toolbox?.setSelectedTool(stored.selectedTool);
+      toolbox?.setSelectedTool(stored.selectedTool, stored.selectedStepIndex ?? null);
     }
 
     // Hold the auto-send effect below while the transcript is in flight.
@@ -815,7 +858,8 @@ function MathDashboardContent() {
       chatId: currentChatId,
       selectedTool,
       toolUrl: isPreviewUrlForSelectedTool(previewUrl, selectedTool) ? previewUrl : null,
-      recommendedToolKeys,
+      recommendedSteps,
+      selectedStepIndex,
       toolChatSessionIds,
     });
   }, [
@@ -826,7 +870,8 @@ function MathDashboardContent() {
     previewUrl,
     question,
     questionImage,
-    recommendedToolKeys,
+    recommendedSteps,
+    selectedStepIndex,
     selectedTool,
     toolChatSessionIds,
     type,
@@ -1163,6 +1208,10 @@ function MathDashboardContent() {
     if (!canSubmitQuestion) return;
     suppressHistoryAnalysisRef.current = false;
     stopQuestionListening();
+    // The steps belong to the old question; keep the open tool but detach it.
+    if (toolbox?.selectedStepIndex != null) {
+      toolbox.setSelectedTool(toolbox.selectedTool, null);
+    }
 
     setIsClassifying(true);
 
@@ -1271,6 +1320,20 @@ function MathDashboardContent() {
                     {question}
                   </ReactMarkdown>
                 </div>
+                {/* 只有一個步驟時不顯示「步驟 1 / 1」，題目本身就是這一步 */}
+                {activeStep && selectedStepIndex !== null && recommendedSteps.length > 1 && (
+                  <p className="mx-auto mt-2 max-w-3xl text-center text-sm text-[#146ef5]">
+                    <span className="font-semibold">
+                      步驟 {selectedStepIndex + 1} / {recommendedSteps.length}
+                    </span>
+                    {activeStep.title && <span>：{activeStep.title}</span>}
+                    {describeStepNumbers(activeStep) && (
+                      <span className="ml-2 rounded bg-[#146ef5]/10 px-1.5 py-0.5 font-medium">
+                        {describeStepNumbers(activeStep)}
+                      </span>
+                    )}
+                  </p>
+                )}
               </div>
             )}
 

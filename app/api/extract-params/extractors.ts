@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { normalizeMathText, parseFractionsInText } from "@/lib/math-word-problem";
+import {
+  findNumbersInText,
+  normalizeMathText,
+  parseFractionsInText,
+  type FractionParts,
+  type NumberToken,
+} from "@/lib/math-word-problem";
 
 /**
  * 参数提取器注册表
@@ -76,12 +82,12 @@ const fractionExpandingSimplifying: Extractor = {
 // ---------- Fraction: 加 / 减 / 乘 / 除 ----------
 const fractionOperation: Extractor = {
   schema: z.object({
-    whole1: z.number().int().min(0).describe("第一個數的整數部分（真分數為 0）"),
-    num1: z.number().int().describe("第一個數的分子"),
-    den1: z.number().int().describe("第一個數的分母"),
-    whole2: z.number().int().min(0).describe("第二個數的整數部分"),
-    num2: z.number().int().describe("第二個數的分子"),
-    den2: z.number().int().describe("第二個數的分母"),
+    whole1: z.number().int().min(0).describe("第一個數的整數部分（真分數為 0；純整數就是該整數）"),
+    num1: z.number().int().describe("第一個數的分子（純整數時為 0）"),
+    den1: z.number().int().describe("第一個數的分母（純整數時為 1）"),
+    whole2: z.number().int().min(0).describe("第二個數的整數部分（真分數為 0；純整數就是該整數）"),
+    num2: z.number().int().describe("第二個數的分子（純整數時為 0）"),
+    den2: z.number().int().describe("第二個數的分母（純整數時為 1）"),
     operation: z.enum(["add", "sub", "mul", "div"]).describe("運算類型"),
     contextText: z.string().describe("題目情境描述（簡短）"),
     unit: z.string().describe("單位，如 L、kg、cm，沒有就留空"),
@@ -92,12 +98,18 @@ const fractionOperation: Extractor = {
 注意事項：
 - 帶分數要拆成整數部分和分數部分，例如 3⅝ → whole1=3, num1=5, den1=8
 - 如果是真分數（沒有整數部分），whole 設為 0
+- 純整數：whole=該整數, num=0, den=1，例如 2 → whole=2, num=0, den=1
+- 只有整數和分數緊連在一起（例如 2 1/4、2又1/4、2¼）才是帶分數。題目中分開出現的數字是不同的數，絕對不可合併成帶分數
+  - 例如「雜豆 2 公斤，紅豆 1/4 公斤」是 2 和 1/4 兩個數，不是 2¼
 - 運算符：add=加法, sub=減法, mul=乘法, div=除法
 - 如果題目是應用題，提取其中的數學運算部分
+- 工具一次只能算兩個數。題目有超過兩個數時，取第一步運算的兩個數（通常是題目中最先出現的兩個數），其餘的數原樣留在 questionTemplate
+  - 例如「現有雜豆 2 公斤，紅豆有 1/4 公斤，綠豆有 3/8 公斤，餘下的是黃豆，黃豆有多少公斤？」→ whole1=2, num1=0, den1=1, whole2=0, num2=1, den2=4, questionTemplate=「現有雜豆 [FRAC1] 公斤，紅豆有 [FRAC2] 公斤，綠豆有 3/8 公斤，餘下的是黃豆，黃豆有多少公斤？」
 - contextText 是題目的情境描述（例如「店員把橙汁倒進玻璃杯」），用於在練習工具中顯示
 - unit 是題目中使用的單位（例如 L、kg、cm），如果沒有單位就留空
 - questionTemplate 是題目的完整文字，但把第一個分數（含帶分數）替換成 [FRAC1]、第二個分數替換成 [FRAC2]；若題目只有一個分數，第二處用 [FRAC2] 佔位；例如原題「½ 的橙汁可以倒滿一杯，倒半杯需要多少橙汁？」→ 輸出「[FRAC1] 的橙汁可以倒滿一杯，倒半杯需要多少橙汁？」
 - questionTemplate 只能使用 [FRAC1] 和 [FRAC2] 兩個佔位符，不要出現 [FRAC3]、[FRAC4]
+- questionTemplate 要保留題目原本的文字和單位（例如「公斤」），不要刪改
 - questionTemplate 必須是純文字，不可使用 LaTeX（不要出現 \\frac、$、\\(）。題目中第三個之後的分數，直接寫成「分子/分母」，帶分數寫成「整數 分子/分母」
   - 例如題目「浩明吃了 1/8 個，柏森吃了 4/8 個，詩恩吃了 2/8 個，三人共吃了多少個？」→ 輸出「浩明吃了 [FRAC1] 個，柏森吃了 [FRAC2] 個，詩恩吃了 2/8 個，三人共吃了多少個？」（不可寫成 \\frac{2}{8}）
 - 分母（den1, den2）不可為 0
@@ -107,16 +119,121 @@ const fractionOperation: Extractor = {
     return `請從以下題目提取分數運算參數。工具類型：${operation}。題目：${question || "（見圖片）"}`;
   },
   validate: (v, ctx) => {
-    if (v.den1 === 0 || v.den2 === 0) {
+    const [op1, op2] = repairOperands(
+      [
+        normalizeOperand({ whole: v.whole1, num: v.num1, den: v.den1 }),
+        normalizeOperand({ whole: v.whole2, num: v.num2, den: v.den2 }),
+      ],
+      ctx.question
+    );
+
+    if (op1.den === 0 || op2.den === 0) {
       throw new Error("分母不能為 0");
     }
     // 除法：除數不能為 0（whole2 + num2/den2 == 0）
-    if (v.operation === "div" && v.whole2 === 0 && v.num2 === 0) {
+    if (v.operation === "div" && op2.whole === 0 && op2.num === 0) {
       throw new Error("除數不能為 0");
     }
-    return { ...v, questionTemplate: normalizeQuestionTemplate(v.questionTemplate, ctx.question) };
+
+    return {
+      ...v,
+      whole1: op1.whole,
+      num1: op1.num,
+      den1: op1.den,
+      whole2: op2.whole,
+      num2: op2.num,
+      den2: op2.den,
+      questionTemplate:
+        buildTemplateFromQuestion(op1, op2, ctx.question) ??
+        normalizeQuestionTemplate(v.questionTemplate, ctx.question),
+    };
   },
 };
+
+type Operand = FractionParts;
+
+const isWholeNumber = (o: Operand) => o.whole > 0 && o.num === 0;
+
+/** 純整數統一成 whole=N, num=0, den=1（AI 偶爾會回 N/1 或 den=0）。 */
+function normalizeOperand(o: Operand): Operand {
+  if (o.whole === 0 && o.den === 1 && o.num > 0) return { whole: o.num, num: 0, den: 1 };
+  if (o.whole > 0 && o.num === 0) return { whole: o.whole, num: 0, den: 1 };
+  return o;
+}
+
+function sameNumber(token: NumberToken, o: Operand): boolean {
+  if (isWholeNumber(o)) return token.kind === "integer" && token.whole === o.whole;
+  return (
+    token.kind === "fraction" &&
+    token.whole === o.whole &&
+    token.num === o.num &&
+    token.den === o.den
+  );
+}
+
+/**
+ * 修正 AI 把「分開的整數 + 分數」誤併成帶分數的情況。
+ *
+ * 題目「現有雜豆 2 公斤，紅豆有 1/4 公斤，綠豆有 3/8 公斤」裡 2 是純整數，舊版
+ * schema 沒說明整數怎麼表示，AI 就回 2¼ 和 3/8，工具顯示成 2¼ − 3/8。
+ * 如果 AI 回的帶分數 W n/d 在題目文字裡不存在，但題目裡有獨立整數 W、緊接著
+ * 下一個數就是 n/d，就把它拆回 W 和 n/d 兩個數，依序取前兩個。
+ */
+function repairOperands(ops: [Operand, Operand], question: string): [Operand, Operand] {
+  const tokens = findNumbersInText(normalizeMathText(question ?? ""));
+  if (tokens.length === 0) return ops;
+
+  const expanded: Operand[] = [];
+  for (const o of ops) {
+    if (o.whole > 0 && o.num > 0 && !tokens.some((t) => sameNumber(t, o))) {
+      const i = tokens.findIndex(
+        (t, idx) =>
+          t.kind === "integer" &&
+          t.whole === o.whole &&
+          tokens[idx + 1] !== undefined &&
+          sameNumber(tokens[idx + 1], { whole: 0, num: o.num, den: o.den })
+      );
+      if (i >= 0) {
+        expanded.push({ whole: o.whole, num: 0, den: 1 }, { whole: 0, num: o.num, den: o.den });
+        continue;
+      }
+    }
+    expanded.push(o);
+  }
+
+  return [expanded[0], expanded[1]];
+}
+
+/**
+ * 直接用老師輸入的題目文字當 questionTemplate：把兩個運算數在題目中的位置換成
+ * [FRAC1] / [FRAC2]。這樣題目原本的文字和單位都會保留，不靠 AI 改寫。
+ * 對不上（圖片題、AI 回的數字題目裡沒有、題目含其他 LaTeX 指令）就回傳 null，
+ * 改用 AI 的 questionTemplate。
+ */
+function buildTemplateFromQuestion(op1: Operand, op2: Operand, question: string): string | null {
+  if (!question) return null;
+  const text = normalizeMathText(question);
+  // 還有其他 LaTeX 指令（\times 之類）時，交給 AI 的版本
+  if (/\\[a-zA-Z]/.test(text)) return null;
+
+  const tokens = findNumbersInText(text);
+  const i1 = tokens.findIndex((t) => sameNumber(t, op1));
+  if (i1 < 0) return null;
+  const i2 = tokens.findIndex((t, idx) => idx !== i1 && sameNumber(t, op2));
+  if (i2 < 0) return null;
+
+  // 從後面往前換，前面的 index 才不會跑掉
+  const replacements = [
+    { token: tokens[i1], placeholder: "[FRAC1]" },
+    { token: tokens[i2], placeholder: "[FRAC2]" },
+  ].sort((a, b) => b.token.index - a.token.index);
+
+  let out = text;
+  for (const { token, placeholder } of replacements) {
+    out = out.slice(0, token.index) + placeholder + out.slice(token.index + token.length);
+  }
+  return out;
+}
 
 /**
  * 題目文字（questionTemplate）清理：工具只有兩組分數輸入框，所以 [FRAC1]/[FRAC2]

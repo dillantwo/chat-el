@@ -64,6 +64,57 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
+/** 獨立的整數（不屬於分數、小數或日期的一部分），例如「雜豆 2 公斤」的 2。 */
+const PLAIN_INTEGER = /(?<![\d./\u2044\uFF0F])\d{1,4}(?![\d./\u2044\uFF0F])/g;
+
+export type NumberToken = FractionParts & {
+  kind: "fraction" | "integer";
+  /** 在（已 normalizeMathText 的）文字中的起始位置 */
+  index: number;
+  length: number;
+};
+
+/**
+ * 找出文字裡所有數值（分數、帶分數、獨立整數），依出現順序回傳。
+ * 傳入的文字應先經過 normalizeMathText()，index 才會對得上。
+ * 整數以 whole=整數、num=0、den=1 表示。
+ */
+export function findNumbersInText(text: string): NumberToken[] {
+  if (!text) return [];
+  const tokens: NumberToken[] = [];
+
+  for (const m of text.matchAll(PLAIN_FRACTION)) {
+    const den = parseInt(m[3], 10);
+    if (!den) continue;
+    tokens.push({
+      kind: "fraction",
+      index: m.index ?? 0,
+      length: m[0].length,
+      whole: m[1] ? parseInt(m[1], 10) : 0,
+      num: parseInt(m[2], 10),
+      den,
+    });
+  }
+
+  const fractionSpans = tokens.map((t) => [t.index, t.index + t.length] as const);
+  for (const m of text.matchAll(PLAIN_INTEGER)) {
+    const start = m.index ?? 0;
+    const end = start + m[0].length;
+    // 帶分數的整數部分（2 1/4 的 2）已經算在分數裡
+    if (fractionSpans.some(([s, e]) => start < e && end > s)) continue;
+    tokens.push({
+      kind: "integer",
+      index: start,
+      length: m[0].length,
+      whole: parseInt(m[0], 10),
+      num: 0,
+      den: 1,
+    });
+  }
+
+  return tokens.sort((a, b) => a.index - b.index);
+}
+
 /** 找出文字裡所有純文字分數，依出現順序回傳。 */
 export function parseFractionsInText(text: string): FractionParts[] {
   if (!text) return [];

@@ -23,6 +23,7 @@ import {
   Repeat,
   type LucideIcon,
 } from "lucide-react";
+import type { MathToolStep } from "@/lib/math-tool-steps";
 
 export interface ToolFromDB {
   key: string;
@@ -64,13 +65,17 @@ interface ToolboxData {
   question: string;
   questionImage: string | null;
   recommendedToolKeys: string[];
+  /** AI 拆解出的解題步驟，每一步對應一個工具和這一步的數字。 */
+  recommendedSteps: MathToolStep[];
   /** True while the AI is still analyzing the question for tool recommendations. */
   isAnalyzingTools: boolean;
 }
 
 interface ToolboxContextValue extends ToolboxData {
   selectedTool: string | null;
-  setSelectedTool: (key: string | null) => void;
+  /** 從「AI 推薦工具」的步驟開啟時是步驟的 index；從「全部工具」開啟時為 null。 */
+  selectedStepIndex: number | null;
+  setSelectedTool: (key: string | null, stepIndex?: number | null) => void;
   register: (data: ToolboxData) => void;
 }
 
@@ -88,9 +93,17 @@ export function ToolboxProvider({ children }: { children: ReactNode }) {
     question: "",
     questionImage: null,
     recommendedToolKeys: [],
+    recommendedSteps: [],
     isAnalyzingTools: false,
   });
-  const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ tool: string | null; stepIndex: number | null }>({
+    tool: null,
+    stepIndex: null,
+  });
+
+  const setSelectedTool = useCallback((key: string | null, stepIndex: number | null = null) => {
+    setSelection({ tool: key, stepIndex: key ? stepIndex : null });
+  }, []);
 
   const register = useCallback((newData: ToolboxData) => {
     setData(newData);
@@ -98,7 +111,13 @@ export function ToolboxProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToolboxContext.Provider
-      value={{ ...data, selectedTool, setSelectedTool, register }}
+      value={{
+        ...data,
+        selectedTool: selection.tool,
+        selectedStepIndex: selection.stepIndex,
+        setSelectedTool,
+        register,
+      }}
     >
       {children}
     </ToolboxContext.Provider>
