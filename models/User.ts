@@ -151,6 +151,11 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
+// Backs the newest-first, paged list in /admin/users so the sort walks an index
+// instead of loading the matching users into memory. _id matches the
+// tie-breaker that query sorts on.
+UserSchema.index({ createdAt: -1, _id: -1 });
+
 /**
  * Whether this teacher may review student data, normalizing the two ways the
  * field can be missing: documents written before it existed, and `.lean()`

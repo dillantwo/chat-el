@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -193,11 +193,25 @@ function PlacementCell({ user }: { user: UserRow }) {
   );
 }
 
+const PAGE_SIZE = 50;
+
+interface UserPage {
+  items: UserRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
 export default function UsersPage() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [allClasses, setAllClasses] = useState<ClassRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
   const [loading, setLoading] = useState(true);
+  // Bumped after a save or delete to refetch the current page.
+  const [reloadToken, setReloadToken] = useState(0);
 
   // filters
   const [filterSchool, setFilterSchool] = useState("");
@@ -205,6 +219,27 @@ export default function UsersPage() {
   const [filterClass, setFilterClass] = useState("");
   const [filterAuthProvider, setFilterAuthProvider] = useState("");
   const [query, setQuery] = useState("");
+
+  const filterParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (filterSchool) params.set("school", filterSchool);
+    if (filterRole) params.set("role", filterRole);
+    if (filterClass) params.set("class", filterClass);
+    if (filterAuthProvider) params.set("authProvider", filterAuthProvider);
+    if (query.trim()) params.set("q", query.trim());
+    return params.toString();
+  }, [filterSchool, filterRole, filterClass, filterAuthProvider, query]);
+
+  // The page number is stored together with the filters it was chosen under.
+  // When the filters change, the stored page no longer applies and the list
+  // reads as page 1 in the same render, rather than resetting it in an effect
+  // and firing one wasted request for the old page first.
+  const [paging, setPaging] = useState({ filters: filterParams, page: 1 });
+  const page = paging.filters === filterParams ? paging.page : 1;
+  const setPage = useCallback(
+    (next: number) => setPaging({ filters: filterParams, page: next }),
+    [filterParams]
+  );
 
   // dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -226,21 +261,7 @@ export default function UsersPage() {
   const [canViewStudentData, setCanViewStudentData] = useState(true);
   const [classes, setClasses] = useState<string[]>([]);
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterSchool) params.set("school", filterSchool);
-      if (filterRole) params.set("role", filterRole);
-      if (filterClass) params.set("class", filterClass);
-      if (filterAuthProvider) params.set("authProvider", filterAuthProvider);
-      if (query.trim()) params.set("q", query.trim());
-      const res = await fetch(`${basePath}/api/admin/users?${params.toString()}`);
-      setUsers(res.ok ? await res.json() : []);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterSchool, filterRole, filterClass, filterAuthProvider, query]);
+  const reloadUsers = useCallback(() => setReloadToken((n) => n + 1), []);
 
   useEffect(() => {
     fetch(`${basePath}/api/admin/schools`)
@@ -254,9 +275,43 @@ export default function UsersPage() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(loadUsers, 250);
-    return () => clearTimeout(t);
-  }, [loadUsers]);
+    // Aborting on cleanup means a slow response for an older search or page
+    // can never land after, and overwrite, the one the admin is looking at.
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams(filterParams);
+        params.set("page", String(page));
+        params.set("pageSize", String(PAGE_SIZE));
+        const res = await fetch(`${basePath}/api/admin/users?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        const data: UserPage | null = res.ok ? await res.json() : null;
+        if (controller.signal.aborted) return;
+        if (data && data.items.length === 0 && data.total > 0) {
+          // Past the end, e.g. after deleting the last user on the last page.
+          setPage(data.pageCount);
+          return;
+        }
+        setUsers(data?.items ?? []);
+        setTotal(data?.total ?? 0);
+        setPageCount(data?.pageCount ?? 1);
+        setLoading(false);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        console.error("[admin/users] load failed", err);
+        setUsers([]);
+        setTotal(0);
+        setPageCount(1);
+        setLoading(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [filterParams, page, reloadToken, setPage]);
 
   const isSsoForm = authProvider === "edconnect";
   const selectedSchool = schools.find((s) => s.id === schoolId);
@@ -358,7 +413,7 @@ export default function UsersPage() {
         return;
       }
       setDialogOpen(false);
-      await loadUsers();
+      reloadUsers();
     } finally {
       setSaving(false);
     }
@@ -372,7 +427,7 @@ export default function UsersPage() {
       alert(data.error ?? "刪除失敗");
       return;
     }
-    await loadUsers();
+    reloadUsers();
   }
 
   return (
@@ -473,7 +528,7 @@ export default function UsersPage() {
         />
       </div>
 
-      {loading ? (
+      {loading && users.length === 0 ? (
         <div className="flex justify-center py-16">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
@@ -482,7 +537,33 @@ export default function UsersPage() {
           沒有符合條件的使用者。
         </p>
       ) : (
-        <>
+        // While the next page loads the current one stays on screen, dimmed,
+        // so paging doesn't flash the whole table away and back.
+        <div className={loading ? "space-y-6 opacity-60 transition-opacity" : "space-y-6"}>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground">
+            {loading && <Loader2 className="size-4 animate-spin" />}
+            <span>共 {total} 位使用者</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading || page <= 1}
+              onClick={() => setPage(Math.max(1, page - 1))}
+            >
+              上一頁
+            </Button>
+            <span className="tabular-nums">
+              {page} / {pageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading || page >= pageCount}
+              onClick={() => setPage(page + 1)}
+            >
+              下一頁
+            </Button>
+          </div>
+
           {/* Five columns that wrap instead of nine that don't, so the table
               fits the content area without a horizontal scrollbar. Below lg
               even that is too tight, and the card list below takes over. */}
@@ -582,7 +663,7 @@ export default function UsersPage() {
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

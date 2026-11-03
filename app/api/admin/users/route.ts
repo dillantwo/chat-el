@@ -35,7 +35,18 @@ function serializeClasses(input: unknown) {
     }));
 }
 
-// GET /api/admin/users?school=<id>&role=<role>&class=<id>&q=<search>
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+// Only what the list renders. Leaves hashedPassword and everything else on the
+// server instead of reading it out of MongoDB just to drop it below.
+const LIST_FIELDS =
+  "username displayName authProvider edcityLoginId role school subjects canViewStudentData classes createdAt";
+
+// GET /api/admin/users?school=<id>&role=<role>&class=<id>&q=<search>&page=<n>&pageSize=<n>
+//
+// Paged: filters and search apply to the whole collection first, then one page
+// of the result is returned along with the total match count.
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "需要管理員權限" }, { status: 403 });
@@ -71,36 +82,59 @@ export async function GET(req: NextRequest) {
     filter.$or = [{ username: rx }, { displayName: rx }, { edcityLoginId: rx }];
   }
 
-  const users = await User.find(filter)
-    .populate("school", "name code")
-    .populate("classes", "name academicYear")
-    .sort({ createdAt: -1 })
-    .lean();
+  const pageRaw = Number(searchParams.get("page"));
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.trunc(pageRaw) : 1;
+  const sizeRaw = Number(searchParams.get("pageSize"));
+  const pageSize =
+    Number.isFinite(sizeRaw) && sizeRaw > 0
+      ? Math.min(Math.trunc(sizeRaw), MAX_PAGE_SIZE)
+      : DEFAULT_PAGE_SIZE;
 
-  return NextResponse.json(
-    users.map((u) => {
-      const s = u.school as unknown as PopulatedSchool;
-      return {
-        id: String(u._id),
-        username: u.username,
-        displayName: u.displayName,
-        // Normalized rather than passed through: .lean() skips the schema
-        // default, so pre-existing rows would arrive as undefined.
-        authProvider: resolveAuthProvider(u.authProvider),
-        edcityLoginId: u.edcityLoginId ?? null,
-        role: u.role,
-        schoolId: s ? s._id.toString() : null,
-        schoolName: s ? s.name : null,
-        subjects: u.subjects ?? [],
-        // Normalized rather than passed through, for the same reason as
-        // authProvider: .lean() skips the schema default, so a teacher created
-        // before this field existed would arrive as undefined and read as "off".
-        canViewStudentData: canViewStudentData(u),
-        classes: serializeClasses(u.classes),
-        createdAt: u.createdAt,
-      };
-    })
-  );
+  const [total, users] = await Promise.all([
+    User.countDocuments(filter),
+    User.find(filter)
+      .select(LIST_FIELDS)
+      // _id breaks ties: a bulk import writes many rows in the same
+      // millisecond, and skip/limit over a non-unique sort key can repeat or
+      // drop rows between pages.
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .populate("school", "name code")
+      .populate("classes", "name academicYear")
+      .lean(),
+  ]);
+
+  const items = users.map((u) => {
+    const s = u.school as unknown as PopulatedSchool;
+    return {
+      id: String(u._id),
+      username: u.username,
+      displayName: u.displayName,
+      // Normalized rather than passed through: .lean() skips the schema
+      // default, so pre-existing rows would arrive as undefined.
+      authProvider: resolveAuthProvider(u.authProvider),
+      edcityLoginId: u.edcityLoginId ?? null,
+      role: u.role,
+      schoolId: s ? s._id.toString() : null,
+      schoolName: s ? s.name : null,
+      subjects: u.subjects ?? [],
+      // Normalized rather than passed through, for the same reason as
+      // authProvider: .lean() skips the schema default, so a teacher created
+      // before this field existed would arrive as undefined and read as "off".
+      canViewStudentData: canViewStudentData(u),
+      classes: serializeClasses(u.classes),
+      createdAt: u.createdAt,
+    };
+  });
+
+  return NextResponse.json({
+    items,
+    total,
+    page,
+    pageSize,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+  });
 }
 
 // POST /api/admin/users — create a teacher/student/admin.
