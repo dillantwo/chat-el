@@ -1,10 +1,11 @@
 import { z } from "zod";
 import {
+  buildTemplateFromQuestion,
   findNumbersInText,
   normalizeMathText,
   parseFractionsInText,
+  tokenMatchesOperand,
   type FractionParts,
-  type NumberToken,
 } from "@/lib/math-word-problem";
 
 /**
@@ -151,24 +152,13 @@ const fractionOperation: Extractor = {
 };
 
 type Operand = FractionParts;
-
-const isWholeNumber = (o: Operand) => o.whole > 0 && o.num === 0;
+const sameNumber = tokenMatchesOperand;
 
 /** 純整數統一成 whole=N, num=0, den=1（AI 偶爾會回 N/1 或 den=0）。 */
 function normalizeOperand(o: Operand): Operand {
   if (o.whole === 0 && o.den === 1 && o.num > 0) return { whole: o.num, num: 0, den: 1 };
   if (o.whole > 0 && o.num === 0) return { whole: o.whole, num: 0, den: 1 };
   return o;
-}
-
-function sameNumber(token: NumberToken, o: Operand): boolean {
-  if (isWholeNumber(o)) return token.kind === "integer" && token.whole === o.whole;
-  return (
-    token.kind === "fraction" &&
-    token.whole === o.whole &&
-    token.num === o.num &&
-    token.den === o.den
-  );
 }
 
 /**
@@ -202,37 +192,6 @@ function repairOperands(ops: [Operand, Operand], question: string): [Operand, Op
   }
 
   return [expanded[0], expanded[1]];
-}
-
-/**
- * 直接用老師輸入的題目文字當 questionTemplate：把兩個運算數在題目中的位置換成
- * [FRAC1] / [FRAC2]。這樣題目原本的文字和單位都會保留，不靠 AI 改寫。
- * 對不上（圖片題、AI 回的數字題目裡沒有、題目含其他 LaTeX 指令）就回傳 null，
- * 改用 AI 的 questionTemplate。
- */
-function buildTemplateFromQuestion(op1: Operand, op2: Operand, question: string): string | null {
-  if (!question) return null;
-  const text = normalizeMathText(question);
-  // 還有其他 LaTeX 指令（\times 之類）時，交給 AI 的版本
-  if (/\\[a-zA-Z]/.test(text)) return null;
-
-  const tokens = findNumbersInText(text);
-  const i1 = tokens.findIndex((t) => sameNumber(t, op1));
-  if (i1 < 0) return null;
-  const i2 = tokens.findIndex((t, idx) => idx !== i1 && sameNumber(t, op2));
-  if (i2 < 0) return null;
-
-  // 從後面往前換，前面的 index 才不會跑掉
-  const replacements = [
-    { token: tokens[i1], placeholder: "[FRAC1]" },
-    { token: tokens[i2], placeholder: "[FRAC2]" },
-  ].sort((a, b) => b.token.index - a.token.index);
-
-  let out = text;
-  for (const { token, placeholder } of replacements) {
-    out = out.slice(0, token.index) + placeholder + out.slice(token.index + token.length);
-  }
-  return out;
 }
 
 /**

@@ -14,7 +14,7 @@
  * 這個檔案同時給 API（清理 AI 輸出）和前端（組工具網址）使用，不可依賴伺服器端套件。
  */
 
-import { normalizeMathText } from "@/lib/math-word-problem";
+import { buildTemplateFromQuestion, normalizeMathText } from "@/lib/math-word-problem";
 
 export type StepNumber = { whole: number; num: number; den: number };
 
@@ -96,7 +96,12 @@ function sanitizeContext(raw: unknown): string | null {
  * - 數字超出工具範圍、分母為 0 的就當作沒有數字（點擊時改用舊的參數提取）
  * - 除法的除數不可為 0
  */
-export function sanitizeSteps(raw: unknown, allowedKeys: ReadonlySet<string>): MathToolStep[] {
+export function sanitizeSteps(
+  raw: unknown,
+  allowedKeys: ReadonlySet<string>,
+  /** 原本的題目文字；有的話，四則運算工具的題目直接用它，不用 AI 改寫的版本 */
+  question = ""
+): MathToolStep[] {
   if (!Array.isArray(raw)) return [];
 
   const steps: MathToolStep[] = [];
@@ -146,24 +151,76 @@ export function sanitizeSteps(raw: unknown, allowedKeys: ReadonlySet<string>): M
       if (v && v.whole === 0 && v.num >= 1 && v.num <= v.den) {
         operand1 = v;
         equivalentMode = r.equivalentMode === "simplify" ? "simplify" : "expand";
-        // 同一個分數在工具裏調整倍數就能看到所有擴分（約分）結果，一個分數只需要一步。
-        // AI 有時把「乘 2、乘 3……」拆成好幾步（4/6、8/12、12/18），和前面步驟的
-        // 分數相等的就是同一個分數的擴分結果，不再另開一步。
-        const isRepeat = steps.some(
-          (s) =>
-            s.toolKey === EQUIVALENT_TOOL_KEY &&
-            s.equivalentMode === equivalentMode &&
-            s.operand1 !== null &&
-            s.operand1.num * v.den === v.num * s.operand1.den
-        );
-        if (isRepeat) continue;
       }
     }
 
     steps.push({ toolKey, title, operand1, operand2, convertMode, equivalentMode, context });
     if (steps.length >= MAX_STEPS) break;
   }
-  return steps;
+  return useOriginalQuestion(uniqueToolSteps(dropMixedConversionSteps(steps)), question);
+}
+
+/**
+ * 四則運算工具上方的題目：兩個運算數都能在原題裏找到時，直接用原題，只把這兩個數
+ * 換成 [FRAC1] / [FRAC2]，其他文字（例如第三個人吃的 2/8）一字不改。
+ * 運算數是前面算出來的結果（原題裏沒有）時，才用 AI 寫的 context。
+ * 要在 dropMixedConversionSteps 之後做，運算數才是原題的寫法（1 1/2 而不是 3/2）。
+ */
+function useOriginalQuestion(steps: MathToolStep[], question: string): MathToolStep[] {
+  if (!question) return steps;
+  return steps.map((s) => {
+    if (!(s.toolKey in OPERATION_TOOL_ROUTES) || !s.operand1 || !s.operand2) return s;
+    const template = buildTemplateFromQuestion(s.operand1, s.operand2, question);
+    return template ? { ...s, context: template.slice(0, 300) } : s;
+  });
+}
+
+/**
+ * 側欄只列出需要用到的工具，每個工具一次（擴分、約分都是「相等分數」，
+ * 4/6 和 5/10 也是同一個工具）。保留每個工具第一次出現的那一項，
+ * 開啟工具時就用它的數字。舊版快取的步驟也要經過這裏。
+ */
+export function uniqueToolSteps(steps: MathToolStep[]): MathToolStep[] {
+  const seen = new Set<string>();
+  return steps.filter((s) => {
+    if (seen.has(s.toolKey)) return false;
+    seen.add(s.toolKey);
+    return true;
+  });
+}
+
+/** a、b 的數值是否相等（1 1/2 和 3/2 相等） */
+function sameValue(a: StepNumber, b: StepNumber): boolean {
+  return (a.whole * a.den + a.num) * b.den === (b.whole * b.den + b.num) * a.den;
+}
+
+/**
+ * 四則運算工具本身就能輸入帶分數，所以「先把 1 1/2 化成 3/2，再算 3/2 − 3/8」
+ * 這種步驟是多餘的。AI 不一定照提示詞做，這裏再把它併掉：
+ * - 有四則運算步驟時，拿掉帶分數 ↔ 假分數的互換步驟
+ * - 之後的四則運算若用到互換後的數，改回題目原本的寫法（1 1/2）
+ * 只有互換、沒有四則運算的概念題（「把 1 1/2 化成假分數」）不受影響；
+ * 整數化成分數（1 = 8/8）的步驟也保留。
+ */
+function dropMixedConversionSteps(steps: MathToolStep[]): MathToolStep[] {
+  if (!steps.some((s) => s.toolKey in OPERATION_TOOL_ROUTES)) return steps;
+
+  const out: MathToolStep[] = [];
+  const originals: StepNumber[] = [];
+  for (const step of steps) {
+    if (step.toolKey === CONVERTING_TOOL_KEY && step.operand1 && step.operand1.num > 0) {
+      originals.push(step.operand1);
+      continue;
+    }
+    if (step.toolKey in OPERATION_TOOL_ROUTES && originals.length > 0) {
+      const restore = (n: StepNumber | null) =>
+        n ? originals.find((o) => sameValue(o, n)) ?? n : n;
+      out.push({ ...step, operand1: restore(step.operand1), operand2: restore(step.operand2) });
+      continue;
+    }
+    out.push(step);
+  }
+  return out;
 }
 
 /**

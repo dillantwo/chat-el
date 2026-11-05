@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/components/AuthProvider";
 import { useToolbox, toolIconMap } from "@/contexts/ToolboxContext";
-import { describeStepNumbers } from "@/lib/math-tool-steps";
 import {
   Tooltip,
   TooltipContent,
@@ -182,7 +181,7 @@ export function AppSidebar() {
   // against every available tool, not just the current group's `tools`.
   const recommendCandidates = allToolGroups.length > 0 ? allToolGroups.flatMap((g) => g.tools) : tools;
   const selectedStepIndex = toolbox?.selectedStepIndex ?? null;
-  // AI 拆好的解題步驟，依解題順序；同一個工具可以出現在多個步驟。
+  // AI 推薦的工具，依解題順序，每個工具一次（見 uniqueToolSteps）。
   const recommendedSteps = (toolbox?.recommendedSteps ?? []).flatMap((step, index) => {
     const tool = recommendCandidates.find((t) => t.key === step.toolKey);
     return tool ? [{ step, index, tool }] : [];
@@ -523,26 +522,20 @@ export function AppSidebar() {
             </SidebarGroupLabel>
             {recommendedSteps.length > 0 ? (
               <SidebarMenuSub>
-                {recommendedSteps.map(({ step, index, tool }) => {
-                  const numbers = describeStepNumbers(step);
-                  return (
-                    <ToolItem
-                      key={`${index}-${step.toolKey}`}
-                      toolKey={tool.key}
-                      label={tool.label}
-                      sub={[step.title, numbers].filter(Boolean).join(" ") || tool.sub}
-                      icon={tool.icon}
-                      iconBg={tool.iconBg}
-                      isActive={selectedTool === tool.key && selectedStepIndex === index}
-                      onClick={() => toolbox?.setSelectedTool(tool.key, index)}
-                      // 只有一個步驟時不標「步驟 1」，改回顯示工具分類（例如「四則運算」）
-                      groupLabel={
-                        recommendedSteps.length > 1 ? `步驟 ${index + 1}` : toolGroupLabelMap[tool.key]
-                      }
-                      detail={numbers}
-                    />
-                  );
-                })}
+                {recommendedSteps.map(({ step, index, tool }) => (
+                  // 只列工具，不標步驟；顯示方式和「全部工具」一樣，前面加工具分類。
+                  <ToolItem
+                    key={`${index}-${step.toolKey}`}
+                    toolKey={tool.key}
+                    label={tool.label}
+                    sub={tool.sub}
+                    icon={tool.icon}
+                    iconBg={tool.iconBg}
+                    isActive={selectedTool === tool.key && selectedStepIndex === index}
+                    onClick={() => toolbox?.setSelectedTool(tool.key, index)}
+                    groupLabel={toolGroupLabelMap[tool.key]}
+                  />
+                ))}
               </SidebarMenuSub>
             ) : isAnalyzingTools ? (
               <p className="text-xs text-muted-foreground px-2 py-1 animate-pulse">

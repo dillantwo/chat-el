@@ -31,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useToolbox, type ToolFromDB } from "@/contexts/ToolboxContext";
-import { buildStepToolPath, describeStepNumbers, type MathToolStep } from "@/lib/math-tool-steps";
+import { buildStepToolPath, uniqueToolSteps, type MathToolStep } from "@/lib/math-tool-steps";
 import { basePath, stripTextModeLatex } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
@@ -750,7 +750,8 @@ function MathDashboardContent() {
       setToolChatSessionIds((prev) => ({ ...prev, ...stored.toolChatSessionIds }));
     }
     // Older snapshots only kept the keys; they come back as steps without numbers.
-    const storedSteps: MathToolStep[] = Array.isArray(stored.recommendedSteps)
+    // Older snapshots may also list the same tool more than once (one entry per step).
+    const storedSteps: MathToolStep[] = uniqueToolSteps(Array.isArray(stored.recommendedSteps)
       ? stored.recommendedSteps
       : (stored.recommendedToolKeys ?? []).map((toolKey) => ({
           toolKey,
@@ -759,7 +760,7 @@ function MathDashboardContent() {
           operand2: null,
           convertMode: null,
           context: null,
-        }));
+        })));
     if (storedSteps.length) {
       restoredRecommendationsRef.current = {
         question: storedQuestion,
@@ -1320,20 +1321,6 @@ function MathDashboardContent() {
                     {question}
                   </ReactMarkdown>
                 </div>
-                {/* 只有一個步驟時不顯示「步驟 1 / 1」，題目本身就是這一步 */}
-                {activeStep && selectedStepIndex !== null && recommendedSteps.length > 1 && (
-                  <p className="mx-auto mt-2 max-w-3xl text-center text-sm text-[#146ef5]">
-                    <span className="font-semibold">
-                      步驟 {selectedStepIndex + 1} / {recommendedSteps.length}
-                    </span>
-                    {activeStep.title && <span>：{activeStep.title}</span>}
-                    {describeStepNumbers(activeStep) && (
-                      <span className="ml-2 rounded bg-[#146ef5]/10 px-1.5 py-0.5 font-medium">
-                        {describeStepNumbers(activeStep)}
-                      </span>
-                    )}
-                  </p>
-                )}
               </div>
             )}
 

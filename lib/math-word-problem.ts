@@ -28,8 +28,16 @@ const LATEX_FRAC_SHORT = /\\(?:d|t)?frac\s*(\d)\s*(\d)/g;
 export function normalizeMathText(text: string): string {
   if (!text) return text;
   return text
+    // 帶分數 1\frac{1}{2}：先在整數和分數之間補空格，否則會變成 11/2
+    .replace(/(\d)\s*(\\(?:d|t)?frac)/g, "$1 $2")
     .replace(LATEX_FRAC_BRACED, (_m, n, d) => `${n}/${d}`)
     .replace(LATEX_FRAC_SHORT, (_m, n, d) => `${n}/${d}`)
+    // 單位、文字：\text{L}、\mathrm{kg} → L、kg
+    .replace(/\\(?:text|textrm|mathrm|textbf|mbox)\s*\{([^{}]*)\}/g, "$1")
+    // 運算符號
+    .replace(/\\times(?![A-Za-z])/g, "×")
+    .replace(/\\div(?![A-Za-z])/g, "÷")
+    .replace(/\\cdot(?![A-Za-z])/g, "·")
     // \left( \right) 之類的包裝指令
     .replace(/\\left|\\right/g, "")
     // LaTeX 間距指令 \, \; \: \!
@@ -213,4 +221,47 @@ export function cleanTextModeLatex(text: string): string {
       .replace(/ *\n */g, "\n")
       .trim()
   );
+}
+
+/** 純整數運算數：whole=N、num=0（分母不看） */
+const isWholeOperand = (o: FractionParts) => o.whole > 0 && o.num === 0;
+
+/** 題目裏的這個數，寫法是否和運算數完全一樣（1 1/2 不等於 3/2） */
+export function tokenMatchesOperand(token: NumberToken, o: FractionParts): boolean {
+  if (isWholeOperand(o)) return token.kind === "integer" && token.whole === o.whole;
+  return token.kind === "fraction" && token.whole === o.whole && token.num === o.num && token.den === o.den;
+}
+
+/**
+ * 直接用原本的題目文字當工具的題目：只把兩個運算數在題目中的位置換成
+ * [FRAC1] / [FRAC2]，其餘文字（包括第三、第四個分數）一字不改。
+ * 對不上時（運算數是前面算出來的結果、題目裏沒有；題目還有其他 LaTeX 指令）回傳 null，
+ * 呼叫端再用 AI 寫的版本。
+ */
+export function buildTemplateFromQuestion(
+  op1: FractionParts,
+  op2: FractionParts,
+  question: string
+): string | null {
+  if (!question) return null;
+  const text = normalizeMathText(question);
+  if (/\\[a-zA-Z]/.test(text)) return null;
+
+  const tokens = findNumbersInText(text);
+  const i1 = tokens.findIndex((t) => tokenMatchesOperand(t, op1));
+  if (i1 < 0) return null;
+  const i2 = tokens.findIndex((t, idx) => idx !== i1 && tokenMatchesOperand(t, op2));
+  if (i2 < 0) return null;
+
+  // 從後面往前換，前面的 index 才不會跑掉
+  const replacements = [
+    { token: tokens[i1], placeholder: "[FRAC1]" },
+    { token: tokens[i2], placeholder: "[FRAC2]" },
+  ].sort((a, b) => b.token.index - a.token.index);
+
+  let out = text;
+  for (const { token, placeholder } of replacements) {
+    out = out.slice(0, token.index) + placeholder + out.slice(token.index + token.length);
+  }
+  return out;
 }

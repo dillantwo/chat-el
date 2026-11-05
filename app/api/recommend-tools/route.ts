@@ -40,28 +40,32 @@ const planSchema = z.object({
     .describe("依解題順序排列的步驟"),
 });
 
-const SYSTEM_PROMPT = `你是一位小學數學老師。先理解整道題目，再把解題過程拆成步驟，每一步配一個最適合的工具，讓學生跟着步驟用工具解題。
+const SYSTEM_PROMPT = `你是一位小學數學老師。先理解整道題目，想清楚解題要用到哪些工具，依使用順序列出，並帶上開啟工具時要用的數字。steps 陣列的每一項就是一個推薦工具（學生看不到「步驟」，只會看到工具列表）。
 
 規則：
 - 先想清楚題目真正問甚麼，只拆出解答需要的運算。與答案無關的數字不要用（例如題目問「佔全部的幾分之幾」，總重量「2 公斤」就與答案無關）。
 - 四則運算工具（fraction-addition / fraction-subtraction / fraction-multiplication / fraction-division）一次只算兩個數：operand1 運算 operand2。
 - 四則運算的 operand1、operand2 要用分數（真分數、假分數或帶分數），不要直接用純整數。
+- 四則運算工具可以直接輸入帶分數，帶分數照題目原本的寫法帶入（1 1/2 寫成 {1,1,2}）。不要為了把帶分數化成假分數（或假分數化成帶分數）另加一步 fraction-converting。只有一個運算的題目，例如「1 1/2 − 3/8」，就只有一步、只推薦一個工具。
 - 運算中需要用到整數時（例如「全部」= 1、或「2 公斤」），先加一步 fraction-converting（整數與分數互換），把整數化成分數，分母用下一步需要的分母；下一步再用化好的分數運算。
   - 整數與分數互換的參數：operand1 = { whole: 該整數, num: 0, den: 要化成的分母 }，convertMode = "whole"
 - 後面的步驟可以用前面步驟的結果（例如第 1 步得 5/8，第 3 步用 5/8）。
-- 相等分數（fraction-expanding-simplifying，擴分約分）一次只處理一個分數：operand1 = 這一步要擴分或約分的真分數，equivalentMode = "expand"（擴分）或 "simplify"（約分）。題目有幾個分數，就拆成幾步，每個分數只用一步、帶自己的分數（例如先 4/6，再 5/10），不要每一步都用同一個分數。
-  - 學生在同一個工具裏調整倍數（×2、×3、×4……）就能看到這個分數所有的擴分結果，所以不要按倍數或擴分次數拆步驟。例如「觀察 4/6 和 5/10 的首 5 個擴分」只有兩步：4/6 一步、5/10 一步。
-  - title 寫這一步觀察哪個分數，例如「用工具觀察 4/6 的擴分」，不要寫「擴分 5 次」、「乘 5 次」等字眼。
+- 相等分數（fraction-expanding-simplifying）一個工具同時做擴分和約分，學生在工具裏可以自己換分數、切換擴分／約分、調整倍數。operand1 = 題目中第一個要擴分或約分的真分數，equivalentMode = 題目先做的是擴分（"expand"）還是約分（"simplify"）。
+- 每個工具只推薦一次。同一個工具要用在幾個分數、或同時要擴分和約分，都只列一次，不要按分數、倍數或擴分／約分拆開。例如「先將 4/6 和 5/10 約至最簡分數，再找首 5 個擴分數」只推薦一次 fraction-expanding-simplifying（operand1={0,4,6}，equivalentMode="simplify"）。
 - 其他概念題（比較大小、帶分數與假分數互換等），就只推薦一個對應的工具，operand 等欄位設為 null。
 - context 是給學生看的這一步題目，保留題目的情境和單位，兩個數的位置分別寫 [FRAC1]、[FRAC2]，不要寫出答案，不可用 LaTeX。
-- 步驟通常 1–4 個，不要超過 6 個。toolKey 只能用可用工具列表裏的 key。
+- 只推薦解題需要用到的工具，通常 1–3 個，同一個 toolKey 不可重複出現。toolKey 只能用可用工具列表裏的 key。
 
 例子：
 題目：現有雜豆 2 公斤，紅豆佔全部的 1/4，綠豆佔全部的 3/8，餘下的是黃豆，黃豆佔全部的幾分之幾？
 steps:
 1. fraction-addition，title「紅豆和綠豆共佔全部的幾分之幾？」，operand1={0,1,4}，operand2={0,3,8}，context「紅豆佔全部的 [FRAC1]，綠豆佔全部的 [FRAC2]，紅豆和綠豆共佔全部的幾分之幾？」
 2. fraction-converting，title「把全部（1）化成分母是 8 的分數」，operand1={1,0,8}，convertMode="whole"
-3. fraction-subtraction，title「黃豆佔全部的幾分之幾？」，operand1={0,8,8}，operand2={0,5,8}，context「全部是 [FRAC1]，紅豆和綠豆共佔 [FRAC2]，黃豆佔全部的幾分之幾？」`;
+3. fraction-subtraction，title「黃豆佔全部的幾分之幾？」，operand1={0,8,8}，operand2={0,5,8}，context「全部是 [FRAC1]，紅豆和綠豆共佔 [FRAC2]，黃豆佔全部的幾分之幾？」
+
+題目：一瓶果汁原有 1 1/2 升，妹妹喝了 3/8 升，這瓶果汁還餘下多少升？
+steps:
+1. fraction-subtraction，title「這瓶果汁還餘下多少升？」，operand1={1,1,2}，operand2={0,3,8}，context「一瓶果汁原有 [FRAC1] 升，妹妹喝了 [FRAC2] 升，這瓶果汁還餘下多少升？」`;
 
 export async function POST(req: Request) {
   const denied = await requireTopicApi("math", "ai-problem-solving");
@@ -105,7 +109,7 @@ export async function POST(req: Request) {
     });
 
     const allowedKeys = new Set(tools.map((t) => t.key));
-    const steps = sanitizeSteps(result.object.steps, allowedKeys);
+    const steps = sanitizeSteps(result.object.steps, allowedKeys, question);
     const recommendedKeys = [...new Set(steps.map((s) => s.toolKey))];
 
     return Response.json({ steps, recommendedKeys });
