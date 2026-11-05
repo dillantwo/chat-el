@@ -20,16 +20,21 @@ export type StepNumber = { whole: number; num: number; den: number };
 
 export type ConvertMode = "whole" | "fraction" | "mixed";
 
+/** 相等分數工具：擴分或約分 */
+export type EquivalentMode = "expand" | "simplify";
+
 export interface MathToolStep {
   toolKey: string;
   /** 這一步要做什麼，例如「紅豆和綠豆共佔全部的幾分之幾？」 */
   title: string;
-  /** 四則運算：第一個數；整數與分數互換：要轉換的數 */
+  /** 四則運算：第一個數；整數與分數互換：要轉換的數；相等分數：要擴分或約分的分數 */
   operand1: StepNumber | null;
   /** 四則運算：第二個數 */
   operand2: StepNumber | null;
   /** 整數與分數互換：數值原本的顯示型態 */
   convertMode: ConvertMode | null;
+  /** 相等分數：擴分或約分（舊版快取的步驟沒有這個欄位） */
+  equivalentMode?: EquivalentMode | null;
   /** 四則運算工具顯示的題目文字，兩個數的位置用 [FRAC1] / [FRAC2] */
   context: string | null;
 }
@@ -43,10 +48,13 @@ export const OPERATION_TOOL_ROUTES: Record<string, string> = {
 };
 
 export const CONVERTING_TOOL_KEY = "fraction-converting";
+export const EQUIVALENT_TOOL_KEY = "fraction-expanding-simplifying";
 
 /** 這些工具可以只靠步驟裏的數字開啟。 */
 export function stepToolTakesNumbers(toolKey: string): boolean {
-  return toolKey in OPERATION_TOOL_ROUTES || toolKey === CONVERTING_TOOL_KEY;
+  return (
+    toolKey in OPERATION_TOOL_ROUTES || toolKey === CONVERTING_TOOL_KEY || toolKey === EQUIVALENT_TOOL_KEY
+  );
 }
 
 const MAX_STEPS = 6;
@@ -102,6 +110,7 @@ export function sanitizeSteps(raw: unknown, allowedKeys: ReadonlySet<string>): M
     let operand1: StepNumber | null = null;
     let operand2: StepNumber | null = null;
     let convertMode: ConvertMode | null = null;
+    let equivalentMode: EquivalentMode | null = null;
     let context: string | null = null;
 
     if (toolKey in OPERATION_TOOL_ROUTES) {
@@ -130,9 +139,28 @@ export function sanitizeSteps(raw: unknown, allowedKeys: ReadonlySet<string>): M
           convertMode = operand1.whole > 0 ? "mixed" : "fraction";
         }
       }
+    } else if (toolKey === EQUIVALENT_TOOL_KEY) {
+      // 相等分數工具只接受分子不大於分母的分數（工具會把較大的分子壓成分母），
+      // 帶分數、假分數就當作沒有數字。
+      const v = sanitizeNumber(r.operand1);
+      if (v && v.whole === 0 && v.num >= 1 && v.num <= v.den) {
+        operand1 = v;
+        equivalentMode = r.equivalentMode === "simplify" ? "simplify" : "expand";
+        // 同一個分數在工具裏調整倍數就能看到所有擴分（約分）結果，一個分數只需要一步。
+        // AI 有時把「乘 2、乘 3……」拆成好幾步（4/6、8/12、12/18），和前面步驟的
+        // 分數相等的就是同一個分數的擴分結果，不再另開一步。
+        const isRepeat = steps.some(
+          (s) =>
+            s.toolKey === EQUIVALENT_TOOL_KEY &&
+            s.equivalentMode === equivalentMode &&
+            s.operand1 !== null &&
+            s.operand1.num * v.den === v.num * s.operand1.den
+        );
+        if (isRepeat) continue;
+      }
     }
 
-    steps.push({ toolKey, title, operand1, operand2, convertMode, context });
+    steps.push({ toolKey, title, operand1, operand2, convertMode, equivalentMode, context });
     if (steps.length >= MAX_STEPS) break;
   }
   return steps;
@@ -172,6 +200,17 @@ export function buildStepToolPath(step: MathToolStep): string | null {
     return `/math/fraction-converting?${qs.toString()}`;
   }
 
+  if (step.toolKey === EQUIVALENT_TOOL_KEY) {
+    const v = step.operand1;
+    if (!v) return null;
+    const qs = new URLSearchParams({
+      numerator: String(v.num),
+      denominator: String(v.den),
+      mode: step.equivalentMode ?? "expand",
+    });
+    return `/math/fraction-es?${qs.toString()}`;
+  }
+
   return null;
 }
 
@@ -198,6 +237,9 @@ export function describeStepNumbers(step: MathToolStep): string {
     const v = step.operand1;
     if (v.num === 0) return `${v.whole} = ?/${v.den}`;
     return formatStepNumber(v);
+  }
+  if (step.toolKey === EQUIVALENT_TOOL_KEY && step.operand1) {
+    return `${formatStepNumber(step.operand1)} ${step.equivalentMode === "simplify" ? "約分" : "擴分"}`;
   }
   return "";
 }

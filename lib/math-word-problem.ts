@@ -166,3 +166,51 @@ export function renderWordProblemHtml(
 
   return html;
 }
+
+/** 排版用 LaTeX 指令會換成一般文字的符號 */
+const TEXT_SYMBOLS: Record<string, string> = {
+  square: "□",
+  Box: "□",
+  blacksquare: "■",
+  bigcirc: "○",
+  bullet: "•",
+  star: "☆",
+  bigstar: "★",
+  ast: "＊",
+  checkmark: "✓",
+  triangle: "△",
+  bigtriangleup: "△",
+  heartsuit: "♡",
+  diamond: "◇",
+  ldots: "…",
+  cdots: "…",
+  dots: "…",
+};
+
+/** \quad、\qquad、\,、\ 、\hspace{2cm} 等只用來排間距的指令 */
+const LATEX_SPACING = String.raw`\\(?:qquad|quad|enspace|thinspace|medspace|thickspace)(?![A-Za-z])|\\[,;:! ]|\\(?:hspace|hphantom|phantom)\*?\{[^{}]*\}`;
+
+/**
+ * 看圖抄題時，模型常用排版用的 LaTeX 指令表示圖片裏的空位、選項間距和特殊符號
+ * （\qquad 鯊魚 \quad / \quad 海龜、\square、\underline{\hspace{2cm}}）。
+ * 這些指令不在 $…$ 裏，畫面會直接顯示原始碼，所以換成一般文字：
+ * - 只有空白的底線 → 填空線 ＿＿＿；只有空白的方框 → □
+ * - 間距指令 → 空格
+ * - 方格、圓圈、星號等符號 → 對應的 Unicode 字元
+ * 數學指令（\frac、\times、\text…）原樣保留，交給後面的渲染流程。
+ */
+export function cleanTextModeLatex(text: string): string {
+  if (!text) return text;
+  return (
+    text
+      .replace(new RegExp(String.raw`\\underline\s*\{(?:\s|${LATEX_SPACING})*\}`, "g"), "＿＿＿")
+      .replace(new RegExp(String.raw`\\(?:boxed|fbox)\s*\{(?:\s|${LATEX_SPACING})*\}`, "g"), "□")
+      .replace(/(?:\\_){2,}/g, "＿＿＿")
+      .replace(new RegExp(LATEX_SPACING, "g"), " ")
+      .replace(/\\([A-Za-z]+)(?![A-Za-z])/g, (m, name: string) => TEXT_SYMBOLS[name] ?? m)
+      // 換掉間距後會留下連續空白（保留換行）
+      .replace(/[ \t\u00a0]{2,}/g, " ")
+      .replace(/ *\n */g, "\n")
+      .trim()
+  );
+}

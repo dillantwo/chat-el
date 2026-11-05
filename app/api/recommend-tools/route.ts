@@ -19,12 +19,18 @@ const planSchema = z.object({
       z.object({
         toolKey: z.string().describe("這一步用的工具 key，必須來自可用工具列表"),
         title: z.string().describe("這一步要做甚麼，簡短一句，例如「紅豆和綠豆共佔全部的幾分之幾？」"),
-        operand1: numberSchema.describe("四則運算的第一個數；整數與分數互換時是要轉換的數；其他工具為 null"),
+        operand1: numberSchema.describe(
+          "四則運算的第一個數；整數與分數互換時是要轉換的數；相等分數（擴分約分）時是這一步要擴分或約分的分數；其他工具為 null"
+        ),
         operand2: numberSchema.describe("四則運算的第二個數；其他工具為 null"),
         convertMode: z
           .enum(["whole", "fraction", "mixed"])
           .nullable()
           .describe("只用於整數與分數互換：operand1 原本的型態；其他工具為 null"),
+        equivalentMode: z
+          .enum(["expand", "simplify"])
+          .nullable()
+          .describe("只用於相等分數（擴分約分）：expand = 擴分，simplify = 約分；其他工具為 null"),
         context: z
           .string()
           .nullable()
@@ -43,7 +49,10 @@ const SYSTEM_PROMPT = `你是一位小學數學老師。先理解整道題目，
 - 運算中需要用到整數時（例如「全部」= 1、或「2 公斤」），先加一步 fraction-converting（整數與分數互換），把整數化成分數，分母用下一步需要的分母；下一步再用化好的分數運算。
   - 整數與分數互換的參數：operand1 = { whole: 該整數, num: 0, den: 要化成的分母 }，convertMode = "whole"
 - 後面的步驟可以用前面步驟的結果（例如第 1 步得 5/8，第 3 步用 5/8）。
-- 題目本身只是概念題（比較大小、擴分約分、帶分數與假分數互換等），就只推薦一個對應的工具，operand 等欄位設為 null。
+- 相等分數（fraction-expanding-simplifying，擴分約分）一次只處理一個分數：operand1 = 這一步要擴分或約分的真分數，equivalentMode = "expand"（擴分）或 "simplify"（約分）。題目有幾個分數，就拆成幾步，每個分數只用一步、帶自己的分數（例如先 4/6，再 5/10），不要每一步都用同一個分數。
+  - 學生在同一個工具裏調整倍數（×2、×3、×4……）就能看到這個分數所有的擴分結果，所以不要按倍數或擴分次數拆步驟。例如「觀察 4/6 和 5/10 的首 5 個擴分」只有兩步：4/6 一步、5/10 一步。
+  - title 寫這一步觀察哪個分數，例如「用工具觀察 4/6 的擴分」，不要寫「擴分 5 次」、「乘 5 次」等字眼。
+- 其他概念題（比較大小、帶分數與假分數互換等），就只推薦一個對應的工具，operand 等欄位設為 null。
 - context 是給學生看的這一步題目，保留題目的情境和單位，兩個數的位置分別寫 [FRAC1]、[FRAC2]，不要寫出答案，不可用 LaTeX。
 - 步驟通常 1–4 個，不要超過 6 個。toolKey 只能用可用工具列表裏的 key。
 

@@ -8,6 +8,7 @@ import { getSession } from "@/lib/session";
 import { getSubjectAccess, requireTopicApi } from "@/lib/subject-access";
 import { isSchoolInScope } from "@/lib/toolbox-access";
 import { recordTokenUsage } from "@/lib/token-usage";
+import { cleanTextModeLatex } from "@/lib/math-word-problem";
 
 /**
  * Fix LaTeX commands broken by JSON parsing.
@@ -226,7 +227,16 @@ ${typeDescriptions}
 - 填空位置留空即可，例如 \\frac{}{12} 表示分子待填
 - 不要使用 $ 或 $$ 符號
 
-範例輸出：店員把 3\\frac{5}{8} \\text{L} 橙汁倒進一些玻璃杯裏，每隻玻璃杯的容量是 \\frac{1}{4} \\text{L}，最多可倒滿 隻玻璃杯。`,
+抄寫圖片題目時（非常重要）：
+- 文字逐字照抄圖片，不要改字、不要換成意思相近的詞（例如圖上是「鯊魚」就寫「鯊魚」）。
+- LaTeX 只用來寫數學式。不要用 \\quad、\\qquad、\\hspace、\\, 等排版指令排空位或間距，直接用文字表達。
+- 選擇題的選項寫成「（鯊魚／海龜／小丑魚）」，選項前的圓圈、星號、方格不用抄。
+- 作答說明照抄成文字，例如「（圈出答案）」。
+- 填空線寫成 ＿＿＿，答案方格寫成 □。
+- 打不出來的符號或圖形，用簡短文字描述，例如「（圖：一個圓形平均分成 4 份，塗了 1 份）」。
+
+範例輸出：店員把 3\\frac{5}{8} \\text{L} 橙汁倒進一些玻璃杯裏，每隻玻璃杯的容量是 \\frac{1}{4} \\text{L}，最多可倒滿 ＿＿＿ 隻玻璃杯。
+範例輸出（選擇題）：海洋館裏有一些動物。鯊魚佔全部的 \\frac{1}{5}，海龜佔全部的 \\frac{1}{2}，小丑魚佔全部的 \\frac{1}{10}。最多的是（鯊魚／海龜／小丑魚）。（圈出答案）`,
     schema: z.object({
       type: z
         .enum(allTypes)
@@ -260,6 +270,7 @@ ${typeDescriptions}
   // 1. Fix JSON-broken escapes  2. Strip stray $ delimiters  3. Re-wrap properly
   let q = fixBrokenLatex(obj.question);
   q = q.replace(/\$\$/g, " ").replace(/\$/g, "");
+  q = cleanTextModeLatex(q);
   q = ensureLatexDelimiters(q);
   return Response.json({ ...obj, question: q });
 }
