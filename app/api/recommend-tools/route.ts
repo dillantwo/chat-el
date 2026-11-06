@@ -20,7 +20,7 @@ const planSchema = z.object({
         toolKey: z.string().describe("這一步用的工具 key，必須來自可用工具列表"),
         title: z.string().describe("這一步要做甚麼，簡短一句，例如「紅豆和綠豆共佔全部的幾分之幾？」"),
         operand1: numberSchema.describe(
-          "四則運算的第一個數；整數與分數互換時是要轉換的數；相等分數（擴分約分）時是這一步要擴分或約分的分數；其他工具為 null"
+          "四則運算的第一個數；整數與分數互換時是要轉換的數；相等分數（擴分約分）時是這一步要擴分或約分的分數；整數的部分時是那個整數（{whole: 36, num: 0, den: 1}）；其他工具為 null"
         ),
         operand2: numberSchema.describe("四則運算的第二個數；其他工具為 null"),
         convertMode: z
@@ -40,6 +40,17 @@ const planSchema = z.object({
     .describe("依解題順序排列的步驟"),
 });
 
+/**
+ * 資料庫裏的工具說明（sub）多半是程式名稱（例如「FractionApp (Integer)」），
+ * AI 看不出工具做甚麼，所以這裏補一句用途。
+ */
+const TOOL_HINTS: Record<string, string> = {
+  "fraction-integer": "求整數的幾分之幾（例如 36 的 2/9 是多少），把整數排成陣列再按分母分組",
+  "fraction-converting": "整數、假分數、帶分數互相轉換（例如 1 = 8/8、1 1/2 = 3/2）",
+  "fraction-expanding-simplifying": "相等分數：擴分和約分",
+  "fraction-comparison": "比較兩三個分數的大小",
+};
+
 const SYSTEM_PROMPT = `你是一位小學數學老師。先理解整道題目，想清楚解題要用到哪些工具，依使用順序列出，並帶上開啟工具時要用的數字。steps 陣列的每一項就是一個推薦工具（學生看不到「步驟」，只會看到工具列表）。
 
 規則：
@@ -52,6 +63,9 @@ const SYSTEM_PROMPT = `你是一位小學數學老師。先理解整道題目，
 - 後面的步驟可以用前面步驟的結果（例如第 1 步得 5/8，第 3 步用 5/8）。
 - 相等分數（fraction-expanding-simplifying）一個工具同時做擴分和約分，學生在工具裏可以自己換分數、切換擴分／約分、調整倍數。operand1 = 題目中第一個要擴分或約分的真分數，equivalentMode = 題目先做的是擴分（"expand"）還是約分（"simplify"）。
 - 每個工具只推薦一次。同一個工具要用在幾個分數、或同時要擴分和約分，都只列一次，不要按分數、倍數或擴分／約分拆開。例如「先將 4/6 和 5/10 約至最簡分數，再找首 5 個擴分數」只推薦一次 fraction-expanding-simplifying（operand1={0,4,6}，equivalentMode="simplify"）。
+- 整數的部分（fraction-integer）用來求「整數的幾分之幾」，例如「36 塊積木的 2/9 是多少塊」：把整數排成長方形陣列，再按分母分組來數。operand1 = {whole: 該整數, num: 0, den: 1}，範圍 1–999。
+  - 題目是「一個整數的幾分之幾是多少」（整數 × 分數、求部分的數量），用 fraction-integer，不要用 fraction-multiplication，也不要先用 fraction-converting 把整數化成分數。
+  - 幾個分數都是同一個整數的部分時，先用 fraction-addition / fraction-subtraction 把分數合起來，再用 fraction-integer 求這個整數的部分。
 - 其他概念題（比較大小、帶分數與假分數互換等），就只推薦一個對應的工具，operand 等欄位設為 null。
 - context 是給學生看的這一步題目，保留題目的情境和單位，兩個數的位置分別寫 [FRAC1]、[FRAC2]，不要寫出答案，不可用 LaTeX。
 - 只推薦解題需要用到的工具，通常 1–3 個，同一個 toolKey 不可重複出現。toolKey 只能用可用工具列表裏的 key。
@@ -65,7 +79,12 @@ steps:
 
 題目：一瓶果汁原有 1 1/2 升，妹妹喝了 3/8 升，這瓶果汁還餘下多少升？
 steps:
-1. fraction-subtraction，title「這瓶果汁還餘下多少升？」，operand1={1,1,2}，operand2={0,3,8}，context「一瓶果汁原有 [FRAC1] 升，妹妹喝了 [FRAC2] 升，這瓶果汁還餘下多少升？」`;
+1. fraction-subtraction，title「這瓶果汁還餘下多少升？」，operand1={1,1,2}，operand2={0,3,8}，context「一瓶果汁原有 [FRAC1] 升，妹妹喝了 [FRAC2] 升，這瓶果汁還餘下多少升？」
+
+題目：森美有 36 塊積木，其中的 2/9 是黃色，1/3 是紅色。黃色和紅色的積木共有多少塊？
+steps:
+1. fraction-addition，title「黃色和紅色共佔全部的幾分之幾？」，operand1={0,2,9}，operand2={0,1,3}，context「森美有 36 塊積木，其中的 [FRAC1] 是黃色，[FRAC2] 是紅色。黃色和紅色的積木共佔全部的幾分之幾？」
+2. fraction-integer，title「36 塊積木的 5/9 是多少塊？」，operand1={36,0,1}`;
 
 export async function POST(req: Request) {
   const denied = await requireTopicApi("math", "ai-problem-solving");
@@ -91,7 +110,8 @@ export async function POST(req: Request) {
   const toolDescriptions = tools
     .map((t) => {
       const note = stepToolTakesNumbers(t.key) ? "（可帶入這一步的數字）" : "";
-      return `- ${t.key}：${t.label ?? ""}（${t.sub ?? ""}）${note}`;
+      const hint = TOOL_HINTS[t.key] ? `：${TOOL_HINTS[t.key]}` : "";
+      return `- ${t.key}：${t.label ?? ""}（${t.sub ?? ""}）${note}${hint}`;
     })
     .join("\n");
 

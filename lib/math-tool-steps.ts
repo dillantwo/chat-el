@@ -49,12 +49,29 @@ export const OPERATION_TOOL_ROUTES: Record<string, string> = {
 
 export const CONVERTING_TOOL_KEY = "fraction-converting";
 export const EQUIVALENT_TOOL_KEY = "fraction-expanding-simplifying";
+/** 整數的部分：求整數的幾分之幾（36 的 2/9），工具只需要那個整數 */
+export const INTEGER_PART_TOOL_KEY = "fraction-integer";
 
 /** 這些工具可以只靠步驟裏的數字開啟。 */
 export function stepToolTakesNumbers(toolKey: string): boolean {
   return (
-    toolKey in OPERATION_TOOL_ROUTES || toolKey === CONVERTING_TOOL_KEY || toolKey === EQUIVALENT_TOOL_KEY
+    toolKey in OPERATION_TOOL_ROUTES ||
+    toolKey === CONVERTING_TOOL_KEY ||
+    toolKey === EQUIVALENT_TOOL_KEY ||
+    toolKey === INTEGER_PART_TOOL_KEY
   );
+}
+
+/** 整數的部分工具的整數：範圍和工具輸入框一致（1–999）。AI 可能寫成 {36,0,1} 或 {0,36,1}。 */
+function sanitizeWholeNumber(raw: unknown): StepNumber | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const whole = toInt(r.whole) ?? 0;
+  const num = toInt(r.num) ?? 0;
+  const den = toInt(r.den) ?? 1;
+  const n = whole > 0 && num === 0 ? whole : whole === 0 && den === 1 ? num : null;
+  if (n === null || n < 1 || n > 999) return null;
+  return { whole: n, num: 0, den: 1 };
 }
 
 const MAX_STEPS = 6;
@@ -152,6 +169,8 @@ export function sanitizeSteps(
         operand1 = v;
         equivalentMode = r.equivalentMode === "simplify" ? "simplify" : "expand";
       }
+    } else if (toolKey === INTEGER_PART_TOOL_KEY) {
+      operand1 = sanitizeWholeNumber(r.operand1);
     }
 
     steps.push({ toolKey, title, operand1, operand2, convertMode, equivalentMode, context });
@@ -266,6 +285,11 @@ export function buildStepToolPath(step: MathToolStep): string | null {
       mode: step.equivalentMode ?? "expand",
     });
     return `/math/fraction-es?${qs.toString()}`;
+  }
+
+  if (step.toolKey === INTEGER_PART_TOOL_KEY) {
+    if (!step.operand1) return null;
+    return `/math/fraction-integer?num=${step.operand1.whole}`;
   }
 
   return null;
