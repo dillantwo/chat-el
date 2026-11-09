@@ -101,32 +101,32 @@ export const questions: Question[] = [
     options: [
       { val: "A", label: "8 August" },
       { val: "B", label: "9 August" },
-      { val: "C", label: "15 August" },
+      { val: "C", label: "12 August" },
       { val: "D", label: "22 August" },
     ],
     answer: "C",
     clues: ["q3"],
     hint: (
       <>
-        <strong>💡 Hint:</strong> The offer runs during <em>10–16 August</em>. Check which answer
-        date falls <strong>within</strong> this period. 8 and 9 August are before it starts; 22
-        August is after it ends!
+        <strong>💡 Hint:</strong> The free gift is given during <em>10–12 August</em>. Check which
+        answer date falls <strong>within</strong> this period. 8 and 9 August are before it starts;
+        22 August is after it ends!
       </>
     ),
     strategy: (
       <>
-        Activate your knowledge of time relations. &quot;10–16
+        Activate your knowledge of time relations. &quot;10–12
         August&quot; is a period of time. Check each option and decide whether the date falls inside
         the period.
       </>
     ),
     explain: (
       <>
-        <strong>✅ Correct: C. 15 August</strong>
+        <strong>✅ Correct: C. 12 August</strong>
         <br />
         <br />
-        The clue says <strong>10–16 August</strong>. 8 and 9 August are <em>before</em> the period
-        and 22 August is after. Only <strong>15 August</strong> falls within 10–16 August, so C is
+        The clue says <strong>10–12 August</strong>. 8 and 9 August are <em>before</em> the period
+        and 22 August is after. Only <strong>12 August</strong> falls within 10–12 August, so C is
         correct.
       </>
     ),

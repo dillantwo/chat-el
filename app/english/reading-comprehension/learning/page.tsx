@@ -570,16 +570,17 @@ export default function EnglishReadingComprehensionLearningPage() {
                                 (for the Tai Po branch only)
                               </span>
                               <br />
-                              <span className={clueClass("q3")} ref={setClueRef("q3")}>
-                                10–16 August
-                              </span>
+                              10–16 August
                               <br />
                               Buy 1 minicup and get 1 minicup FREE!
                             </p>
                           </div>
                           <div className="gift-banner">
-                            🎁 <strong>FREE GIFT</strong> — Spend over $300 from 10–12 August to get
-                            a pair of sunglasses for FREE! 😎
+                            🎁 <strong>FREE GIFT</strong> — Spend over $300 from{" "}
+                            <span className={clueClass("q3")} ref={setClueRef("q3")}>
+                              10–12 August
+                            </span>{" "}
+                            to get a pair of sunglasses for FREE! 😎
                           </div>
                         </div>
                       </div>
