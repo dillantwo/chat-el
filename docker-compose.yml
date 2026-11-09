@@ -16,6 +16,7 @@ services:
       - mongo-data:/data/db
       - ./docker/mongo/init-user.sh:/docker-entrypoint-initdb.d/init-user.sh:ro
     environment:
+      TZ: Asia/Hong_Kong
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-ai-qef}
@@ -77,6 +78,7 @@ services:
           # container instead of an OOM that takes the host down.
           memory: 1500M
     environment:
+      TZ: Asia/Hong_Kong
       # Keep V8's heap ceiling under the container limit so GC runs before the
       # kernel's OOM killer does. Without this, Node sizes the old space from
       # host RAM (8GB here) and would happily grow past 1500M.
@@ -144,6 +146,7 @@ services:
       mongo:
         condition: service_healthy
     environment:
+      TZ: Asia/Hong_Kong
       MONGODB_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/${MONGO_INITDB_DATABASE:-ai-qef}?authSource=${MONGO_INITDB_DATABASE:-ai-qef}
       AZURE_RESOURCE_NAME: ${AZURE_RESOURCE_NAME}
       AZURE_API_KEY: ${AZURE_API_KEY}
@@ -162,6 +165,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    environment:
+      TZ: Asia/Hong_Kong
     ports:
       - "80:80"
       - "443:443"
