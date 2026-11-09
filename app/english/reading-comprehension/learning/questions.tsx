@@ -101,7 +101,7 @@ export const questions: Question[] = [
     options: [
       { val: "A", label: "8 August" },
       { val: "B", label: "9 August" },
-      { val: "C", label: "12 August" },
+      { val: "C", label: "11 August" },
       { val: "D", label: "22 August" },
     ],
     answer: "C",
@@ -122,11 +122,11 @@ export const questions: Question[] = [
     ),
     explain: (
       <>
-        <strong>✅ Correct: C. 12 August</strong>
+        <strong>✅ Correct: C. 11 August</strong>
         <br />
         <br />
         The clue says <strong>10–12 August</strong>. 8 and 9 August are <em>before</em> the period
-        and 22 August is after. Only <strong>12 August</strong> falls within 10–12 August, so C is
+        and 22 August is after. Only <strong>11 August</strong> falls within 10–12 August, so C is
         correct.
       </>
     ),

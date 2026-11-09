@@ -653,7 +653,7 @@ export default function EnglishReadingComprehensionLearningPage() {
                           <div className="comment-item">
                             <div className="comment-meta">
                               <span className="comment-user">Vicky2026</span>
-                              <span className="comment-date">20 Aug 2026</span>
+                              <span className="comment-date">12 Aug 2026</span>
                             </div>
                             <p className="comment-text">
                               I like chocolate and strawberry flavours more. I prefer the{" "}
@@ -670,7 +670,7 @@ export default function EnglishReadingComprehensionLearningPage() {
                           <div className="comment-item">
                             <div className="comment-meta">
                               <span className="comment-user">Rebecca01</span>
-                              <span className="comment-date">15 Aug 2026</span>
+                              <span className="comment-date">12 Aug 2026</span>
                             </div>
                             <p className="comment-text">
                               <span className={clueClass("q6")} ref={setClueRef("q6")}>
@@ -828,10 +828,10 @@ export default function EnglishReadingComprehensionLearningPage() {
 const OVERVIEW_COMMENTS = [
   {
     user: "Vicky2026",
-    date: "20 Aug 2026",
+    date: "12 Aug 2026",
     text: "I like chocolate and strawberry flavours more. I prefer the ordinary flavours to the strange new mix.",
   },
-  { user: "Rebecca01", date: "15 Aug 2026", text: "I'm coming back for more!" },
+  { user: "Rebecca01", date: "12 Aug 2026", text: "I'm coming back for more!" },
   { user: "Vera123", date: "11 Aug 2026", text: "Smells good, but tastes..." },
   {
     user: "HappyPeter",
