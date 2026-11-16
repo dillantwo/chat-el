@@ -2,6 +2,62 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalogClock, type ClockHand } from "../_components/AnalogClock";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    correct: (hours: number, minutes: number) => `答對了，正確答案是 ${hours} 小時 ${minutes} 分鐘。`,
+    wrong: "答案不太對，記得借位時 1 小時 = 60 分鐘。",
+    quizCorrect: "設定正確，可以再抽一題。\n",
+    quizOff: (hours: number, minutes: number) => `目前差距是 ${hours}h ${minutes}m，還沒到指定時間。`,
+    question: "算算看，經過了多少時間？",
+    hint: "提示：借位時 1 小時 = 60 分鐘",
+    check: "檢查我的計算",
+    hideSteps: "收起詳解",
+    showSteps: "看橫式詳解",
+    stepsTitle: "橫式計算過程",
+    nextDay: "Time 2 是隔天，所以先在計算時加上 24 小時。",
+    equation: (h2: number, m2: number, h1: number, m1: number) =>
+      `Time 2 (${h2}時 ${m2}分) - Time 1 (${h1}時 ${m1}分)`,
+    borrowNeeded: (m2: number, m1: number) => `${m2} 分不夠減 ${m1} 分，所以向小時借 1。`,
+    afterBorrow: (h2: number, m2: number, h1: number, m1: number) =>
+      `借位後: (${h2}時 ${m2}分) - (${h1}時 ${m1}分)`,
+    hourSubtract: (a: number, b: number, result: number) => `小時相減: ${a} - ${b} = ${result} 時`,
+    minuteSubtract: (a: number, b: number, result: number) => `分鐘相減: ${a} - ${b} = ${result} 分`,
+    noBorrow: "分鐘夠減，直接把小時和分鐘分開相減。",
+    answer: (hours: number, minutes: number) => `答: 經過了 ${hours} 小時 ${minutes} 分鐘`,
+    startQuiz: "隨機挑戰 (設定 Time 2)",
+    quizTarget: (hours: number, minutes: number) => `請將 Time 2 設為 Time 1 之後 ${hours}h ${minutes}m`,
+    checkQuiz: "檢查 Time 2",
+  },
+  en: {
+    correct: (hours: number, minutes: number) => `Correct! The answer is ${hours} hours ${minutes} minutes.`,
+    wrong: "Not quite. Remember: when you borrow, 1 hour = 60 minutes.",
+    quizCorrect: "That's right! You can try another one.\n",
+    quizOff: (hours: number, minutes: number) =>
+      `The time difference is ${hours}h ${minutes}m now. That's not the target yet.`,
+    question: "Work it out: how much time has passed?",
+    hint: "Hint: when you borrow, 1 hour = 60 minutes",
+    check: "Check my answer",
+    hideSteps: "Hide the working",
+    showSteps: "Show the working",
+    stepsTitle: "Working",
+    nextDay: "Time 2 is on the next day, so add 24 hours to it first.",
+    equation: (h2: number, m2: number, h1: number, m1: number) =>
+      `Time 2 (${h2} h ${m2} min) - Time 1 (${h1} h ${m1} min)`,
+    borrowNeeded: (m2: number, m1: number) => `You can't take ${m1} min from ${m2} min, so borrow 1 hour.`,
+    afterBorrow: (h2: number, m2: number, h1: number, m1: number) =>
+      `After borrowing: (${h2} h ${m2} min) - (${h1} h ${m1} min)`,
+    hourSubtract: (a: number, b: number, result: number) => `Hours: ${a} - ${b} = ${result} h`,
+    minuteSubtract: (a: number, b: number, result: number) => `Minutes: ${a} - ${b} = ${result} min`,
+    noBorrow: "There are enough minutes, so subtract the hours and the minutes separately.",
+    answer: (hours: number, minutes: number) => `Answer: ${hours} hours ${minutes} minutes have passed`,
+    startQuiz: "Random challenge (set Time 2)",
+    quizTarget: (hours: number, minutes: number) => `Set Time 2 to ${hours}h ${minutes}m after Time 1`,
+    checkQuiz: "Check Time 2",
+  },
+});
 
 type ClockKey = "start" | "end";
 
@@ -12,8 +68,10 @@ type DragState = {
 
 type FeedbackState = {
   kind: "idle" | "correct" | "wrong";
-  message: string;
 };
+
+/** What the last 檢查 Time 2 found. The wording is built at render so it follows the locale. */
+type QuizFeedback = { kind: "correct" } | { kind: "off"; diffMinutes: number } | null;
 
 type TimeDiffSteps = {
   isNextDay: boolean;
@@ -99,6 +157,7 @@ function buildSteps(startTime: number, endTime: number): TimeDiffSteps {
 }
 
 export default function ClockTimeDifferencePage() {
+  const copy = useCopy(COPY);
   const startClockRef = useRef<SVGSVGElement | null>(null);
   const endClockRef = useRef<SVGSVGElement | null>(null);
   const lastAngleRef = useRef(0);
@@ -108,10 +167,10 @@ export default function ClockTimeDifferencePage() {
   const [dragging, setDragging] = useState<DragState>(null);
   const [answerHours, setAnswerHours] = useState("");
   const [answerMinutes, setAnswerMinutes] = useState("");
-  const [feedback, setFeedback] = useState<FeedbackState>({ kind: "idle", message: "" });
+  const [feedback, setFeedback] = useState<FeedbackState>({ kind: "idle" });
   const [showSteps, setShowSteps] = useState(false);
   const [quizTargetDiff, setQuizTargetDiff] = useState<number | null>(null);
-  const [quizFeedback, setQuizFeedback] = useState("");
+  const [quizFeedback, setQuizFeedback] = useState<QuizFeedback>(null);
 
   useEffect(() => {
     if (!dragging) {
@@ -147,9 +206,9 @@ export default function ClockTimeDifferencePage() {
   }, [dragging]);
 
   useEffect(() => {
-    setFeedback({ kind: "idle", message: "" });
+    setFeedback({ kind: "idle" });
     setShowSteps(false);
-    setQuizFeedback("");
+    setQuizFeedback(null);
   }, [startTime, endTime, is24H]);
 
   const diffMinutes = (endTime - startTime + 1440) % 1440;
@@ -230,18 +289,12 @@ export default function ClockTimeDifferencePage() {
     const studentHours = Number.parseInt(answerHours || "0", 10) || 0;
     const studentMinutes = Number.parseInt(answerMinutes || "0", 10) || 0;
     if (studentHours === expectedHours && studentMinutes === expectedMinutes) {
-      setFeedback({
-        kind: "correct",
-        message: `答對了，正確答案是 ${expectedHours} 小時 ${expectedMinutes} 分鐘。`,
-      });
+      setFeedback({ kind: "correct" });
       setShowSteps(false);
       return;
     }
 
-    setFeedback({
-      kind: "wrong",
-      message: "答案不太對，記得借位時 1 小時 = 60 分鐘。",
-    });
+    setFeedback({ kind: "wrong" });
   }
 
   function startQuiz() {
@@ -249,7 +302,7 @@ export default function ClockTimeDifferencePage() {
     const target = (Math.floor(Math.random() * 11) + 1) * 60 + Math.floor(Math.random() * 12) * 5;
     setStartTime(nextStartTime);
     setQuizTargetDiff(target);
-    setQuizFeedback("");
+    setQuizFeedback(null);
   }
 
   function checkQuiz() {
@@ -258,14 +311,26 @@ export default function ClockTimeDifferencePage() {
     }
 
     if (diffMinutes === quizTargetDiff) {
-      setQuizFeedback("設定正確，可以再抽一題。\n");
+      setQuizFeedback({ kind: "correct" });
       return;
     }
 
-    setQuizFeedback(
-      `目前差距是 ${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m，還沒到指定時間。`,
-    );
+    setQuizFeedback({ kind: "off", diffMinutes });
   }
+
+  const feedbackMessage =
+    feedback.kind === "correct"
+      ? copy.correct(expectedHours, expectedMinutes)
+      : feedback.kind === "wrong"
+        ? copy.wrong
+        : "";
+
+  const quizFeedbackMessage =
+    quizFeedback === null
+      ? ""
+      : quizFeedback.kind === "correct"
+        ? copy.quizCorrect
+        : copy.quizOff(Math.floor(quizFeedback.diffMinutes / 60), quizFeedback.diffMinutes % 60);
 
   function renderClock(clock: ClockKey, color: string, time: number) {
     const hours = Math.floor(time / 60);
@@ -342,9 +407,9 @@ export default function ClockTimeDifferencePage() {
         </div>
 
         <section className="mt-9 border-t-2 border-dashed border-[#ddd] pt-6 text-center">
-          <div className="mb-2 text-[1.3rem] font-extrabold text-[#1b1b1f]">算算看，經過了多少時間？</div>
+          <div className="mb-2 text-[1.3rem] font-extrabold text-[#1b1b1f]">{copy.question}</div>
           <div className="mb-4 inline-block rounded-full border border-[#fadbd8] bg-[#fef0f0] px-4 py-1 text-[1.05rem] font-bold text-[#d35400]">
-            提示：借位時 1 小時 = 60 分鐘
+            {copy.hint}
           </div>
 
           <div className="mb-4 flex items-center justify-center gap-3">
@@ -375,7 +440,7 @@ export default function ClockTimeDifferencePage() {
             onClick={checkAnswer}
             className="rounded-[10px] bg-[#2ecc71] px-6 py-3 text-lg font-bold text-white"
           >
-            檢查我的計算
+            {copy.check}
           </button>
 
           <div
@@ -387,7 +452,7 @@ export default function ClockTimeDifferencePage() {
                   : "text-transparent"
             }`}
           >
-            {feedback.message || "."}
+            {feedbackMessage || "."}
           </div>
 
           {feedback.kind === "wrong" ? (
@@ -396,42 +461,42 @@ export default function ClockTimeDifferencePage() {
               onClick={() => setShowSteps((value) => !value)}
               className="mt-2 rounded-[8px] bg-[#9b59b6] px-4 py-2 text-base font-bold text-white"
             >
-              {showSteps ? "收起詳解" : "看橫式詳解"}
+              {showSteps ? copy.hideSteps : copy.showSteps}
             </button>
           ) : null}
 
           {showSteps ? (
             <div className="mx-auto mt-4 max-w-[450px] rounded-[12px] border-2 border-dashed border-[#e67e22] bg-[#fdf2e9] p-4 text-left text-lg leading-8 text-[#333]">
-              <strong className="text-[1.15rem] text-[#d35400]">橫式計算過程</strong>
+              <strong className="text-[1.15rem] text-[#d35400]">{copy.stepsTitle}</strong>
               {steps.isNextDay ? (
                 <p className="mt-3 text-sm text-[#c0392b]">
-                  Time 2 是隔天，所以先在計算時加上 24 小時。
+                  {copy.nextDay}
                 </p>
               ) : null}
 
               <div className="mt-4 rounded-[8px] border border-[#ccc] bg-white p-3 text-center text-[1.15rem] font-bold">
-                Time 2 ({steps.calcHour2}時 {steps.displayMinute2}分) - Time 1 ({steps.calcHour1}時 {steps.displayMinute1}分)
+                {copy.equation(steps.calcHour2, steps.displayMinute2, steps.calcHour1, steps.displayMinute1)}
               </div>
 
               {steps.needsBorrow ? (
                 <>
-                  <p className="mt-4">{steps.displayMinute2} 分不夠減 {steps.displayMinute1} 分，所以向小時借 1。</p>
+                  <p className="mt-4">{copy.borrowNeeded(steps.displayMinute2, steps.displayMinute1)}</p>
                   <div className="mt-3 rounded-[8px] border-2 border-dashed border-[#e67e22] bg-[#fffcf8] p-3 text-center text-[1.15rem] font-bold">
-                    借位後: ({steps.borrowedHour2}時 {steps.borrowedMinute2}分) - ({steps.calcHour1}時 {steps.displayMinute1}分)
+                    {copy.afterBorrow(steps.borrowedHour2, steps.borrowedMinute2, steps.calcHour1, steps.displayMinute1)}
                   </div>
-                  <p className="mt-3">小時相減: {steps.borrowedHour2} - {steps.calcHour1} = {steps.diffHours} 時</p>
-                  <p>分鐘相減: {steps.borrowedMinute2} - {steps.displayMinute1} = {steps.diffMinutes} 分</p>
+                  <p className="mt-3">{copy.hourSubtract(steps.borrowedHour2, steps.calcHour1, steps.diffHours)}</p>
+                  <p>{copy.minuteSubtract(steps.borrowedMinute2, steps.displayMinute1, steps.diffMinutes)}</p>
                 </>
               ) : (
                 <>
-                  <p className="mt-4">分鐘夠減，直接把小時和分鐘分開相減。</p>
-                  <p className="mt-3">小時相減: {steps.calcHour2} - {steps.calcHour1} = {steps.diffHours} 時</p>
-                  <p>分鐘相減: {steps.displayMinute2} - {steps.displayMinute1} = {steps.diffMinutes} 分</p>
+                  <p className="mt-4">{copy.noBorrow}</p>
+                  <p className="mt-3">{copy.hourSubtract(steps.calcHour2, steps.calcHour1, steps.diffHours)}</p>
+                  <p>{copy.minuteSubtract(steps.displayMinute2, steps.displayMinute1, steps.diffMinutes)}</p>
                 </>
               )}
 
               <div className="mt-4 border-t border-dashed border-[#ccc] pt-4 text-center text-xl text-[#27ae60]">
-                答: 經過了 {steps.diffHours} 小時 {steps.diffMinutes} 分鐘
+                {copy.answer(steps.diffHours, steps.diffMinutes)}
               </div>
             </div>
           ) : null}
@@ -443,22 +508,22 @@ export default function ClockTimeDifferencePage() {
             onClick={startQuiz}
             className="rounded-[8px] bg-[#3498db] px-5 py-2.5 text-base font-bold text-white"
           >
-            隨機挑戰 (設定 Time 2)
+            {copy.startQuiz}
           </button>
 
           {quizTargetDiff !== null ? (
             <div className="mx-auto mt-4 w-full max-w-[400px] rounded-[12px] bg-[#e3f2fd] p-4">
               <div className="mb-3 text-lg font-bold text-[#1976d2]">
-                請將 Time 2 設為 Time 1 之後 {Math.floor(quizTargetDiff / 60)}h {quizTargetDiff % 60}m
+                {copy.quizTarget(Math.floor(quizTargetDiff / 60), quizTargetDiff % 60)}
               </div>
               <button
                 type="button"
                 onClick={checkQuiz}
                 className="rounded-[8px] bg-[#f39c12] px-5 py-2.5 text-base font-bold text-white"
               >
-                檢查 Time 2
+                {copy.checkQuiz}
               </button>
-              {quizFeedback ? <p className="mt-3 font-semibold text-[#1b1b1f]">{quizFeedback}</p> : null}
+              {quizFeedbackMessage ? <p className="mt-3 font-semibold text-[#1b1b1f]">{quizFeedbackMessage}</p> : null}
             </div>
           ) : null}
         </section>

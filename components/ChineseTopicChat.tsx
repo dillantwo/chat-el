@@ -44,6 +44,8 @@ import {
   toSavedMessages,
 } from "@/lib/chat-message";
 import { useVoiceInput } from "@/lib/use-voice-input";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { defineCopy, intlLocale, type Locale } from "@/lib/i18n/config";
 import {
   createChineseChatId,
   upsertChineseChatHistory,
@@ -98,16 +100,132 @@ export interface ChineseTopicConfig {
 type DraftStage = "first" | "revised" | "final";
 type DraftState = Record<DraftStage, string>;
 const EMPTY_DRAFTS: DraftState = { first: "", revised: "", final: "" };
-const DRAFT_STAGES: { key: DraftStage; label: string; hint: string }[] = [
-  { key: "first", label: "初稿", hint: "先寫下你的第一個版本…" },
-  { key: "revised", label: "修改版本", hint: "根據建議修改後的版本…" },
-  { key: "final", label: "終稿", hint: "完成後的最終版本…" },
-];
+const DRAFT_STAGE_KEYS: DraftStage[] = ["first", "revised", "final"];
 
-function formatDraftDate(value: string) {
+/**
+ * Stored as the title of an untitled draft (here and by the API route), and
+ * matched on load to show an empty title box. A stored value, not UI copy, so
+ * it stays Chinese; the list shows `copy.untitledDraft` in its place.
+ */
+const UNTITLED_DRAFT_TITLE = "未命名作文稿";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    stages: {
+      first: { label: "初稿", hint: "先寫下你的第一個版本…" },
+      revised: { label: "修改版本", hint: "根據建議修改後的版本…" },
+      final: { label: "終稿", hint: "完成後的最終版本…" },
+    } as Record<DraftStage, { label: string; hint: string }>,
+    interactiveContent: "互動內容",
+    defaultBackLabel: "返回中文科",
+    defaultPlaceholder: "輸入你的作文或問題…",
+    defaultEmptyHint: (topic: string) => `開始與 AI 對話，練習${topic}。`,
+    defaultTitle: (topic: string) => `${topic}對話`,
+    errorPrefix: "（出錯了）",
+    unknownError: "未知錯誤",
+    hideDrafts: "隱藏作文稿",
+    showDrafts: "顯示作文稿",
+    drafts: "作文稿",
+    hidePinned: "隱藏釘選",
+    showPinned: "顯示釘選",
+    pinned: (n: number) => `釘選 ${n}`,
+    copyMessage: "複製訊息",
+    copied: "已複製",
+    unpin: "取消釘選",
+    pinMessage: "釘選訊息",
+    generatingInteractive: "互動內容生成中…⏳",
+    copyReply: "複製回覆",
+    pinReply: "釘選回覆",
+    pickModeFirst: "請先在上方選擇一個模式…",
+    uploadImage: "上傳圖片",
+    stopVoice: "停止語音輸入",
+    voiceInput: "語音輸入",
+    listening: "聆聽中…",
+    backToList: "返回列表",
+    editDraft: "編輯作文稿",
+    myDrafts: "我的作文稿",
+    close: "關閉",
+    newDraft: "新建作文稿",
+    noDraftsLine1: "還沒有作文稿。",
+    noDraftsLine2: "點擊上方「新建作文稿」開始寫作。",
+    untitledDraft: "未命名作文稿",
+    delete: "刪除",
+    titleLabel: "標題",
+    titlePlaceholder: "為這篇作文取個名字…",
+    saving: "儲存中…",
+    saved: "已儲存到雲端",
+    autosaveHint: "編輯後會自動儲存到雲端",
+    charCount: (n: number) => `${n} 字`,
+    stopVoiceFor: (stage: string) => `停止語音輸入：${stage}`,
+    voiceInputFor: (stage: string) => `語音輸入：${stage}`,
+    discussWithAi: "與 AI 討論",
+    pinnedMessages: "釘選的訊息",
+    noPinnedLine1: "還沒有釘選任何訊息。",
+    noPinnedLine2: "點擊訊息下方的釘選圖示即可加入。",
+    you: "你",
+    copy: "複製",
+  },
+  en: {
+    stages: {
+      first: { label: "First draft", hint: "Write your first version here…" },
+      revised: { label: "Revised draft", hint: "Your version after the suggestions…" },
+      final: { label: "Final draft", hint: "Your finished version…" },
+    },
+    interactiveContent: "Interactive content",
+    defaultBackLabel: "Back to Chinese",
+    defaultPlaceholder: "Type your essay or question…",
+    defaultEmptyHint: (topic: string) => `Start chatting with AI to practise ${topic}.`,
+    defaultTitle: (topic: string) => `${topic} chat`,
+    errorPrefix: "(Error) ",
+    unknownError: "Unknown error",
+    hideDrafts: "Hide drafts",
+    showDrafts: "Show drafts",
+    drafts: "Drafts",
+    hidePinned: "Hide pinned",
+    showPinned: "Show pinned",
+    pinned: (n: number) => `Pinned ${n}`,
+    copyMessage: "Copy message",
+    copied: "Copied",
+    unpin: "Unpin",
+    pinMessage: "Pin message",
+    generatingInteractive: "Making interactive content…⏳",
+    copyReply: "Copy reply",
+    pinReply: "Pin reply",
+    pickModeFirst: "Please pick a mode above first…",
+    uploadImage: "Upload image",
+    stopVoice: "Stop voice input",
+    voiceInput: "Voice input",
+    listening: "Listening…",
+    backToList: "Back to list",
+    editDraft: "Edit draft",
+    myDrafts: "My drafts",
+    close: "Close",
+    newDraft: "New draft",
+    noDraftsLine1: "No drafts yet.",
+    noDraftsLine2: "Click “New draft” above to start writing.",
+    untitledDraft: "Untitled draft",
+    delete: "Delete",
+    titleLabel: "Title",
+    titlePlaceholder: "Give your essay a name…",
+    saving: "Saving…",
+    saved: "Saved to the cloud",
+    autosaveHint: "Your changes save to the cloud automatically",
+    charCount: (n: number) => `${n} characters`,
+    stopVoiceFor: (stage: string) => `Stop voice input: ${stage}`,
+    voiceInputFor: (stage: string) => `Voice input: ${stage}`,
+    discussWithAi: "Discuss with AI",
+    pinnedMessages: "Pinned messages",
+    noPinnedLine1: "Nothing pinned yet.",
+    noPinnedLine2: "Click the pin icon under a message to add it.",
+    you: "You",
+    copy: "Copy",
+  },
+});
+
+function formatDraftDate(value: string, locale: Locale) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("zh-HK", {
+  return d.toLocaleString(intlLocale(locale), {
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
@@ -186,6 +304,7 @@ function sanitizeEmbedHtml(html: string): string {
 // Renders AI-produced HTML in a sandboxed iframe that auto-grows to fit its
 // content, so the whole page shows with no inner scroll bar.
 function EmbeddedHtmlFrame({ html }: { html: string }) {
+  const copy = useCopy(COPY);
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(480);
 
@@ -235,7 +354,7 @@ function EmbeddedHtmlFrame({ html }: { html: string }) {
       scrolling="no"
       className="w-full overflow-hidden rounded-[8px] border border-[#e5e5e5] bg-white"
       style={{ height }}
-      title="互動內容"
+      title={copy.interactiveContent}
     />
   );
 }
@@ -246,16 +365,27 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     topicLabel,
     apiEndpoint,
     backHref = "/chinese",
-    backLabel = "返回中文科",
     icon = "pen",
-    placeholder = "輸入你的作文或問題…",
-    emptyHint = `開始與 AI 對話，練習${config.topicLabel}。`,
-    defaultTitle = `${config.topicLabel}對話`,
     quickStartOptions,
     requireQuickStartSelection = false,
     enableDrafts = false,
     promptPresets,
   } = config;
+  const { locale } = useLocale();
+  const copy = COPY[locale];
+  // Config text comes from the page, already in the current locale; these are
+  // only the fallbacks for a page that leaves a field out.
+  const backLabel = config.backLabel ?? copy.defaultBackLabel;
+  const placeholder = config.placeholder ?? copy.defaultPlaceholder;
+  const emptyHint = config.emptyHint ?? copy.defaultEmptyHint(topicLabel);
+  const defaultTitle = config.defaultTitle ?? copy.defaultTitle(topicLabel);
+  // Read by the autosave effect through a ref, so switching language does not
+  // re-save (and reorder) the open conversation.
+  const defaultTitleRef = useRef(defaultTitle);
+  defaultTitleRef.current = defaultTitle;
+  // The upload-limit / unreadable-file alerts take the older "zh" | "en" form.
+  const alertLang = locale === "en" ? "en" : "zh";
+  const draftStages = DRAFT_STAGE_KEYS.map((key) => ({ key, ...copy.stages[key] }));
   const HeaderIcon = ICON_MAP[icon];
 
   const {
@@ -269,8 +399,8 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     reset: resetChat,
   } = useStreamingChat({
     endpoint: apiEndpoint,
-    errorPrefix: "（出錯了）",
-    unknownErrorMessage: "未知錯誤",
+    errorPrefix: copy.errorPrefix,
+    unknownErrorMessage: copy.unknownError,
   });
   const {
     files: chatFiles,
@@ -279,7 +409,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     clear: clearChatFiles,
     onInputChange: handleChatFileChange,
     onPaste: handlePaste,
-  } = useChatAttachments("zh");
+  } = useChatAttachments(alertLang);
 
   const [input, setInput] = useState("");
   const [currentChatId, setCurrentChatId] = useState(() => createChineseChatId());
@@ -343,6 +473,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     rebase: rebaseDraftDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: alertLang,
     // Dictation begins on a new line under whatever is already written, but once
     // the student has typed we are mid-sentence and must not add another break.
     separator: "\n",
@@ -384,6 +515,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     rebase: rebaseChatDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: alertLang,
     // Chinese doesn't separate words with spaces.
     separator: "",
     getBaseText: () => input,
@@ -468,7 +600,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     (id: string, state: DraftState, title: string) => ({
       id,
       topic: topicId,
-      title: title.trim() || deriveDraftTitle(state, "未命名作文稿"),
+      title: title.trim() || deriveDraftTitle(state, UNTITLED_DRAFT_TITLE),
       first: state.first,
       revised: state.revised,
       final: state.final,
@@ -580,7 +712,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
       const item = await getEssayDraft(id);
       if (!item) return;
       const loaded: DraftState = { first: item.first, revised: item.revised, final: item.final };
-      const title = item.title === "未命名作文稿" ? "" : item.title;
+      const title = item.title === UNTITLED_DRAFT_TITLE ? "" : item.title;
       // Remember what we loaded so a flush cannot re-save identical content and
       // needlessly bump updatedAt (which reorders the draft list).
       lastSavedPayloadRef.current = JSON.stringify(buildDraftPayload(item.id, loaded, title));
@@ -738,12 +870,12 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
 
     void upsertChineseChatHistory({
       id: currentChatId,
-      title: deriveChatTitle(messages, defaultTitle),
+      title: deriveChatTitle(messages, defaultTitleRef.current),
       topic: topicId,
       messages: toSavedMessages(messages),
       updatedAt: new Date().toISOString(),
     });
-  }, [currentChatId, messages, status, topicId, defaultTitle]);
+  }, [currentChatId, messages, status, topicId]);
 
   useEffect(() => {
     const container = chatScrollRef.current;
@@ -771,7 +903,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
     if (isListening) stopListening();
     const { signal } = beginSend();
 
-    const images = isQuick ? [] : await filesToChatImages(chatFiles, "zh");
+    const images = isQuick ? [] : await filesToChatImages(chatFiles, alertLang);
     // The student pressed Stop while the attachments were being read.
     if (signal.aborted) return;
 
@@ -822,17 +954,17 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
             {enableDrafts && (
               <Button type="button" variant="outline" size="sm" onClick={() => setShowDrafts((v) => !v)}
                 className={`rounded-full border-[#e5e5e5] px-3 text-xs font-medium transition-all hover:bg-[#f4f4f5] ${showDrafts ? "text-[#146ef5] border-[#146ef5]/40" : "text-[#080808]"}`}
-                title={showDrafts ? "隱藏作文稿" : "顯示作文稿"}>
+                title={showDrafts ? copy.hideDrafts : copy.showDrafts}>
                 <FileText className="size-3.5" />
-                作文稿
+                {copy.drafts}
               </Button>
             )}
             {pinnedIds.length > 0 && (
               <Button type="button" variant="outline" size="sm" onClick={() => setShowPinned((v) => !v)}
                 className={`rounded-full border-[#e5e5e5] px-3 text-xs font-medium transition-all hover:bg-[#f4f4f5] ${showPinned ? "text-[#146ef5] border-[#146ef5]/40" : "text-[#080808]"}`}
-                title={showPinned ? "隱藏釘選" : "顯示釘選"}>
+                title={showPinned ? copy.hidePinned : copy.showPinned}>
                 <Pin className="size-3.5" />
-                釘選 {pinnedIds.length}
+                {copy.pinned(pinnedIds.length)}
               </Button>
             )}
           </div>
@@ -885,7 +1017,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                       type="button"
                       onClick={() => handleCopy(message.id, message.text)}
                       className="group/copy relative mt-1.5 inline-flex size-8 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f4f4f5] hover:text-[#5a5a5a]"
-                      aria-label="複製訊息"
+                      aria-label={copy.copyMessage}
                     >
                       {copiedId === message.id ? (
                         <Check className="size-4 text-[#16a34a]" />
@@ -893,14 +1025,14 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                         <Copy className="size-4" />
                       )}
                       <span className="pointer-events-none absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-md bg-[#080808] px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover/copy:opacity-100">
-                        {copiedId === message.id ? "已複製" : "複製訊息"}
+                        {copiedId === message.id ? copy.copied : copy.copyMessage}
                       </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => togglePin(message.id)}
                       className={`group/pin relative mt-1.5 inline-flex size-8 items-center justify-center rounded-full transition-colors hover:bg-[#f4f4f5] ${pinnedIds.includes(message.id) ? "text-[#146ef5]" : "text-[#9a9a9a] hover:text-[#5a5a5a]"}`}
-                      aria-label={pinnedIds.includes(message.id) ? "取消釘選" : "釘選訊息"}
+                      aria-label={pinnedIds.includes(message.id) ? copy.unpin : copy.pinMessage}
                     >
                       {pinnedIds.includes(message.id) ? (
                         <PinOff className="size-4" />
@@ -908,7 +1040,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                         <Pin className="size-4" />
                       )}
                       <span className="pointer-events-none absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-md bg-[#080808] px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover/pin:opacity-100">
-                        {pinnedIds.includes(message.id) ? "取消釘選" : "釘選訊息"}
+                        {pinnedIds.includes(message.id) ? copy.unpin : copy.pinMessage}
                       </span>
                     </button>
                   </div>
@@ -952,7 +1084,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                     // placeholder instead of flashing raw tags as text.
                     const streamingThis = isLoading && message.id === messages[messages.length - 1]?.id;
                     if (streamingThis && HTML_START_RE.test(message.text)) {
-                      return <div className="text-sm text-[#9a9a9a]">互動內容生成中…⏳</div>;
+                      return <div className="text-sm text-[#9a9a9a]">{copy.generatingInteractive}</div>;
                     }
                     return (
                       <div className={ASSISTANT_PROSE_CLASS}>
@@ -967,7 +1099,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                       type="button"
                       onClick={() => handleCopy(message.id, message.text)}
                       className="group/copy relative mt-1.5 inline-flex size-8 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f4f4f5] hover:text-[#5a5a5a]"
-                      aria-label="複製回覆"
+                      aria-label={copy.copyReply}
                     >
                       {copiedId === message.id ? (
                         <Check className="size-4 text-[#16a34a]" />
@@ -975,7 +1107,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                         <Copy className="size-4" />
                       )}
                       <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#080808] px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover/copy:opacity-100">
-                        {copiedId === message.id ? "已複製" : "複製回覆"}
+                        {copiedId === message.id ? copy.copied : copy.copyReply}
                       </span>
                     </button>
                   )}
@@ -984,7 +1116,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                       type="button"
                       onClick={() => togglePin(message.id)}
                       className={`group/pin relative mt-1.5 inline-flex size-8 items-center justify-center rounded-full transition-colors hover:bg-[#f4f4f5] ${pinnedIds.includes(message.id) ? "text-[#146ef5]" : "text-[#9a9a9a] hover:text-[#5a5a5a]"}`}
-                      aria-label={pinnedIds.includes(message.id) ? "取消釘選" : "釘選回覆"}
+                      aria-label={pinnedIds.includes(message.id) ? copy.unpin : copy.pinReply}
                     >
                       {pinnedIds.includes(message.id) ? (
                         <PinOff className="size-4" />
@@ -992,7 +1124,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                         <Pin className="size-4" />
                       )}
                       <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#080808] px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover/pin:opacity-100">
-                        {pinnedIds.includes(message.id) ? "取消釘選" : "釘選回覆"}
+                        {pinnedIds.includes(message.id) ? copy.unpin : copy.pinReply}
                       </span>
                     </button>
                   )}
@@ -1033,22 +1165,22 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
           <form onSubmit={handleSubmit} className="w-full">
             <div className="relative w-full rounded-2xl border border-[#e5e5e5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
               <ChatAttachmentPreview files={chatFiles} onRemove={removeChatFile} />
-              <Textarea ref={textareaRef} placeholder={mustSelectFirst ? "請先在上方選擇一個模式…" : placeholder} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={mustSelectFirst}
+              <Textarea ref={textareaRef} placeholder={mustSelectFirst ? copy.pickModeFirst : placeholder} value={input} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={mustSelectFirst}
                 className="min-h-[56px] max-h-[160px] resize-none overflow-y-auto border-0 bg-transparent px-4 pt-3.5 pb-10 text-sm shadow-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60" />
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleChatFileChange} className="hidden" />
               <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <Button type="button" size="icon-sm" variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={mustSelectFirst}
-                    className="rounded-full text-[#5a5a5a] transition-all hover:bg-[#f4f4f5]" title="上傳圖片">
+                    className="rounded-full text-[#5a5a5a] transition-all hover:bg-[#f4f4f5]" title={copy.uploadImage}>
                     <ImagePlus className="size-4" />
                   </Button>
                   <Button type="button" size="icon-sm" variant="ghost" onClick={toggleVoice} disabled={mustSelectFirst}
                     className={`rounded-full transition-all ${isListening ? 'text-red-500 hover:bg-red-50' : 'text-[#5a5a5a] hover:bg-[#f4f4f5]'}`}
-                    title={isListening ? '停止語音輸入' : '語音輸入'}
-                    aria-label={isListening ? '停止語音輸入' : '語音輸入'}>
+                    title={isListening ? copy.stopVoice : copy.voiceInput}
+                    aria-label={isListening ? copy.stopVoice : copy.voiceInput}>
                     {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                   </Button>
-                  {isListening && <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>}
+                  {isListening && <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">{copy.listening}</span>}
                   {!isListening && voiceError && <span role="alert" className="text-[11px] font-medium text-red-500">{voiceError.message}</span>}
                 </div>
                 {isLoading ? (
@@ -1072,7 +1204,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                   type="button"
                   onClick={() => { setDraftsView("list"); void refreshDraftList(); }}
                   className="inline-flex items-center rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  title="返回列表"
+                  title={copy.backToList}
                 >
                   <ChevronLeft className="size-4" />
                 </button>
@@ -1080,11 +1212,11 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                 <FileText className="size-4 text-[#146ef5]" />
               )}
               <span className="text-sm font-semibold text-[#080808]">
-                {draftsView === "editor" ? "編輯作文稿" : "我的作文稿"}
+                {draftsView === "editor" ? copy.editDraft : copy.myDrafts}
               </span>
             </div>
             <Button type="button" size="icon-sm" variant="ghost" onClick={() => setShowDrafts(false)}
-              className="rounded-full text-[#5a5a5a] transition-all hover:bg-[#f4f4f5]" title="關閉">
+              className="rounded-full text-[#5a5a5a] transition-all hover:bg-[#f4f4f5]" title={copy.close}>
               <X className="size-4" />
             </Button>
           </div>
@@ -1097,11 +1229,11 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                 className="w-full rounded-full bg-[#146ef5] text-sm font-medium text-white transition-all hover:bg-[#0055d4]"
               >
                 <Plus className="size-4" />
-                新建作文稿
+                {copy.newDraft}
               </Button>
               {draftList.length === 0 ? (
                 <div className="flex h-40 flex-col items-center justify-center text-center text-xs leading-relaxed text-[#9a9a9a]">
-                  還沒有作文稿。<br />點擊上方「新建作文稿」開始寫作。
+                  {copy.noDraftsLine1}<br />{copy.noDraftsLine2}
                 </div>
               ) : (
                 draftList.map((item) => (
@@ -1112,20 +1244,22 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-[#080808]">{item.title}</div>
-                        <div className="mt-0.5 text-[11px] text-[#9a9a9a]">{formatDraftDate(item.updatedAt)}</div>
+                        <div className="truncate text-sm font-medium text-[#080808]">
+                          {item.title === UNTITLED_DRAFT_TITLE ? copy.untitledDraft : item.title}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-[#9a9a9a]">{formatDraftDate(item.updatedAt, locale)}</div>
                       </div>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); void handleDeleteDraft(item.id); }}
                         className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-red-50 hover:text-red-500"
-                        title="刪除"
+                        title={copy.delete}
                       >
                         <Trash2 className="size-3.5" />
                       </button>
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      {DRAFT_STAGES.filter((s) => item[s.key].trim()).map((s) => (
+                      {draftStages.filter((s) => item[s.key].trim()).map((s) => (
                         <span key={s.key} className="rounded-full bg-[#146ef5]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#146ef5]">
                           {s.label}
                         </span>
@@ -1138,27 +1272,27 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
           ) : (
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-[#9a9a9a]">標題</label>
+                <label className="mb-1 block text-[11px] font-medium text-[#9a9a9a]">{copy.titleLabel}</label>
                 <input
                   value={draftTitle}
                   onChange={(e) => handleDraftTitleChange(e.target.value)}
-                  placeholder="為這篇作文取個名字…"
+                  placeholder={copy.titlePlaceholder}
                   className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#146ef5]/40"
                 />
               </div>
               <div className="text-[11px] text-[#9a9a9a]">
                 {draftSaveState === "saving" ? (
-                  "儲存中…"
+                  copy.saving
                 ) : draftSaveState === "saved" ? (
                   <span className="inline-flex items-center gap-1 text-[#16a34a]">
                     <Check className="size-3" />
-                    已儲存到雲端
+                    {copy.saved}
                   </span>
                 ) : (
-                  "編輯後會自動儲存到雲端"
+                  copy.autosaveHint
                 )}
               </div>
-              {DRAFT_STAGES.map((stage) => {
+              {draftStages.map((stage) => {
                 const value = drafts[stage.key];
                 const hasText = value.trim().length > 0;
                 return (
@@ -1167,7 +1301,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#146ef5]/10 px-2 py-0.5 text-[11px] font-semibold text-[#146ef5]">
                         {stage.label}
                       </span>
-                      <span className="text-[10px] text-[#c0c0c0]">{value.length} 字</span>
+                      <span className="text-[10px] text-[#c0c0c0]">{copy.charCount(value.length)}</span>
                     </div>
                     <Textarea
                       value={value}
@@ -1183,17 +1317,17 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                           variant="ghost"
                           onClick={() => toggleDraftVoice(stage.key)}
                           className={`rounded-full transition-all ${listeningStage === stage.key ? "text-red-500 hover:bg-red-50" : "text-[#5a5a5a] hover:bg-[#f4f4f5]"}`}
-                          title={listeningStage === stage.key ? "停止語音輸入" : "語音輸入"}
+                          title={listeningStage === stage.key ? copy.stopVoice : copy.voiceInput}
                           aria-label={
                             listeningStage === stage.key
-                              ? `停止語音輸入：${stage.label}`
-                              : `語音輸入：${stage.label}`
+                              ? copy.stopVoiceFor(stage.label)
+                              : copy.voiceInputFor(stage.label)
                           }
                         >
                           {listeningStage === stage.key ? <MicOff className="size-4" /> : <Mic className="size-4" />}
                         </Button>
                         {listeningStage === stage.key && (
-                          <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                          <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">{copy.listening}</span>
                         )}
                         {draftVoiceErrorStage === stage.key && draftVoiceError && (
                           <span role="alert" className="text-[11px] font-medium text-red-500">{draftVoiceError.message}</span>
@@ -1207,7 +1341,7 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
                         className="rounded-full bg-[#146ef5] px-3 text-xs font-medium text-white transition-all hover:bg-[#0055d4] disabled:bg-[#d8d8d8]"
                       >
                         <MessageSquarePlus className="size-3.5" />
-                        與 AI 討論
+                        {copy.discussWithAi}
                       </Button>
                     </div>
                   </div>
@@ -1224,32 +1358,32 @@ export default function ChineseTopicChat({ config }: { config: ChineseTopicConfi
           <div className="flex h-[57px] shrink-0 items-center justify-between border-b border-[#ededed] bg-white px-4">
             <div className="flex items-center gap-2">
               <Pin className="size-4 text-[#146ef5]" />
-              <span className="text-sm font-semibold text-[#080808]">釘選的訊息</span>
+              <span className="text-sm font-semibold text-[#080808]">{copy.pinnedMessages}</span>
             </div>
             <Button type="button" size="icon-sm" variant="ghost" onClick={() => setShowPinned(false)}
-              className="rounded-full text-[#5a5a5a] transition-all hover:bg-[#f4f4f5]" title="關閉">
+              className="rounded-full text-[#5a5a5a] transition-all hover:bg-[#f4f4f5]" title={copy.close}>
               <X className="size-4" />
             </Button>
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {pinnedMessages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-center text-xs text-[#9a9a9a]">
-                還沒有釘選任何訊息。<br />點擊訊息下方的釘選圖示即可加入。
+                {copy.noPinnedLine1}<br />{copy.noPinnedLine2}
               </div>
             ) : (
               pinnedMessages.map((message) => (
                 <div key={message.id} className="group/pinned rounded-xl border border-[#ededed] bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${message.role === "user" ? "bg-[#f4f4f5] text-[#5a5a5a]" : "bg-[#146ef5]/10 text-[#146ef5]"}`}>
-                      {message.role === "user" ? "你" : "AI"}
+                      {message.role === "user" ? copy.you : "AI"}
                     </span>
                     <div className="flex items-center gap-0.5">
                       <button type="button" onClick={() => handleCopy(message.id, message.text)}
-                        className="inline-flex size-7 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f4f4f5] hover:text-[#5a5a5a]" title="複製">
+                        className="inline-flex size-7 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f4f4f5] hover:text-[#5a5a5a]" title={copy.copy}>
                         {copiedId === message.id ? <Check className="size-3.5 text-[#16a34a]" /> : <Copy className="size-3.5" />}
                       </button>
                       <button type="button" onClick={() => togglePin(message.id)}
-                        className="inline-flex size-7 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f4f4f5] hover:text-[#5a5a5a]" title="取消釘選">
+                        className="inline-flex size-7 items-center justify-center rounded-full text-[#9a9a9a] transition-colors hover:bg-[#f4f4f5] hover:text-[#5a5a5a]" title={copy.unpin}>
                         <PinOff className="size-3.5" />
                       </button>
                     </div>

@@ -3,12 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import Header from "@/components/Header";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 
 // Self-hosted static map app (public/humanities/heritage-trail-map/).
 // Replaces the previous Google Apps Script embed, which is no longer available.
 const EMBED_URL = "/humanities/heritage-trail-map/index.html";
 
+const COPY = defineCopy({
+  "zh-Hant": {
+    backLabel: "返回抗日戰爭",
+    loading: "正在載入互動地圖…",
+    frameTitle: "香港抗戰文物徑互動地圖",
+  },
+  en: {
+    backLabel: "Back to War of Resistance",
+    loading: "Loading the interactive map…",
+    frameTitle: "Hong Kong War Relics Trail Map",
+  },
+});
+
 export default function HeritageTrailMapPage() {
+  const copy = useCopy(COPY);
   const [loaded, setLoaded] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -53,20 +69,20 @@ export default function HeritageTrailMapPage() {
   // left under the header at any viewport size.
   return (
     <>
-      <Header backHref="/humanities/anti-japanese-war" backLabel="返回抗日戰爭" />
+      <Header backHref="/humanities/anti-japanese-war" backLabel={copy.backLabel} />
 
       <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f8f7f4]">
         {!loaded && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#f8f7f4] text-[#5a5a5a]">
             <Loader2 className="size-7 animate-spin text-[#146ef5]" />
-            <p className="text-sm">正在載入互動地圖…</p>
+            <p className="text-sm">{copy.loading}</p>
           </div>
         )}
 
         <iframe
           ref={iframeRef}
           src={EMBED_URL}
-          title="香港抗戰文物徑互動地圖"
+          title={copy.frameTitle}
           onLoad={() => setLoaded(true)}
           className="block h-full w-full flex-1 border-0"
           allow="fullscreen"

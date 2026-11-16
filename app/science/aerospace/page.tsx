@@ -10,94 +10,151 @@ import {
   ArrowRight,
 } from "lucide-react";
 import Header from "@/components/Header";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+type PartId = "chat" | "timeline" | "mars-mission" | "navigation-satellite" | "satellite-height";
 
 type Part = {
-  id: string;
-  label: string;
+  id: PartId;
   labelEn: string;
-  description: string;
   icon: typeof History;
   accent: string;
   href: string;
-  cta: string;
 };
+
+type PartText = { label: string; description: string; cta: string };
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    backLabel: "返回科學科",
+    heading: "航天科技",
+    groups: { p4: "小四", p6: "小六" } as Record<string, string>,
+    parts: {
+      chat: {
+        label: "AI 對話助手「小空」",
+        description:
+          "跟著「🚀小空」(Little Space) 對話，隨時提問衛星應用、國家航天員、太空生活及太空探索的問題。",
+        cta: "開始對話",
+      },
+      timeline: {
+        label: "中國航天大冒險",
+        description:
+          "在互動時間線上走過中國航天的重要里程碑，一步一步解鎖從人造衛星到載人航天、探月與探火的成就。",
+        cta: "開始冒險",
+      },
+      "mars-mission": {
+        label: "火星探測任務",
+        description:
+          "選出正確的指令，完成從火箭發射到成功降落火星的每一步，體驗深空探測的重重挑戰。",
+        cta: "開始任務",
+      },
+      "navigation-satellite": {
+        label: "導航衛星尋寶小遊戲",
+        description:
+          "利用導航衛星的訊號範圍鎖定寶藏位置，從遊戲中明白為什麼現實中的定位需要至少四顆衛星。",
+        cta: "開始尋寶",
+      },
+      "satellite-height": {
+        label: "不同高度軌道的衛星",
+        description:
+          "比較低、中、高軌道衛星的電波覆蓋範圍與運行週期，認識不同高度軌道各自的用途。",
+        cta: "開始比較",
+      },
+    } as Record<PartId, PartText>,
+  },
+  en: {
+    backLabel: "Back to Science",
+    heading: "Space Technology",
+    groups: { p4: "Primary 4", p6: "Primary 6" },
+    parts: {
+      chat: {
+        label: "AI Chatbot “Little Space”",
+        description:
+          "Chat with 🚀 Little Space and ask questions any time about satellites, China's astronauts, life in space and space exploration.",
+        cta: "Start chatting",
+      },
+      timeline: {
+        label: "China Space Adventure",
+        description:
+          "Walk through the key milestones of China's space programme on an interactive timeline, unlocking achievements step by step, from the first satellite to crewed flights, the Moon and Mars.",
+        cta: "Start the adventure",
+      },
+      "mars-mission": {
+        label: "Mars Mission Challenge",
+        description:
+          "Choose the right commands for every step from rocket launch to landing on Mars, and find out how hard deep-space missions can be.",
+        cta: "Start the mission",
+      },
+      "navigation-satellite": {
+        label: "Navigation Satellite Treasure Hunt",
+        description:
+          "Use the signal ranges of navigation satellites to find the treasure, and learn why real-life positioning needs at least four satellites.",
+        cta: "Start the hunt",
+      },
+      "satellite-height": {
+        label: "Satellites at Different Orbit Heights",
+        description:
+          "Compare the signal coverage and orbit times of low, medium and high orbit satellites, and learn what each orbit height is used for.",
+        cta: "Start comparing",
+      },
+    },
+  },
+});
 
 // The AI chatbot is one shared chat (same route, same history) that both grade
 // levels can open, so it is listed in each group rather than duplicated.
 const CHATBOT: Part = {
   id: "chat",
-  label: "AI 對話助手「小空」",
   labelEn: "AI Chatbot",
-  description:
-    "跟著「🚀小空」(Little Space) 對話，隨時提問衛星應用、國家航天員、太空生活及太空探索的問題。",
   icon: MessageCircle,
   accent: "#ed52cb",
   href: "/science/aerospace/chat",
-  cta: "開始對話",
 };
 
 const groups: {
   id: string;
-  label: string;
   labelEn: string;
   parts: Part[];
 }[] = [
   {
     id: "p4",
-    label: "小四",
     labelEn: "P4",
     parts: [
       {
         id: "timeline",
-        label: "中國航天大冒險",
         labelEn: "China Space Adventure",
-        description:
-          "在互動時間線上走過中國航天的重要里程碑，一步一步解鎖從人造衛星到載人航天、探月與探火的成就。",
         icon: History,
         accent: "#ef4444",
         href: "/science/aerospace/timeline",
-        cta: "開始冒險",
       },
       CHATBOT,
     ],
   },
   {
     id: "p6",
-    label: "小六",
     labelEn: "P6",
     parts: [
       {
         id: "mars-mission",
-        label: "火星探測任務",
         labelEn: "Mars Mission Challenge",
-        description:
-          "選出正確的指令，完成從火箭發射到成功降落火星的每一步，體驗深空探測的重重挑戰。",
         icon: Rocket,
         accent: "#f59e0b",
         href: "/science/aerospace/mars-mission",
-        cta: "開始任務",
       },
       {
         id: "navigation-satellite",
-        label: "導航衛星尋寶小遊戲",
         labelEn: "Navigation Satellite Game",
-        description:
-          "利用導航衛星的訊號範圍鎖定寶藏位置，從遊戲中明白為什麼現實中的定位需要至少四顆衛星。",
         icon: Compass,
         accent: "#10b981",
         href: "/science/aerospace/navigation-satellite",
-        cta: "開始尋寶",
       },
       {
         id: "satellite-height",
-        label: "不同高度軌道的衛星",
         labelEn: "Satellite Orbit Heights",
-        description:
-          "比較低、中、高軌道衛星的電波覆蓋範圍與運行週期，認識不同高度軌道各自的用途。",
         icon: Orbit,
         accent: "#146ef5",
         href: "/science/aerospace/satellite-height",
-        cta: "開始比較",
       },
       CHATBOT,
     ],
@@ -106,10 +163,11 @@ const groups: {
 
 export default function ScienceAerospaceLandingPage() {
   const router = useRouter();
+  const copy = useCopy(COPY);
 
   return (
     <>
-      <Header backHref="/science" backLabel="返回科學科" />
+      <Header backHref="/science" backLabel={copy.backLabel} />
 
       <main className="relative flex flex-1 items-start overflow-y-auto overflow-x-hidden bg-[linear-gradient(180deg,_#fffdf8_0%,_#f8f7f4_48%,_#ffffff_100%)] text-[#080808]">
         <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_top,_rgba(20,110,245,0.12),_transparent_42%)]" />
@@ -125,7 +183,7 @@ export default function ScienceAerospaceLandingPage() {
                 <Rocket className="size-5" />
               </div>
               <h1 className="text-[40px] leading-[1.02] font-semibold tracking-[-0.04em] text-[#080808] sm:text-[52px]">
-                航天科技
+                {copy.heading}
               </h1>
             </section>
 
@@ -139,14 +197,15 @@ export default function ScienceAerospaceLandingPage() {
                     {group.labelEn}
                   </span>
                   <h2 className="text-[22px] font-semibold leading-none tracking-[-0.03em] text-[#080808]">
-                    {group.label}
+                    {copy.groups[group.id]}
                   </h2>
                   <span className="h-px flex-1 bg-[#d8d8d8]" />
                 </div>
 
                 <div className="grid gap-4 px-2 sm:px-0 sm:grid-cols-2 lg:grid-cols-3">
-                  {group.parts.map(
-                    ({ id, label, labelEn, description, icon: Icon, accent, href, cta }) => (
+                  {group.parts.map(({ id, labelEn, icon: Icon, accent, href }) => {
+                    const { label, description, cta } = copy.parts[id];
+                    return (
                       <button
                         key={`${group.id}-${id}`}
                         onClick={() => router.push(href)}
@@ -159,9 +218,12 @@ export default function ScienceAerospaceLandingPage() {
                           >
                             <Icon className="size-5" />
                           </div>
-                          <span className="text-[11px] font-semibold uppercase tracking-[1.1px] text-[#ababab]">
-                            {labelEn}
-                          </span>
+                          {/* In English mode the eyebrow would repeat the title. */}
+                          {labelEn.toLowerCase() !== label.toLowerCase() && (
+                            <span className="text-[11px] font-semibold uppercase tracking-[1.1px] text-[#ababab]">
+                              {labelEn}
+                            </span>
+                          )}
                         </div>
 
                         <div className="mt-10 space-y-4">
@@ -178,8 +240,8 @@ export default function ScienceAerospaceLandingPage() {
                           </span>
                         </div>
                       </button>
-                    ),
-                  )}
+                    );
+                  })}
                 </div>
               </section>
             ))}

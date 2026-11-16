@@ -15,6 +15,8 @@ import {
   Presentation,
 } from "lucide-react";
 import Header from "@/components/Header";
+import { useLocale } from "@/components/LocaleProvider";
+import { defineCopy, type Locale } from "@/lib/i18n/config";
 import type { SubjectValue } from "@/lib/subjects";
 import { linkHost } from "@/lib/learning-materials";
 import { basePath } from "@/lib/utils";
@@ -48,13 +50,18 @@ export interface MaterialsBrowserProps {
   backLabel: string;
   /** Page heading. */
   heading?: string;
-  /** UI copy language. English Language uses `"en"`; every other subject is `"zh"`. */
-  lang?: "zh" | "en";
+  /**
+   * Forces the UI copy language. English Language passes `"en"` so its pages
+   * stay English in both locales. Omitted means the current interface locale.
+   * `"zh"` is the older spelling of `"zh-Hant"` and is still accepted.
+   */
+  lang?: "zh" | Locale;
 }
 
 /** All UI strings, so the English section can run fully in English. */
-const COPY = {
-  zh: {
+const COPY = defineCopy({
+  "zh-Hant": {
+    heading: "學習資源",
     groupNav: "資源分組",
     all: "全部",
     // "資源" rather than "檔案": a group may hold external links too.
@@ -75,6 +82,7 @@ const COPY = {
     },
   },
   en: {
+    heading: "Learning resources",
     groupNav: "Resource groups",
     all: "All",
     itemCount: (n: number) => `${n} ${n === 1 ? "item" : "items"}`,
@@ -93,9 +101,9 @@ const COPY = {
       link: "Link",
     },
   },
-} as const;
+});
 
-type Copy = (typeof COPY)[keyof typeof COPY];
+type Copy = (typeof COPY)[Locale];
 
 /** The badge text and glyph for one resource row. */
 type KindInfo = { label: string; Icon: typeof FileIcon };
@@ -156,10 +164,12 @@ export default function MaterialsBrowser({
   subject,
   backHref,
   backLabel,
-  heading = "學習資源",
-  lang = "zh",
+  heading: headingProp,
+  lang,
 }: MaterialsBrowserProps) {
-  const copy = COPY[lang];
+  const { locale } = useLocale();
+  const copy = COPY[lang === undefined ? locale : lang === "en" ? "en" : "zh-Hant"];
+  const heading = headingProp ?? copy.heading;
   const [groups, setGroups] = useState<MaterialGroup[]>([]);
   const [loading, setLoading] = useState(true);
   // Kept as a flag rather than a message, so the copy follows `lang` at render.

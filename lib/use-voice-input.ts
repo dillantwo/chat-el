@@ -43,6 +43,12 @@ export type UseVoiceInputOptions = {
   /** BCP-47 tag, e.g. `en-US` or `zh-HK`. Also picks the message language. */
   lang: string;
   /**
+   * Language of the error messages, when it should follow the interface rather
+   * than `lang` (e.g. dictating Chinese with the interface in English).
+   * Omitted means the messages follow `lang`, as before.
+   */
+  messageLang?: "zh" | "en";
+  /**
    * Text already in the target field, read once when dictation starts.
    * Dictated speech is appended to it instead of replacing it.
    */
@@ -210,7 +216,9 @@ export function useVoiceInput(options: UseVoiceInputOptions): UseVoiceInputResul
   }, []);
 
   function messageFor(kind: VoiceInputErrorKind): string {
-    const table = optionsRef.current.lang.toLowerCase().startsWith("en") ? MESSAGES.en : MESSAGES.zh;
+    const { lang, messageLang } = optionsRef.current;
+    const english = messageLang ? messageLang === "en" : lang.toLowerCase().startsWith("en");
+    const table = english ? MESSAGES.en : MESSAGES.zh;
     return table[kind];
   }
 

@@ -15,6 +15,8 @@ import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import { getMathChatHistoryItem, restoreUiMessages, serializeUiMessages, upsertMathChatHistory } from "@/lib/math-chat-history";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 
 type Clock24HoursState = {
   tool: "clock-24hrs";
@@ -47,20 +49,78 @@ type ClockTimeDifferenceState = {
 type ClockToolState = Clock24HoursState | ClockTimeDifferenceState;
 type ClockToolKey = ClockToolState["tool"];
 
-const SUGGESTIONS: Record<ClockToolState["tool"], string[]> = {
-  "clock-24hrs": [
-    "現在時鐘顯示的是什麼時間？你可以提示我怎樣看。",
-    "為什麼時針不是剛好指著某個數字？",
-    "AM/PM 和 24 小時制可以怎樣互相轉換？",
-    "這個角度可以怎樣一步步判斷？",
-  ],
-  "clock-time-difference": [
-    "我應該先看哪一個時間，再算相差多久？",
-    "如果分鐘不夠減，應該怎樣想借位？",
-    "這題要怎樣判斷是不是隔天？",
-    "你可以先檢查我的思路，不要直接告訴我答案嗎？",
-  ],
-};
+const COPY = defineCopy({
+  "zh-Hant": {
+    // Suggestion chips are sent to the AI exactly as shown.
+    suggestions: {
+      "clock-24hrs": [
+        "現在時鐘顯示的是什麼時間？你可以提示我怎樣看。",
+        "為什麼時針不是剛好指著某個數字？",
+        "AM/PM 和 24 小時制可以怎樣互相轉換？",
+        "這個角度可以怎樣一步步判斷？",
+      ],
+      "clock-time-difference": [
+        "我應該先看哪一個時間，再算相差多久？",
+        "如果分鐘不夠減，應該怎樣想借位？",
+        "這題要怎樣判斷是不是隔天？",
+        "你可以先檢查我的思路，不要直接告訴我答案嗎？",
+      ],
+    } as Record<ClockToolKey, string[]>,
+    toolName: { "clock-24hrs": "24小時時鐘", "clock-time-difference": "時間差時鐘" } as Record<ClockToolKey, string>,
+    chatTitle: { "clock-24hrs": "24小時時鐘對話", "clock-time-difference": "時間差時鐘對話" } as Record<ClockToolKey, string>,
+    titleDifference: "時鐘時間差 AI 助教",
+    titleClock: "時鐘概念 AI 助教",
+    waiting: "等待時鐘工具同步目前狀態",
+    currentQuestion: (start: string, end: string) => `目前題目：${start} 到 ${end}`,
+    currentTime: (time: string, period: string) => `目前時間：${time} ${period}`,
+    newChatTitle: "新建聊天",
+    hideAssistant: "隱藏 AI 助手",
+    emptyTitle: "問我關於目前時鐘的問題",
+    emptyBody: "我會根據你現在工具上的時間、模式和互動狀態，逐步提示你理解時鐘概念。",
+    placeholder: "繼續提問...（可直接粘貼圖片）",
+    uploadImage: "上傳圖片",
+    stopVoice: "停止語音輸入",
+    voice: "語音輸入",
+    listening: "聆聽中…",
+    clearTitle: "清除對話",
+    clear: "清除",
+  },
+  en: {
+    suggestions: {
+      "clock-24hrs": [
+        "What time is the clock showing now? Can you give me a hint on how to read it?",
+        "Why isn't the hour hand pointing exactly at a number?",
+        "How do I change between AM/PM and the 24-hour clock?",
+        "How can I work out this angle step by step?",
+      ],
+      "clock-time-difference": [
+        "Which time should I look at first before working out the time difference?",
+        "If there aren't enough minutes to subtract, how do I borrow?",
+        "How can I tell if this question goes into the next day?",
+        "Can you check my thinking first, without telling me the answer?",
+      ],
+    },
+    toolName: { "clock-24hrs": "24-hour clock", "clock-time-difference": "Time difference clock" },
+    chatTitle: { "clock-24hrs": "24-hour clock chat", "clock-time-difference": "Time difference clock chat" },
+    titleDifference: "Time Difference AI Tutor",
+    titleClock: "Clock AI Tutor",
+    waiting: "Waiting for the clock tool to share its current state",
+    currentQuestion: (start: string, end: string) => `Current question: ${start} to ${end}`,
+    currentTime: (time: string, period: string) => `Current time: ${time} ${period}`,
+    newChatTitle: "New chat",
+    hideAssistant: "Hide AI helper",
+    emptyTitle: "Ask me about the clock",
+    emptyBody:
+      "I'll look at the time, mode and what you're doing on the tool, and give you hints step by step to help you understand clocks.",
+    placeholder: "Ask another question... (you can paste an image)",
+    uploadImage: "Upload image",
+    stopVoice: "Stop voice input",
+    voice: "Voice input",
+    listening: "Listening…",
+    clearTitle: "Clear chat",
+    clear: "Clear",
+  },
+});
 
 function fileToDataURL(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -89,6 +149,8 @@ export function ClockChatPanel({
   onNewChat: () => void;
   onHide?: () => void;
 } = { selectedTool: "clock-24hrs", chatId: "clock-chat-default", hasUserQuestion: false, onNewChat: () => {} }) {
+  const copy = useCopy(COPY);
+  const { locale } = useLocale();
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
   const [clockState, setClockState] = useState<ClockToolState | null>(null);
@@ -115,6 +177,7 @@ export function ClockChatPanel({
     rebase: rebaseDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     // Chinese doesn't separate words with spaces.
     separator: "",
     getBaseText: () => input,
@@ -222,10 +285,8 @@ export function ClockChatPanel({
       id: chatId,
       kind: selectedTool,
       title: firstUserText?.type === "text"
-        ? `${selectedTool === "clock-24hrs" ? "24小時時鐘" : "時間差時鐘"}: ${firstUserText.text.slice(0, 30)}`
-        : selectedTool === "clock-24hrs"
-          ? "24小時時鐘對話"
-          : "時間差時鐘對話",
+        ? `${copy.toolName[selectedTool]}: ${firstUserText.text.slice(0, 30)}`
+        : copy.chatTitle[selectedTool],
       hasUserQuestion,
       question: hasUserQuestion ? question : undefined,
       type: hasUserQuestion ? type : undefined,
@@ -235,6 +296,8 @@ export function ClockChatPanel({
       messages: serializeUiMessages(messages),
       updatedAt: new Date().toISOString(),
     });
+    // `copy` is left out on purpose: switching language must not re-save the chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasUserQuestion, messages, question, selectedTool, chatId, status, toolUrl, type]);
 
   useEffect(() => {
@@ -313,13 +376,13 @@ export function ClockChatPanel({
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  const headerTitle = clockState?.tool === "clock-time-difference" ? "時鐘時間差 AI 助教" : "時鐘概念 AI 助教";
+  const headerTitle = clockState?.tool === "clock-time-difference" ? copy.titleDifference : copy.titleClock;
   const headerMeta = !clockState
-    ? "等待時鐘工具同步目前狀態"
+    ? copy.waiting
     : clockState.tool === "clock-time-difference"
-      ? `目前題目：${clockState.startLabel} 到 ${clockState.endLabel}`
-      : `目前時間：${clockState.displayTime} ${clockState.periodLabel}`.trim();
-  const suggestions = clockState ? SUGGESTIONS[clockState.tool] : [];
+      ? copy.currentQuestion(clockState.startLabel, clockState.endLabel)
+      : copy.currentTime(clockState.displayTime, clockState.periodLabel).trim();
+  const suggestions = clockState ? copy.suggestions[clockState.tool] : [];
 
   return (
     <div className="relative flex min-h-0 w-[360px] shrink-0 flex-col bg-white/95">
@@ -341,7 +404,7 @@ export function ClockChatPanel({
               size="sm"
               onClick={onNewChat}
               className="rounded-[4px] border border-transparent bg-[#146ef5] px-2.5 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(20,110,245,0.28)] transition-all hover:bg-[#0055d4] hover:shadow-[0_8px_20px_rgba(0,85,212,0.34)]"
-              title="新建聊天"
+              title={copy.newChatTitle}
             >
               New Chat
             </Button>
@@ -352,7 +415,7 @@ export function ClockChatPanel({
                 size="icon-sm"
                 onClick={onHide}
                 className="rounded-[4px]"
-                title="隱藏 AI 助手"
+                title={copy.hideAssistant}
               >
                 <PanelRight className="size-4" />
               </Button>
@@ -368,9 +431,9 @@ export function ClockChatPanel({
             <div className="grid h-12 w-12 place-items-center rounded-full bg-[#146ef5]/10 text-[#146ef5]">
               <MessageSquare size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#080808]">問我關於目前時鐘的問題</p>
+            <p className="text-sm font-semibold text-[#080808]">{copy.emptyTitle}</p>
             <p className="text-[11px] text-[#6b7280]">
-              我會根據你現在工具上的時間、模式和互動狀態，逐步提示你理解時鐘概念。
+              {copy.emptyBody}
             </p>
             <div className="mt-2 flex w-full flex-col gap-1.5">
               {suggestions.map((suggestion) => (
@@ -465,7 +528,7 @@ export function ClockChatPanel({
                 }
               }}
               onPaste={handlePaste}
-              placeholder="繼續提問...（可直接粘貼圖片）"
+              placeholder={copy.placeholder}
               className="min-h-[58px] max-h-[160px] w-full resize-none overflow-y-auto rounded-[8px] border-0 bg-transparent px-3 pt-3 pb-10 text-sm outline-none focus-visible:ring-0"
             />
 
@@ -486,7 +549,7 @@ export function ClockChatPanel({
                   variant="ghost"
                   onClick={() => fileInputRef.current?.click()}
                   className="rounded-[4px] border border-[#d8d8d8] bg-white text-[#080808] transition-all hover:border-[#898989] hover:bg-white"
-                  title="上傳圖片"
+                  title={copy.uploadImage}
                 >
                   <ImagePlus className="size-3.5 text-[#5a5a5a]" />
                 </Button>
@@ -500,8 +563,8 @@ export function ClockChatPanel({
                       ? "border-red-400 text-red-500 hover:border-red-500 hover:text-red-600"
                       : "border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]"
                   }`}
-                  title={isListening ? "停止語音輸入" : "語音輸入"}
-                  aria-label={isListening ? "停止語音輸入" : "語音輸入"}
+                  title={isListening ? copy.stopVoice : copy.voice}
+                  aria-label={isListening ? copy.stopVoice : copy.voice}
                 >
                   {isListening ? (
                     <MicOff className="size-3.5" />
@@ -511,7 +574,7 @@ export function ClockChatPanel({
                 </Button>
                 {isListening && (
                   <span aria-live="polite" className="animate-pulse text-[11px] font-medium text-red-500">
-                    聆聽中…
+                    {copy.listening}
                   </span>
                 )}
                 {!isListening && voiceError && (
@@ -526,9 +589,9 @@ export function ClockChatPanel({
                     type="button"
                     onClick={() => setMessages([])}
                     className="rounded-md px-2 py-1 text-[11px] text-[#6b7280] hover:bg-[#eef2f7]"
-                    title="清除對話"
+                    title={copy.clearTitle}
                   >
-                    清除
+                    {copy.clear}
                   </button>
                 )}
                 {isLoading ? (

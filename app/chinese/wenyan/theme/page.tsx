@@ -21,13 +21,60 @@ import {
   THEME_QUESTION_COUNT,
   type ThemeQuestion,
 } from "@/lib/wenyan-theme";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+import { BADGE_COPY, WENYAN_COPY } from "../wenyan-copy";
 
 const ACCENT = "#6366f1";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    heading: "讀懂文章主旨",
+    introPart1: "每題會給你一篇文言文的 ",
+    introOriginal: "原文和翻譯",
+    introPart2: "，請仔細閱讀，然後從五個選項中選出這篇文章的 ",
+    introMainIdea: "主旨",
+    introPart3: (count: number) =>
+      `（隱含的道理）。題目選自學習模式的四篇文章（《論語四則》四則各自獨立成題），共 ${count} 題，全對得 100 分。`,
+    questionBefore: "這篇文章想說明的 ",
+    questionHighlight: "主旨（道理）",
+    questionAfter: " 是甚麼？",
+    retryBefore: "答錯了，再想想看！還剩 ",
+    retryAfter: (_n: number) => " 次機會。",
+    solved: "答對了！🎉 你讀懂了這篇文章的道理。",
+    failed: "兩次機會都用完了。再多讀幾遍文章，慢慢體會當中的道理吧！",
+    msgPerfect: "滿分！你完全讀懂了文章的道理！👑",
+    msg75: "很棒，主旨掌握得不錯！🏅",
+    msg50: "再讀仔細一點，你會更明白！⭐",
+    msgLow: "別灰心，多讀幾遍就會明白道理！🌱",
+  },
+  en: {
+    heading: "Find the Main Idea",
+    introPart1: "Each question gives you a Classical Chinese text with its ",
+    introOriginal: "original and translation",
+    introPart2: ". Read it carefully, then choose the text's ",
+    introMainIdea: "main idea",
+    introPart3: (count: number) =>
+      ` (the lesson it teaches) from five choices. Questions come from the four texts in Learn mode (each of the four sayings in 《論語四則》 is its own question). There are ${count} questions. Get them all right for 100 points.`,
+    questionBefore: "What is the ",
+    questionHighlight: "main idea (lesson)",
+    questionAfter: " of this text?",
+    retryBefore: "Not quite, think again! You have ",
+    retryAfter: (n: number) => (n === 1 ? " try left." : " tries left."),
+    solved: "Correct! 🎉 You understood the lesson of this text.",
+    failed: "You've used both tries. Read the text a few more times and think about the lesson it teaches!",
+    msgPerfect: "Full marks! You fully understood the lessons! 👑",
+    msg75: "Great, you've got a good grasp of the main ideas! 🏅",
+    msg50: "Read a bit more carefully and it will become clearer! ⭐",
+    msgLow: "Don't give up. Read the texts a few more times and you'll get it! 🌱",
+  },
+});
 const MAX_WRONG = 2; // each question allows up to two wrong attempts
 
 type Phase = "intro" | "playing" | "result";
 
 export default function WenyanThemePage() {
+  const shared = useCopy(WENYAN_COPY);
   const [phase, setPhase] = useState<Phase>("intro");
   const [quiz, setQuiz] = useState<ThemeQuestion[]>([]);
   const [current, setCurrent] = useState(0);
@@ -108,12 +155,12 @@ export default function WenyanThemePage() {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ChevronLeft className="size-4" />
-          返回遊戲首頁
+          {shared.backToGame}
         </Link>
         <div className="flex items-center gap-2">
           <Lightbulb className="size-4" style={{ color: ACCENT }} />
           <span className="text-sm font-semibold text-[#080808]">
-            挑戰模式 - 主旨理解
+            {shared.challengeTitle(shared.modeTheme)}
           </span>
         </div>
         <div className="w-[112px]" />
@@ -169,6 +216,8 @@ function Intro({
   bestScore: number;
   onStart: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   return (
     <div className="space-y-6 text-center wyt-fade-in-up">
       <div
@@ -179,19 +228,18 @@ function Intro({
       </div>
       <div className="space-y-2">
         <h1 className="font-serif text-[34px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-          讀懂文章主旨
+          {copy.heading}
         </h1>
         <p className="mx-auto max-w-md text-sm leading-7 text-[#6b6385]">
-          每題會給你一篇文言文的{" "}
+          {copy.introPart1}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            原文和翻譯
+            {copy.introOriginal}
           </span>
-          ，請仔細閱讀，然後從五個選項中選出這篇文章的{" "}
+          {copy.introPart2}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            主旨
+            {copy.introMainIdea}
           </span>
-          （隱含的道理）。題目選自學習模式的四篇文章（《論語四則》四則各自獨立成題），共 {THEME_QUESTION_COUNT}{" "}
-          題，全對得 100 分。
+          {copy.introPart3(THEME_QUESTION_COUNT)}
         </p>
       </div>
 
@@ -204,7 +252,7 @@ function Intro({
         }}
       >
         <Trophy className="size-4" />
-        目前最高分：<span className="font-semibold">{bestScore}</span>
+        {shared.bestScoreLabel}<span className="font-semibold">{bestScore}</span>
       </div>
 
       <Button
@@ -213,7 +261,7 @@ function Intro({
         style={{ backgroundColor: ACCENT }}
       >
         <Sparkles className="size-5" />
-        開始挑戰
+        {shared.startChallenge}
       </Button>
     </div>
   );
@@ -246,6 +294,8 @@ function Playing({
   onPick: (i: number) => void;
   onNext: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   const remaining = maxWrong - wrongPicks.length;
   const progressPct = Math.round(((index + (resolved ? 1 : 0)) / total) * 100);
 
@@ -254,7 +304,7 @@ function Playing({
       {/* HUD */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[#6b6385]">
-          第 {index + 1} / {total} 題
+          {shared.questionOf(index + 1, total)}
         </span>
         <div className="flex items-center gap-3 text-sm">
           {streak >= 2 && (
@@ -263,7 +313,7 @@ function Playing({
               style={{ backgroundColor: "#eef2ff", color: "#4338ca" }}
             >
               <Sparkles className="size-3.5" />
-              連對 {streak}
+              {shared.streak(streak)}
             </span>
           )}
           <span
@@ -271,7 +321,7 @@ function Playing({
             style={{ backgroundColor: "#eef2ff", color: "#4338ca" }}
           >
             <Trophy className="size-3.5" />
-            {score} 分
+            {shared.points(score)}
           </span>
         </div>
       </div>
@@ -299,7 +349,7 @@ function Playing({
               style={{ color: ACCENT }}
             >
               <ScrollText className="size-3.5" />
-              原文
+              {shared.original}
             </p>
             <p className="font-serif text-[20px] leading-[1.9] tracking-[0.02em] text-[#1a1330] md:text-[22px]">
               {q.original}
@@ -308,7 +358,7 @@ function Playing({
           <div className="border-t border-dashed border-[#e7e9fb] pt-4">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[1px] text-[#8b86a8]">
               <Languages className="size-3.5" />
-              翻譯
+              {shared.translation}
             </p>
             <p className="text-[15px] leading-[1.9] text-[#4b4660]">
               {q.translation}
@@ -318,11 +368,11 @@ function Playing({
       </div>
 
       <p className="px-1 text-sm font-medium text-[#1a1330]">
-        這篇文章想說明的{" "}
+        {copy.questionBefore}
         <span className="font-semibold" style={{ color: ACCENT }}>
-          主旨（道理）
-        </span>{" "}
-        是甚麼？
+          {copy.questionHighlight}
+        </span>
+        {copy.questionAfter}
       </p>
 
       {/* Options */}
@@ -375,7 +425,7 @@ function Playing({
       {/* Retry hint between attempts — no answer is revealed */}
       {!resolved && wrongPicks.length > 0 && (
         <div className="wyt-fade-in-up rounded-[14px] border border-[#f59e0b]/30 bg-[#fffbeb] p-4 text-sm leading-7 text-[#b45309]">
-          答錯了，再想想看！還剩 <span className="font-semibold">{remaining}</span> 次機會。
+          {copy.retryBefore}<span className="font-semibold">{remaining}</span>{copy.retryAfter(remaining)}
         </div>
       )}
 
@@ -390,9 +440,7 @@ function Playing({
                 : "border-[#6366f1]/30 bg-[#eef2ff] text-[#4338ca]",
             ].join(" ")}
           >
-            {solved
-              ? "答對了！🎉 你讀懂了這篇文章的道理。"
-              : "兩次機會都用完了。再多讀幾遍文章，慢慢體會當中的道理吧！"}
+            {solved ? copy.solved : copy.failed}
           </div>
           <div className="flex justify-end">
             <Button
@@ -400,7 +448,7 @@ function Playing({
               className="gap-2 rounded-full text-white shadow-[0_4px_14px_rgba(99,102,241,0.3)] transition hover:-translate-y-0.5"
               style={{ backgroundColor: ACCENT }}
             >
-              {index + 1 < total ? "下一題" : "看成績"}
+              {index + 1 < total ? shared.nextQuestion : shared.seeResults}
               <ArrowRight className="size-4" />
             </Button>
           </div>
@@ -493,15 +541,18 @@ function Result({
   newBadges: string[];
   onReplay: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
+  const badgeCopy = useCopy(BADGE_COPY);
   const displayScore = useCountUp(score);
   const celebrate = score >= 75;
 
   const message = useMemo(() => {
-    if (score >= 100) return "滿分！你完全讀懂了文章的道理！👑";
-    if (score >= 75) return "很棒，主旨掌握得不錯！🏅";
-    if (score >= 50) return "再讀仔細一點，你會更明白！⭐";
-    return "別灰心，多讀幾遍就會明白道理！🌱";
-  }, [score]);
+    if (score >= 100) return copy.msgPerfect;
+    if (score >= 75) return copy.msg75;
+    if (score >= 50) return copy.msg50;
+    return copy.msgLow;
+  }, [score, copy]);
 
   return (
     <div className="relative space-y-6 text-center">
@@ -515,7 +566,7 @@ function Result({
       </div>
 
       <div className="space-y-1">
-        <p className="text-sm text-[#6b6385]">本場得分</p>
+        <p className="text-sm text-[#6b6385]">{shared.roundScore}</p>
         <p className="font-serif text-[56px] font-semibold leading-none text-[#1a1330]">
           {displayScore}
         </p>
@@ -523,14 +574,14 @@ function Result({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <ResultStat label="答對題數" value={`${correctCount}/${total}`} />
-        <ResultStat label="最長連對" value={`${maxStreak}`} />
-        <ResultStat label="歷來最高" value={`${bestScore}`} />
+        <ResultStat label={shared.correctAnswers} value={`${correctCount}/${total}`} />
+        <ResultStat label={shared.longestStreak} value={`${maxStreak}`} />
+        <ResultStat label={shared.allTimeBest} value={`${bestScore}`} />
       </div>
 
       {newBadges.length > 0 && (
         <div className="wyt-pop-in rounded-[16px] border border-[#c7d2fe] bg-[#eef2ff] p-5">
-          <p className="text-sm font-semibold text-[#4338ca]">🎉 解鎖新獎章！</p>
+          <p className="text-sm font-semibold text-[#4338ca]">{shared.newBadges}</p>
           <div className="mt-3 flex flex-wrap justify-center gap-3">
             {newBadges.map((id, i) => {
               const b = getBadge(id);
@@ -542,7 +593,7 @@ function Result({
                   className="wyt-pop-in flex items-center gap-2 rounded-full border border-[#c7d2fe] bg-white px-3 py-1.5 text-sm font-medium text-[#1a1330]"
                 >
                   <span className="text-lg">{b.emoji}</span>
-                  {b.label}
+                  {badgeCopy[b.id]?.label ?? b.label}
                 </div>
               );
             })}
@@ -557,7 +608,7 @@ function Result({
           style={{ backgroundColor: ACCENT }}
         >
           <RotateCcw className="size-4" />
-          再玩一次
+          {shared.playAgain}
         </Button>
         <Link href="/chinese/wenyan">
           <Button
@@ -565,7 +616,7 @@ function Result({
             className="gap-2 rounded-full border-[#e0dbf0] bg-white text-[#5b4f7a] transition hover:border-[#c4b8ec] hover:bg-[#f7f4ff]"
           >
             <ChevronLeft className="size-4" />
-            回到首頁
+            {shared.backHome}
           </Button>
         </Link>
       </div>

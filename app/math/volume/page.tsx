@@ -16,6 +16,8 @@ import {
   type ContainerSize,
   type Tool,
 } from "./store";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 
 // R3F must be client-only — Canvas relies on browser APIs.
 const VolumeScene = dynamic(
@@ -23,14 +25,141 @@ const VolumeScene = dynamic(
   { ssr: false }
 );
 
-const TOOL_BUTTONS: Array<{ key: Tool | "xray" | "container"; icon: string; label: string }> = [
-  { key: "place", icon: "📦", label: "放置方塊" },
-  { key: "erase", icon: "⬜", label: "刪除方塊" },
-  { key: "paint", icon: "🎨", label: "上色 / 改色" },
-  { key: "xray", icon: "👁️", label: "透視模式" },
-  { key: "rotateView", icon: "🔄", label: "旋轉視圖" },
-  { key: "container", icon: "🗃️", label: "顯示容器" },
+type ToolButtonKey = Tool | "xray" | "container";
+
+const TOOL_BUTTONS: Array<{ key: ToolButtonKey; icon: string }> = [
+  { key: "place", icon: "📦" },
+  { key: "erase", icon: "⬜" },
+  { key: "paint", icon: "🎨" },
+  { key: "xray", icon: "👁️" },
+  { key: "rotateView", icon: "🔄" },
+  { key: "container", icon: "🗃️" },
 ];
+
+type DialogCopy = { title: string; message: string; confirmLabel: string; cancelLabel: string };
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    tools: {
+      place: "放置方塊",
+      erase: "刪除方塊",
+      paint: "上色 / 改色",
+      xray: "透視模式",
+      rotateView: "旋轉視圖",
+      container: "顯示容器",
+    } as Record<ToolButtonKey, string>,
+    modes: { build: "手動構建", inspect: "觀察模式" },
+    resizeDialog: {
+      title: "切換容器尺寸",
+      message: "這會重新開始目前的容器任務，已放置的方塊會被清除。要繼續嗎？",
+      confirmLabel: "重新開始",
+      cancelLabel: "先不要",
+    } as DialogCopy,
+    clearDialog: {
+      title: "清除全部方塊",
+      message: "目前的作品會被清空，但你之後還是可以用復原拿回上一步。確定要清除嗎？",
+      confirmLabel: "清除全部",
+      cancelLabel: "保留作品",
+    } as DialogCopy,
+    containerTask: "容器任務",
+    containerSize: "容器尺寸",
+    containerHint: "切換尺寸會重新開始任務。請把容器內每一格都填滿。",
+    rotateLeft: "⟲ 向左旋轉",
+    rotateRight: "⟳ 向右旋轉",
+    clearAll: "🗑 清除全部",
+    undo: "↩ 復原",
+    canvasHint: "點擊網格放置方塊 · 拖曳右鍵旋轉視角",
+    threeViews: "三視圖投影",
+    topView: "頂視圖（俯視）",
+    frontView: "前視圖",
+    sideView: "側視圖",
+    tips: "提示",
+    buildTip: "選擇「放置方塊」工具，點擊網格或既有方塊的面來疊加；選「刪除方塊」可移除；「上色」可變更顏色。",
+    inspectTip: "觀察模式：拖曳視角檢視整體形狀，右側面板會顯示體積、表面積與三視圖。",
+    measureInfo: "度量資訊",
+    measureUnit: "度量單位",
+    cubeCount: (n: number) => `正方體個數: ${n}`,
+    surfaceArea: (value: string) => `表面積: ${value}`,
+    enclosedSpace: (value: string) => `包圍的空間: ${value}`,
+    targetVolume: (value: string) => `目標體積: ${value}`,
+    filled: (n: number) => `已填: ${n}`,
+    unfilled: (n: number) => `未填: ${n}`,
+    extra: (n: number) => `額外: ${n}`,
+    taskStatus: "任務狀態:",
+    complete: "完成",
+    inProgress: "進行中",
+    containerStart: "先點擊「顯示容器」開始容器任務。",
+    reminder: "小提醒",
+    cancel: "取消",
+    explode: "分離",
+    frontSublabel: "前視圖",
+    sideSublabel: "側視圖",
+    topSublabel: "頂視圖",
+    noCubes: "尚未放置任何方塊。",
+  },
+  en: {
+    tools: {
+      place: "Place cubes",
+      erase: "Remove cubes",
+      paint: "Paint / recolour",
+      xray: "X-ray view",
+      rotateView: "Rotate view",
+      container: "Show container",
+    },
+    modes: { build: "Build", inspect: "Inspect" },
+    resizeDialog: {
+      title: "Change container size",
+      message: "This restarts the container task and removes the cubes you have placed. Do you want to continue?",
+      confirmLabel: "Start again",
+      cancelLabel: "Not now",
+    },
+    clearDialog: {
+      title: "Clear all cubes",
+      message: "Your model will be cleared, but you can still use Undo to get the last step back. Clear everything?",
+      confirmLabel: "Clear all",
+      cancelLabel: "Keep my model",
+    },
+    containerTask: "Container task",
+    containerSize: "Container size",
+    containerHint: "Changing the size restarts the task. Fill every space inside the container.",
+    rotateLeft: "⟲ Rotate left",
+    rotateRight: "⟳ Rotate right",
+    clearAll: "🗑 Clear all",
+    undo: "↩ Undo",
+    canvasHint: "Click the grid to place a cube · Right-drag to turn the view",
+    threeViews: "Three views",
+    topView: "Top view (from above)",
+    frontView: "Front view",
+    sideView: "Side view",
+    tips: "Tips",
+    buildTip:
+      "Choose \"Place cubes\", then click the grid or the face of a cube to stack on it. Choose \"Remove cubes\" to take cubes away, and \"Paint\" to change colours.",
+    inspectTip:
+      "Inspect mode: drag to look at the whole shape. The panel on the right shows the volume, surface area and three views.",
+    measureInfo: "Measurements",
+    measureUnit: "Unit",
+    cubeCount: (n: number) => `Number of cubes: ${n}`,
+    surfaceArea: (value: string) => `Surface area: ${value}`,
+    enclosedSpace: (value: string) => `Enclosed space: ${value}`,
+    targetVolume: (value: string) => `Target volume: ${value}`,
+    filled: (n: number) => `Filled: ${n}`,
+    unfilled: (n: number) => `Empty: ${n}`,
+    extra: (n: number) => `Extra: ${n}`,
+    taskStatus: "Status:",
+    complete: "Done",
+    inProgress: "In progress",
+    containerStart: "Click \"Show container\" first to start the container task.",
+    reminder: "Just checking",
+    cancel: "Cancel",
+    explode: "Spread",
+    frontSublabel: "Front view",
+    sideSublabel: "Side view",
+    topSublabel: "Top view",
+    noCubes: "No cubes placed yet.",
+  },
+});
+
+type VolumeCopy = (typeof COPY)["zh-Hant"];
 
 const CONTAINER_PRESETS: Array<{ value: string; label: string; size: ContainerSize }> = [
   { value: "2x2x2", label: "2 × 2 × 2", size: { w: 2, h: 2, d: 2 } },
@@ -43,16 +172,15 @@ function presetValueFor(size: ContainerSize) {
   return `${size.w}x${size.h}x${size.d}`;
 }
 
+/** Which dialog is open. The wording is looked up at render so it follows the locale. */
 type ConfirmDialogState = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  cancelLabel?: string;
+  kind: "resize" | "clear";
   tone?: "primary" | "danger";
   onConfirm: () => void;
 };
 
 export default function VolumeExplorerPage() {
+  const copy = useCopy(COPY);
   const mode = useCubeStore((s) => s.mode);
   const tool = useCubeStore((s) => s.tool);
   const color = useCubeStore((s) => s.color);
@@ -119,10 +247,7 @@ export default function VolumeExplorerPage() {
 
     if (count > 0) {
       requestConfirmation({
-        title: "切換容器尺寸",
-        message: "這會重新開始目前的容器任務，已放置的方塊會被清除。要繼續嗎？",
-        confirmLabel: "重新開始",
-        cancelLabel: "先不要",
+        kind: "resize",
         onConfirm: applySizeChange,
       });
       return;
@@ -176,8 +301,8 @@ export default function VolumeExplorerPage() {
       {/* Tabs */}
       <div className="grid grid-cols-2 border-b border-[#d8d8d8] bg-white">
         {([
-          { id: "build", label: "手動構建" },
-          { id: "inspect", label: "觀察模式" },
+          { id: "build", label: copy.modes.build },
+          { id: "inspect", label: copy.modes.inspect },
         ] as const).map((t) => (
           <button
             key={t.id}
@@ -197,7 +322,7 @@ export default function VolumeExplorerPage() {
       <div className="grid min-h-0 grid-cols-[180px_1fr_200px]">
         {/* LEFT: tools */}
         <aside className="overflow-y-auto border-r border-[#d8d8d8] bg-white p-3">
-          <SectionTitle>{mode === "build" ? "手動構建" : "觀察模式"}</SectionTitle>
+          <SectionTitle>{mode === "build" ? copy.modes.build : copy.modes.inspect}</SectionTitle>
 
           <SectionTitle>Tools</SectionTitle>
           <div className="grid grid-cols-3 gap-1.5">
@@ -212,15 +337,15 @@ export default function VolumeExplorerPage() {
                 }`}
               >
                 <span className="text-base leading-none">{b.icon}</span>
-                <span>{b.label}</span>
+                <span>{copy.tools[b.key]}</span>
               </button>
             ))}
           </div>
 
           {showContainer && (
             <>
-              <SectionTitle>容器任務</SectionTitle>
-              <label className="mb-1 block text-[11px] font-medium text-[#6b7280]">容器尺寸</label>
+              <SectionTitle>{copy.containerTask}</SectionTitle>
+              <label className="mb-1 block text-[11px] font-medium text-[#6b7280]">{copy.containerSize}</label>
               <select
                 value={presetValueFor(containerSize)}
                 onChange={(e) => handleContainerSizeChange(e.target.value)}
@@ -233,7 +358,7 @@ export default function VolumeExplorerPage() {
                 ))}
               </select>
               <p className="mb-1.5 rounded-md border border-[#d8d8d8] bg-[#f8fafc] px-2.5 py-2 text-[11px] leading-relaxed text-[#6b7280]">
-                切換尺寸會重新開始任務。請把容器內每一格都填滿。
+                {copy.containerHint}
               </p>
             </>
           )}
@@ -254,8 +379,8 @@ export default function VolumeExplorerPage() {
           </div>
 
           <SectionTitle>View</SectionTitle>
-          <ActionButton onClick={rotateLeft}>⟲ 向左旋轉</ActionButton>
-          <ActionButton onClick={rotateRight}>⟳ 向右旋轉</ActionButton>
+          <ActionButton onClick={rotateLeft}>{copy.rotateLeft}</ActionButton>
+          <ActionButton onClick={rotateRight}>{copy.rotateRight}</ActionButton>
 
           <SectionTitle>Workspace</SectionTitle>
           <ActionButton
@@ -265,18 +390,15 @@ export default function VolumeExplorerPage() {
                 return;
               }
               requestConfirmation({
-                title: "清除全部方塊",
-                message: "目前的作品會被清空，但你之後還是可以用復原拿回上一步。確定要清除嗎？",
-                confirmLabel: "清除全部",
-                cancelLabel: "保留作品",
+                kind: "clear",
                 tone: "danger",
                 onConfirm: clearAll,
               });
             }}
           >
-            🗑 清除全部
+            {copy.clearAll}
           </ActionButton>
-          <ActionButton onClick={undo}>↩ 復原</ActionButton>
+          <ActionButton onClick={undo}>{copy.undo}</ActionButton>
         </aside>
 
         {/* CENTER: 3D canvas (build) or inspection panels (inspect) */}
@@ -285,7 +407,7 @@ export default function VolumeExplorerPage() {
             <>
               <VolumeScene />
               <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-[#d8d8d8] bg-white/90 px-2.5 py-1.5 text-[11px] text-[#6b7280] backdrop-blur-sm">
-                點擊網格放置方塊 · 拖曳右鍵旋轉視角
+                {copy.canvasHint}
               </div>
             </>
           ) : (
@@ -308,25 +430,25 @@ export default function VolumeExplorerPage() {
             onMeasurementUnitChange={setMeasurementUnit}
             showContainer={showContainer}
             containerTaskComplete={containerTaskComplete}
+            copy={copy}
           />
 
-          <Card title="三視圖投影">
-            <Stat label="頂視圖（俯視）" value={views.top} />
-            <Stat label="前視圖" value={views.front} />
-            <Stat label="側視圖" value={views.side} />
+          <Card title={copy.threeViews}>
+            <Stat label={copy.topView} value={views.top} />
+            <Stat label={copy.frontView} value={views.front} />
+            <Stat label={copy.sideView} value={views.side} />
           </Card>
 
-          <Card title="提示">
+          <Card title={copy.tips}>
             <p className="text-[11px] leading-relaxed text-[#6b7280]">
-              {mode === "build"
-                ? "選擇「放置方塊」工具，點擊網格或既有方塊的面來疊加；選「刪除方塊」可移除；「上色」可變更顏色。"
-                : "觀察模式：拖曳視角檢視整體形狀，右側面板會顯示體積、表面積與三視圖。"}
+              {mode === "build" ? copy.buildTip : copy.inspectTip}
             </p>
           </Card>
         </aside>
       </div>
 
       <FriendlyConfirmDialog
+        copy={copy}
         dialog={confirmDialog}
         onCancel={closeConfirmation}
         onConfirm={confirmAndClose}
@@ -387,7 +509,9 @@ function MeasureInfoPanel({
   onMeasurementUnitChange,
   showContainer,
   containerTaskComplete,
+  copy,
 }: {
+  copy: VolumeCopy;
   bbox: ReturnType<typeof computeBoundingBox>;
   cubeCount: number;
   area: number;
@@ -407,10 +531,10 @@ function MeasureInfoPanel({
   return (
     <div className="mb-2.5 rounded-lg border border-[#d8d8d8] bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-bold tracking-[0.2px] text-[#146ef5]">度量資訊</h3>
+        <h3 className="text-xs font-bold tracking-[0.2px] text-[#146ef5]">{copy.measureInfo}</h3>
       </div>
 
-      <div className="mb-1 text-[11px] text-[#6b7280]">度量單位</div>
+      <div className="mb-1 text-[11px] text-[#6b7280]">{copy.measureUnit}</div>
       <select
         value={measurementUnit}
         onChange={(e) => onMeasurementUnitChange(e.target.value)}
@@ -424,21 +548,21 @@ function MeasureInfoPanel({
       <MeasureLine label={`Y: ${bbox.height} ${measurementUnit}`} />
       <MeasureLine label={`Z: ${bbox.depth} ${measurementUnit}`} />
       <MeasureLine label={`V: ${cubeCount} ${volumeUnit}`} />
-      <MeasureLine label={`正方體個數: ${cubeCount}`} />
-      <MeasureLine label={`表面積: ${area} ${areaUnit}`} />
-      <MeasureLine label={`包圍的空間: ${pool} ${volumeUnit}`} />
+      <MeasureLine label={copy.cubeCount(cubeCount)} />
+      <MeasureLine label={copy.surfaceArea(`${area} ${areaUnit}`)} />
+      <MeasureLine label={copy.enclosedSpace(`${pool} ${volumeUnit}`)} />
 
       <div className="mt-2.5 border-t border-[#e5ecf5] pt-2 text-[11px] font-bold text-[#146ef5]">
-        容器任務
+        {copy.containerTask}
       </div>
       {showContainer ? (
         <>
-          <MeasureLine label={`目標體積: ${containerVolume} ${volumeUnit}`} />
-          <MeasureLine label={`已填: ${filledCount}`} />
-          <MeasureLine label={`未填: ${remainingCount}`} />
-          <MeasureLine label={`額外: ${extraCount}`} />
+          <MeasureLine label={copy.targetVolume(`${containerVolume} ${volumeUnit}`)} />
+          <MeasureLine label={copy.filled(filledCount)} />
+          <MeasureLine label={copy.unfilled(remainingCount)} />
+          <MeasureLine label={copy.extra(extraCount)} />
           <div className="pt-1 text-[11px] font-bold text-[#146ef5]">
-            <span className="mr-1">任務狀態:</span>
+            <span className="mr-1">{copy.taskStatus}</span>
             <span
               className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
                 containerTaskComplete
@@ -446,12 +570,12 @@ function MeasureInfoPanel({
                   : "bg-[#fff7ed] text-[#ea580c]"
               }`}
             >
-              {containerTaskComplete ? "完成" : "進行中"}
+              {containerTaskComplete ? copy.complete : copy.inProgress}
             </span>
           </div>
         </>
       ) : (
-        <div className="pt-1 text-[11px] text-[#6b7280]">先點擊「顯示容器」開始容器任務。</div>
+        <div className="pt-1 text-[11px] text-[#6b7280]">{copy.containerStart}</div>
       )}
     </div>
   );
@@ -462,15 +586,22 @@ function MeasureLine({ label }: { label: string }) {
 }
 
 function FriendlyConfirmDialog({
-  dialog,
+  copy,
+  dialog: state,
   onCancel,
   onConfirm,
 }: {
+  copy: VolumeCopy;
   dialog: ConfirmDialogState | null;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  if (!dialog) return null;
+  if (!state) return null;
+
+  const dialog = {
+    ...(state.kind === "resize" ? copy.resizeDialog : copy.clearDialog),
+    tone: state.tone,
+  };
 
   const confirmClassName = dialog.tone === "danger"
     ? "bg-[#ef4444] text-white hover:bg-[#dc2626]"
@@ -485,7 +616,7 @@ function FriendlyConfirmDialog({
         className="w-full max-w-[420px] rounded-2xl border border-[#dbe6f6] bg-white p-5 shadow-[0_24px_80px_rgba(20,110,245,0.16)]"
       >
         <div className="mb-3 inline-flex rounded-full bg-[#eef5ff] px-3 py-1 text-[10px] font-bold tracking-[1px] text-[#146ef5]">
-          小提醒
+          {copy.reminder}
         </div>
         <h2 id="volume-confirm-title" className="text-lg font-bold text-[#080808]">
           {dialog.title}
@@ -499,7 +630,7 @@ function FriendlyConfirmDialog({
             onClick={onCancel}
             className="rounded-full border border-[#d8d8d8] bg-white px-4 py-2 text-sm font-semibold text-[#5f6b7a] transition-colors hover:bg-[#f8fafc]"
           >
-            {dialog.cancelLabel ?? "取消"}
+            {dialog.cancelLabel ?? copy.cancel}
           </button>
           <button
             type="button"
@@ -515,6 +646,7 @@ function FriendlyConfirmDialog({
 }
 
 function InspectPanels() {
+  const copy = useCopy(COPY);
   const cubes = useCubeStore((s) => s.cubes);
   const viewYaw = useCubeStore((s) => s.viewYaw);
   const cubeArr = useMemo(() => Object.values(cubes), [cubes]);
@@ -531,7 +663,7 @@ function InspectPanels() {
       <div className="relative col-span-2 min-h-0 bg-white">
         <PanelHeader icon="💥" label="Explode View">
           <div className="flex items-center gap-2 text-[11px] text-[#6b7280]">
-            <span>分離</span>
+            <span>{copy.explode}</span>
             <input
               type="range"
               min={0}
@@ -557,7 +689,7 @@ function InspectPanels() {
       <ProjectionPanel
         icon="📐"
         label="Front"
-        sublabel="前視圖"
+        sublabel={copy.frontSublabel}
         grid={projections.front}
         empty={empty}
       />
@@ -566,7 +698,7 @@ function InspectPanels() {
       <ProjectionPanel
         icon="📐"
         label="Right"
-        sublabel="側視圖"
+        sublabel={copy.sideSublabel}
         grid={projections.right}
         empty={empty}
       />
@@ -575,7 +707,7 @@ function InspectPanels() {
       <ProjectionPanel
         icon="📐"
         label="Top"
-        sublabel="頂視圖"
+        sublabel={copy.topSublabel}
         grid={projections.top}
         empty={empty}
       />
@@ -585,7 +717,7 @@ function InspectPanels() {
         <PanelHeader icon="🎨" label="Material" />
         <div className="flex-1 overflow-auto p-3">
           {empty ? (
-            <p className="text-[12px] text-[#6b7280]">尚未放置任何方塊。</p>
+            <p className="text-[12px] text-[#6b7280]">{copy.noCubes}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {colors.map(({ color, count }) => (

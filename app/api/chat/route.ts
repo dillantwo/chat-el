@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { getSession } from "@/lib/session";
 import { requireSubjectApi, requireTopicApi } from "@/lib/subject-access";
 import { recordTokenUsage } from "@/lib/token-usage";
+import { withReplyLanguage } from "@/lib/i18n/ai";
 import type { Subject } from "@/models/User";
 
 function uiMessagesToModelMessages(messages: UIMessage[]): ModelMessage[] {
@@ -159,15 +160,20 @@ export async function POST(req: Request) {
         : await requireSubjectApi(subject);
     if (denied) return denied;
 
+    const baseSystem = systemPrompt && systemPrompt.trim().length > 0
+      ? systemPrompt
+      : mode === "ai-tool"
+        ? aiToolSystem
+        : hasQuestion === false
+          ? noQuestionSystem
+          : defaultSystem;
+
     const result = streamText({
       model: azure(deploymentName),
-      system: systemPrompt && systemPrompt.trim().length > 0
-        ? systemPrompt
-        : mode === "ai-tool"
-          ? aiToolSystem
-          : hasQuestion === false
-            ? noQuestionSystem
-            : defaultSystem,
+      // Only maths follows the interface language here. The English subject's
+      // prompts are English-only already, and the Chinese Language subject is
+      // always Chinese.
+      system: subject === "math" ? await withReplyLanguage(baseSystem, "chat") : baseSystem,
       messages: uiMessagesToModelMessages(messages),
     });
 
@@ -176,6 +182,9 @@ export async function POST(req: Request) {
       await recordTokenUsage({
         session,
         subject,
+        // Same rule as the access check above: only a maths request can claim
+        // ai-diagram. Anything else is derived from the endpoint + subject.
+        topic: subject === "math" && topic === "ai-diagram" ? "ai-diagram" : undefined,
         modelName: deploymentName,
         endpoint: "/api/chat",
         usage: await result.usage,

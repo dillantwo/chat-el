@@ -26,6 +26,9 @@ import {
   type WenyanText,
 } from "@/lib/wenyan-texts";
 import { getProgress, markTextCompleted } from "@/lib/wenyan-progress";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+import { WENYAN_COPY } from "../wenyan-copy";
 
 type TaskKey = 1 | 2 | 3 | 4;
 
@@ -35,35 +38,128 @@ interface Feedback {
   suggestion: string;
 }
 
-const TASKS: { key: TaskKey; label: string; sub: string; icon: typeof ScrollText }[] = [
-  { key: 1, label: "任務一　閱讀原文", sub: "先讀通原文", icon: ScrollText },
-  { key: 2, label: "任務二　句子拆解", sub: "拆解字詞意思", icon: ListTree },
-  { key: 3, label: "任務三　翻譯練習", sub: "AI 檢測你的翻譯", icon: Languages },
-  { key: 4, label: "任務四　完整翻譯", sub: "對照完整白話翻譯", icon: BookOpen },
+const COPY = defineCopy({
+  "zh-Hant": {
+    tasks: {
+      1: { label: "任務一　閱讀原文", sub: "先讀通原文" },
+      2: { label: "任務二　句子拆解", sub: "拆解字詞意思" },
+      3: { label: "任務三　翻譯練習", sub: "AI 檢測你的翻譯" },
+      4: { label: "任務四　完整翻譯", sub: "對照完整白話翻譯" },
+    } as Record<TaskKey, { label: string; sub: string }>,
+    ratings: {
+      excellent: "很出色",
+      good: "做得好",
+      needs_improvement: "再試試",
+    } as Record<Feedback["rating"], string>,
+    enterTranslation: "請先輸入你的翻譯",
+    checkFailed: "檢測失敗，請稍後再試",
+    checkError: "檢測時發生錯誤",
+    pickAnother: "選擇其他篇章",
+    task4Locked: "完成任務三所有 AI 檢測後解鎖",
+    prevStep: "上一步",
+    seeFullTranslation: "查看完整翻譯",
+    nextTask: "下一個任務",
+    checkAllFirst: "請先完成所有句子的 AI 檢測",
+    finishAndNext: "完成，學習另一篇",
+    pickerIntro:
+      "選擇一篇文言文，跟着四個任務一步步學：先讀通原文，再拆解句子成分，然後試着翻譯並由 AI 檢測，最後對照完整白話翻譯。完成後就會記錄在你的學習進度裏。",
+    completed: "已完成",
+    learnAgain: "再學一次",
+    startLearning: "開始學習",
+    commonWords: "常用詞",
+    jyutping: (s: string) => `粵［${s}］`,
+    pinyin: (s: string) => `普［${s}］`,
+    task1Hint: "先細心讀一遍原文，留意上面的常用詞，讀完後按「下一個任務」學習句子拆解。",
+    task2Intro:
+      "把句子拆成一個個字詞，逐一弄清意思，就能讀懂整句文言文。下面每句都拆好了，試着把字詞和解釋對起來讀一遍。",
+    task3Intro:
+      "試着把每一句文言文翻譯成白話文，按「AI 檢測」就會得到鼓勵和建議。完成全部句子後，便可查看完整翻譯。",
+    checkedCount: (n: number, total: number) => `已檢測 ${n}/${total}`,
+    translationPlaceholder: "在這裏寫上你的白話翻譯…",
+    checking: "檢測中…",
+    recheck: "重新檢測",
+    check: "AI 檢測",
+    suggestedTranslation: "建議翻譯：",
+    task4Intro:
+      "恭喜你完成這篇文章！已記錄到你的學習進度裏。下面是原文和完整的白話翻譯，把它和你自己的翻譯對照一下，看看哪裏可以譯得更好。",
+    modernTranslation: "白話翻譯",
+  },
+  en: {
+    tasks: {
+      1: { label: "Task 1: Read the text", sub: "Read the original first" },
+      2: { label: "Task 2: Break it down", sub: "Learn what each word means" },
+      3: { label: "Task 3: Translate", sub: "AI checks your translation" },
+      4: { label: "Task 4: Full translation", sub: "Compare with the full translation" },
+    },
+    ratings: {
+      excellent: "Excellent",
+      good: "Well done",
+      needs_improvement: "Try again",
+    },
+    enterTranslation: "Please type your translation first.",
+    checkFailed: "Checking failed. Please try again later.",
+    checkError: "Something went wrong while checking.",
+    pickAnother: "Choose another text",
+    task4Locked: "Unlocks when every sentence in Task 3 has been checked by AI",
+    prevStep: "Back",
+    seeFullTranslation: "See full translation",
+    nextTask: "Next task",
+    checkAllFirst: "Check every sentence with AI first",
+    finishAndNext: "Done! Learn another text",
+    pickerIntro:
+      "Choose a Classical Chinese text and learn it in four tasks: read the original, break the sentences down, try translating them and have AI check your work, then compare with the full modern Chinese translation. Finished texts are saved to your progress.",
+    completed: "Finished",
+    learnAgain: "Learn again",
+    startLearning: "Start learning",
+    commonWords: "Common words (常用詞)",
+    jyutping: (s: string) => `Cantonese [${s}]`,
+    pinyin: (s: string) => `Mandarin [${s}]`,
+    task1Hint:
+      "Read the original carefully and look out for the common words above. When you're done, press \"Next task\" to break the sentences down.",
+    task2Intro:
+      "Break each sentence into words and work out what each one means, and you'll understand the whole sentence. Every sentence below is already broken down. Read each word with its meaning.",
+    task3Intro:
+      "Try translating each sentence into modern Chinese (白話文). Press \"AI check\" to get encouragement and tips. When every sentence is done, you can see the full translation.",
+    checkedCount: (n: number, total: number) => `Checked ${n}/${total}`,
+    translationPlaceholder: "Write your modern Chinese translation here…",
+    checking: "Checking…",
+    recheck: "Check again",
+    check: "AI check",
+    suggestedTranslation: "Suggested translation: ",
+    task4Intro:
+      "Well done, you've finished this text! It's saved to your progress. Below are the original and the full modern Chinese translation. Compare it with your own and see where you could translate better.",
+    modernTranslation: "Modern Chinese translation (白話翻譯)",
+  },
+});
+
+const TASKS: { key: TaskKey; icon: typeof ScrollText }[] = [
+  { key: 1, icon: ScrollText },
+  { key: 2, icon: ListTree },
+  { key: 3, icon: Languages },
+  { key: 4, icon: BookOpen },
 ];
 
 const RATING_META: Record<
   Feedback["rating"],
-  { label: string; cls: string; icon: typeof CheckCircle2 }
+  { cls: string; icon: typeof CheckCircle2 }
 > = {
   excellent: {
-    label: "很出色",
     cls: "border-[#16a34a]/30 bg-[#f0fdf4] text-[#15803d]",
     icon: CheckCircle2,
   },
   good: {
-    label: "做得好",
     cls: "border-[#146ef5]/30 bg-[#eff6ff] text-[#1d4ed8]",
     icon: ThumbsUp,
   },
   needs_improvement: {
-    label: "再試試",
     cls: "border-[#f59e0b]/30 bg-[#fffbeb] text-[#b45309]",
     icon: AlertCircle,
   },
 };
 
 export default function WenyanLearnPage() {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [task, setTask] = useState<TaskKey>(1);
   const [completedIds, setCompletedIds] = useState<string[]>([]);
@@ -112,7 +208,7 @@ export default function WenyanLearnPage() {
     const key = `${text.id}-${sentenceId}`;
     const studentTranslation = (translations[key] ?? "").trim();
     if (!studentTranslation) {
-      setErrors((prev) => ({ ...prev, [key]: "請先輸入你的翻譯" }));
+      setErrors((prev) => ({ ...prev, [key]: copy.enterTranslation }));
       return;
     }
 
@@ -132,7 +228,7 @@ export default function WenyanLearnPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "檢測失敗，請稍後再試");
+        throw new Error(data?.error ?? copy.checkFailed);
       }
 
       const data = (await res.json()) as Feedback;
@@ -140,7 +236,7 @@ export default function WenyanLearnPage() {
     } catch (err) {
       setErrors((prev) => ({
         ...prev,
-        [key]: err instanceof Error ? err.message : "檢測時發生錯誤",
+        [key]: err instanceof Error ? err.message : copy.checkError,
       }));
     } finally {
       setChecking(null);
@@ -157,11 +253,11 @@ export default function WenyanLearnPage() {
             className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <ChevronLeft className="size-4" />
-            返回遊戲首頁
+            {shared.backToGame}
           </Link>
           <div className="flex items-center gap-2">
             <BookOpen className="size-4 text-[#7a3dff]" />
-            <span className="text-sm font-semibold text-[#080808]">學習模式</span>
+            <span className="text-sm font-semibold text-[#080808]">{shared.learnMode}</span>
           </div>
           <div className="w-[112px]" />
         </div>
@@ -190,13 +286,14 @@ export default function WenyanLearnPage() {
                     className="gap-1.5 rounded-full border-[#e0dbf0] bg-white text-[#5b4f7a] transition hover:border-[#c4b8ec] hover:bg-[#f7f4ff]"
                   >
                     <ChevronLeft className="size-3.5" />
-                    選擇其他篇章
+                    {copy.pickAnother}
                   </Button>
                 </div>
 
                 {/* Step indicator */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {TASKS.map(({ key, label, icon: Icon }, i) => {
+                  {TASKS.map(({ key, icon: Icon }, i) => {
+                    const label = copy.tasks[key].label;
                     const active = task === key;
                     const done = task > key;
                     const locked = key === 4 && !allChecked;
@@ -208,7 +305,7 @@ export default function WenyanLearnPage() {
                             setTask(key);
                           }}
                           disabled={locked}
-                          title={locked ? "完成任務三所有 AI 檢測後解鎖" : undefined}
+                          title={locked ? copy.task4Locked : undefined}
                           className={[
                             "flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all",
                             active
@@ -262,7 +359,7 @@ export default function WenyanLearnPage() {
                     className="gap-1.5 rounded-full border-[#e0dbf0] bg-white text-[#5b4f7a] transition hover:border-[#c4b8ec] hover:bg-[#f7f4ff] disabled:opacity-40"
                   >
                     <ChevronLeft className="size-4" />
-                    上一步
+                    {copy.prevStep}
                   </Button>
                   {task < 4 ? (
                     <div className="flex flex-col items-end gap-1">
@@ -271,12 +368,12 @@ export default function WenyanLearnPage() {
                         disabled={task === 3 && !allChecked}
                         className="gap-1.5 rounded-full bg-[#7a3dff] text-white shadow-[0_4px_14px_rgba(122,61,255,0.28)] transition hover:-translate-y-0.5 hover:bg-[#5a25d6] disabled:translate-y-0 disabled:bg-[#cbc3e3] disabled:shadow-none"
                       >
-                        {task === 3 ? "查看完整翻譯" : "下一個任務"}
+                        {task === 3 ? copy.seeFullTranslation : copy.nextTask}
                         <ChevronRight className="size-4" />
                       </Button>
                       {task === 3 && !allChecked && (
                         <span className="text-[11px] text-[#9a8fb5]">
-                          請先完成所有句子的 AI 檢測
+                          {copy.checkAllFirst}
                         </span>
                       )}
                     </div>
@@ -286,7 +383,7 @@ export default function WenyanLearnPage() {
                       className="gap-1.5 rounded-full bg-[#16a34a] text-white shadow-[0_4px_14px_rgba(22,163,74,0.25)] transition hover:-translate-y-0.5 hover:bg-[#15803d]"
                     >
                       <CheckCircle2 className="size-4" />
-                      完成，學習另一篇
+                      {copy.finishAndNext}
                     </Button>
                   )}
                 </div>
@@ -308,14 +405,16 @@ function TextPicker({
   onSelect: (id: string) => void;
   completedIds: string[];
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h1 className="font-serif text-[34px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-          學習模式
+          {shared.learnMode}
         </h1>
         <p className="mx-auto max-w-xl text-sm leading-7 text-[#6b6385]">
-          選擇一篇文言文，跟着四個任務一步步學：先讀通原文，再拆解句子成分，然後試着翻譯並由 AI 檢測，最後對照完整白話翻譯。完成後就會記錄在你的學習進度裏。
+          {copy.pickerIntro}
         </p>
       </div>
 
@@ -331,7 +430,7 @@ function TextPicker({
               {done && (
                 <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-[#16a34a]/30 bg-[#f0fdf4] px-2 py-0.5 text-[11px] font-semibold text-[#15803d]">
                   <CheckCircle2 className="size-3.5" />
-                  已完成
+                  {copy.completed}
                 </span>
               )}
               <div className="flex items-center justify-between">
@@ -347,7 +446,7 @@ function TextPicker({
               </h2>
               <p className="mt-2 flex-1 text-sm leading-6 text-[#6b6385]">{t.summary}</p>
               <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#7a3dff] transition-transform duration-200 group-hover:translate-x-1">
-                {done ? "再學一次" : "開始學習"}
+                {done ? copy.learnAgain : copy.startLearning}
                 <ArrowRight className="size-4" />
               </span>
             </button>
@@ -361,6 +460,7 @@ function TextPicker({
 /* --------------------------------------------------------------- Task 1 */
 
 function Task1({ text }: { text: WenyanText }) {
+  const copy = useCopy(COPY);
   return (
     <div className="space-y-4">
       <div className="rounded-[14px] border border-[#e6e1f3] bg-[#faf8ff] p-4 text-sm leading-7 text-[#5b4f7a]">
@@ -379,7 +479,7 @@ function Task1({ text }: { text: WenyanText }) {
             <span className="inline-flex size-7 items-center justify-center rounded-[8px] bg-[#fff3d6] text-[#b45309]">
               <BookOpen className="size-4" />
             </span>
-            <h3 className="font-serif text-[18px] font-semibold text-[#1a1330]">常用詞</h3>
+            <h3 className="font-serif text-[18px] font-semibold text-[#1a1330]">{copy.commonWords}</h3>
           </div>
           <ol className="space-y-2.5">
             {text.vocab.map((v, i) => (
@@ -398,9 +498,9 @@ function Task1({ text }: { text: WenyanText }) {
                   {v.meaning}
                   {(v.jyutping || v.pinyin) && (
                     <span className="ml-1 whitespace-nowrap text-[13px] text-[#9a8fb5]">
-                      {v.jyutping && `粵［${v.jyutping}］`}
+                      {v.jyutping && copy.jyutping(v.jyutping)}
                       {v.jyutping && v.pinyin && "　"}
-                      {v.pinyin && `普［${v.pinyin}］`}
+                      {v.pinyin && copy.pinyin(v.pinyin)}
                     </span>
                   )}
                 </p>
@@ -411,7 +511,7 @@ function Task1({ text }: { text: WenyanText }) {
       )}
 
       <p className="text-center text-sm text-[#9a8fb5]">
-        先細心讀一遍原文，留意上面的常用詞，讀完後按「下一個任務」學習句子拆解。
+        {copy.task1Hint}
       </p>
     </div>
   );
@@ -420,10 +520,11 @@ function Task1({ text }: { text: WenyanText }) {
 /* --------------------------------------------------------------- Task 2 */
 
 function Task2({ text }: { text: WenyanText }) {
+  const copy = useCopy(COPY);
   return (
     <div className="space-y-4">
       <div className="rounded-[14px] border border-[#e6e1f3] bg-[#faf8ff] p-4 text-sm leading-7 text-[#5b4f7a]">
-        把句子拆成一個個字詞，逐一弄清意思，就能讀懂整句文言文。下面每句都拆好了，試着把字詞和解釋對起來讀一遍。
+        {copy.task2Intro}
       </div>
 
       <div className="space-y-4">
@@ -480,6 +581,7 @@ function Task3({
   errors: Record<string, string>;
   onCheck: (text: WenyanText, sentenceId: string) => void;
 }) {
+  const copy = useCopy(COPY);
   const checkedCount = text.sentences.filter(
     (s) => !!feedbacks[`${text.id}-${s.id}`]
   ).length;
@@ -488,10 +590,10 @@ function Task3({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#e6e1f3] bg-[#faf8ff] p-4 text-sm leading-7 text-[#5b4f7a]">
         <span>
-          試着把每一句文言文翻譯成白話文，按「AI 檢測」就會得到鼓勵和建議。完成全部句子後，便可查看完整翻譯。
+          {copy.task3Intro}
         </span>
         <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#7a3dff]">
-          已檢測 {checkedCount}/{text.sentences.length}
+          {copy.checkedCount(checkedCount, text.sentences.length)}
         </span>
       </div>
 
@@ -524,7 +626,7 @@ function Task3({
                   onChange={(e) =>
                     setTranslations((prev) => ({ ...prev, [key]: e.target.value }))
                   }
-                  placeholder="在這裏寫上你的白話翻譯…"
+                  placeholder={copy.translationPlaceholder}
                   className="min-h-[80px] resize-y rounded-[12px] border-[#e0dbf0] bg-[#fbfaff] text-[15px] leading-7 text-[#1a1330] shadow-none focus-visible:ring-[#7a3dff]"
                 />
 
@@ -539,7 +641,7 @@ function Task3({
                     ) : (
                       <Sparkles className="size-4" />
                     )}
-                    {isChecking ? "檢測中…" : fb ? "重新檢測" : "AI 檢測"}
+                    {isChecking ? copy.checking : fb ? copy.recheck : copy.check}
                   </Button>
                 </div>
 
@@ -554,11 +656,11 @@ function Task3({
                       ].join(" ")}
                     >
                       <RatingIcon className="size-3.5" />
-                      {RATING_META[fb.rating].label}
+                      {copy.ratings[fb.rating]}
                     </div>
                     <p className="text-sm leading-7 text-[#3f3a52]">{fb.feedback}</p>
                     <p className="rounded-[8px] bg-white px-3 py-2 text-sm leading-7 text-[#555]">
-                      <span className="font-medium text-[#7a3dff]">建議翻譯：</span>
+                      <span className="font-medium text-[#7a3dff]">{copy.suggestedTranslation}</span>
                       {fb.suggestion}
                     </p>
                   </div>
@@ -575,15 +677,17 @@ function Task3({
 /* --------------------------------------------------------------- Task 4 */
 
 function Task4({ text }: { text: WenyanText }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   return (
     <div className="space-y-4">
       <div className="rounded-[14px] border border-[#16a34a]/20 bg-[#f0fdf4] p-4 text-sm leading-7 text-[#15803d]">
-        恭喜你完成這篇文章！已記錄到你的學習進度裏。下面是原文和完整的白話翻譯，把它和你自己的翻譯對照一下，看看哪裏可以譯得更好。
+        {copy.task4Intro}
       </div>
 
       <div className="rounded-[16px] border border-[#e6e1f3] bg-white/92 p-6 shadow-[0_10px_28px_rgba(122,61,255,0.08)] md:p-8">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[1px] text-[#9a8fb5]">
-          原文
+          {shared.original}
         </p>
         <p className="font-serif text-[21px] leading-[2.2] tracking-[0.03em] text-[#1a1330] md:text-[23px]">
           {text.sentences.map((s) => s.original).join("")}
@@ -591,7 +695,7 @@ function Task4({ text }: { text: WenyanText }) {
 
         <div className="mt-6 border-t border-[#f0edf8] pt-6">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[1px] text-[#9a8fb5]">
-            白話翻譯
+            {copy.modernTranslation}
           </p>
           <p className="text-[16px] leading-8 text-[#3f3a52]">
             {text.sentences.map((s) => s.translation).join("")}

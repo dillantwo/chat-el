@@ -54,6 +54,8 @@ export const toolIconMap: Record<string, LucideIcon> = {
 };
 
 export interface ToolGroup {
+  /** Stored group key, e.g. "fraction-operations"; picks the English name. */
+  type?: string;
   label: string;
   tools: ToolFromDB[];
 }

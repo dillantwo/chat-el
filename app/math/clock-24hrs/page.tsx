@@ -2,6 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalogClock, type ClockHand } from "../_components/AnalogClock";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    snapOn: "Snap: 5m (開)",
+    snapOff: "Snap: 1m (關)",
+    showAngle: "顯示夾角",
+    mode24: "模式: 24H",
+    modeAmPm: "模式: AM/PM",
+    handAngle: "指針夾角：",
+  },
+  en: {
+    snapOn: "Snap: 5m (on)",
+    snapOff: "Snap: 1m (off)",
+    showAngle: "Show angle",
+    mode24: "Mode: 24H",
+    modeAmPm: "Mode: AM/PM",
+    handAngle: "Angle between hands: ",
+  },
+});
 
 const DAY_START = 6;
 const NIGHT_START = 18;
@@ -53,6 +74,7 @@ function buildAngleArcPath(hourAngle: number, minuteAngle: number) {
 }
 
 export default function Clock24HoursPage() {
+  const copy = useCopy(COPY);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const lastAngleRef = useRef(0);
   const [currentTime, setCurrentTime] = useState(546);
@@ -178,7 +200,7 @@ export default function Clock24HoursPage() {
                   : "border-[#ccc] bg-[#eee] text-[#1b1b1f]"
               }`}
             >
-              {snapTo5Min ? "Snap: 5m (開)" : "Snap: 1m (關)"}
+              {snapTo5Min ? copy.snapOn : copy.snapOff}
             </button>
             <button
               type="button"
@@ -189,7 +211,7 @@ export default function Clock24HoursPage() {
                   : "border-[#ccc] bg-[#eee] text-[#1b1b1f]"
               }`}
             >
-              顯示夾角
+              {copy.showAngle}
             </button>
           </div>
         </div>
@@ -217,7 +239,7 @@ export default function Clock24HoursPage() {
               is24HDisplay ? "bg-[#333] text-white" : "bg-[#111827] text-white"
             }`}
           >
-            {is24HDisplay ? "模式: 24H" : "模式: AM/PM"}
+            {is24HDisplay ? copy.mode24 : copy.modeAmPm}
           </button>
 
           <div className="flex flex-wrap items-center justify-center gap-3 rounded-[16px] border-[3px] border-[#333] bg-white px-4 py-4">
@@ -271,7 +293,7 @@ export default function Clock24HoursPage() {
 
           {showAngle ? (
             <div className="rounded-[8px] border border-dashed border-[#ffa500] bg-[#fff3e0] px-4 py-2 text-lg font-bold text-[#666]">
-              指針夾角：{angleArc.angle.toFixed(1)}°
+              {copy.handAngle}{angleArc.angle.toFixed(1)}°
             </div>
           ) : null}
         </div>

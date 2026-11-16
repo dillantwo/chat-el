@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import { SUBJECTS, SUBJECT_LABELS } from "@/lib/subjects";
 import { RoleBadge, SubjectBadgeList } from "@/components/admin/badges";
-import { USAGE_TOPICS } from "@/lib/usage-topics";
+import { USAGE_TOPICS, topicLabel } from "@/lib/usage-topics";
 import { basePath, cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -366,53 +366,82 @@ export default function TokenUsagePage() {
     return p.toString();
   }, [from, to, school, subject, topic, role, query, selectedUser]);
 
-  const loadReport = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${basePath}/api/admin/token-usage?${filterParams}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "載入失敗");
+  // Each effect aborts its request when the filters change again, so a slow
+  // response for an old filter can never overwrite the current one.
+  const loadReport = useCallback(
+    async (signal: AbortSignal) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${basePath}/api/admin/token-usage?${filterParams}`, {
+          signal,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (signal.aborted) return;
+          setError(data.error ?? "載入失敗");
+          setReport(null);
+          return;
+        }
+        const data = await res.json();
+        if (signal.aborted) return;
+        setReport(data);
+      } catch {
+        if (signal.aborted) return;
+        setError("載入失敗");
         setReport(null);
-        return;
+      } finally {
+        if (!signal.aborted) setLoading(false);
       }
-      setReport(await res.json());
-    } catch {
-      setError("載入失敗");
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterParams]);
+    },
+    [filterParams],
+  );
 
   useEffect(() => {
-    const t = setTimeout(loadReport, 250);
-    return () => clearTimeout(t);
+    const controller = new AbortController();
+    const t = setTimeout(() => loadReport(controller.signal), 250);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [loadReport]);
 
-  // Reset paging whenever the filters change.
-  useEffect(() => {
+  // Paging belongs to one set of filters. Reset it during render (not in an
+  // effect) so the records request below never fires with a stale page.
+  const [pagedFilters, setPagedFilters] = useState(filterParams);
+  if (pagedFilters !== filterParams) {
+    setPagedFilters(filterParams);
     setPage(1);
-  }, [filterParams]);
+  }
 
-  const loadRecords = useCallback(async () => {
-    setRecordsLoading(true);
-    try {
-      const res = await fetch(
-        `${basePath}/api/admin/token-usage/records?${filterParams}&page=${page}&pageSize=25`,
-      );
-      setRecords(res.ok ? await res.json() : null);
-    } catch {
-      setRecords(null);
-    } finally {
-      setRecordsLoading(false);
-    }
-  }, [filterParams, page]);
+  const loadRecords = useCallback(
+    async (signal: AbortSignal) => {
+      setRecordsLoading(true);
+      try {
+        const res = await fetch(
+          `${basePath}/api/admin/token-usage/records?${filterParams}&page=${page}&pageSize=25`,
+          { signal },
+        );
+        const data = res.ok ? await res.json() : null;
+        if (signal.aborted) return;
+        setRecords(data);
+      } catch {
+        if (signal.aborted) return;
+        setRecords(null);
+      } finally {
+        if (!signal.aborted) setRecordsLoading(false);
+      }
+    },
+    [filterParams, page],
+  );
 
   useEffect(() => {
-    const t = setTimeout(loadRecords, 300);
-    return () => clearTimeout(t);
+    const controller = new AbortController();
+    const t = setTimeout(() => loadRecords(controller.signal), 300);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [loadRecords]);
 
   const schools = report?.schools ?? [];
@@ -474,7 +503,7 @@ export default function TokenUsagePage() {
       },
     },
     topic && {
-      label: `主題：${USAGE_TOPICS.find((t) => t.key === topic)?.label ?? topic}`,
+      label: `主題：${topicLabel(topic)}`,
       clear: () => setTopic(""),
     },
     role && {
@@ -542,6 +571,7 @@ export default function TokenUsagePage() {
             <Input
               type="date"
               value={from}
+              max={to || undefined}
               onChange={(e) => setFrom(e.target.value)}
               className="h-9 w-40"
               aria-label="開始日期"
@@ -550,6 +580,7 @@ export default function TokenUsagePage() {
             <Input
               type="date"
               value={to}
+              min={from || undefined}
               onChange={(e) => setTo(e.target.value)}
               className="h-9 w-40"
               aria-label="結束日期"
@@ -606,11 +637,7 @@ export default function TokenUsagePage() {
           <Select value={topic} onValueChange={(v) => setTopic(v as string)}>
             <SelectTrigger className="h-9 w-48">
               <SelectValue placeholder="全部主題">
-                {(v) =>
-                  !v
-                    ? "全部主題"
-                    : (USAGE_TOPICS.find((t) => t.key === v)?.label ?? "全部主題")
-                }
+                {(v) => (!v ? "全部主題" : topicLabel(v as string))}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>

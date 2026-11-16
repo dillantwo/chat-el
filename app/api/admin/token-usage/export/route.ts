@@ -16,7 +16,12 @@ import {
 /** Hard cap so an unbounded date range can't exhaust memory. */
 const MAX_RECORDS = 50_000;
 
-type ExportType = "records" | "school" | "subject" | "topic" | "user";
+const EXPORT_TYPES = ["records", "school", "subject", "topic", "model", "user"] as const;
+type ExportType = (typeof EXPORT_TYPES)[number];
+
+function isExportType(value: string): value is ExportType {
+  return (EXPORT_TYPES as readonly string[]).includes(value);
+}
 
 /**
  * Excel and Sheets treat a cell starting with `=`, `+`, `-`, `@`, tab or CR as a
@@ -79,7 +84,7 @@ const SUMMARY_HEADER = [
 ];
 
 /**
- * GET /api/admin/token-usage/export?type=records|school|subject|topic|user
+ * GET /api/admin/token-usage/export?type=records|school|subject|topic|model|user
  *
  * CSV export of the current report. Accepts the same filters as
  * /api/admin/token-usage.
@@ -94,7 +99,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = req.nextUrl;
     const filters = parseUsageFilters(searchParams);
-    const type = (searchParams.get("type") ?? "records") as ExportType;
+    const typeParam = searchParams.get("type") ?? "records";
+    if (!isExportType(typeParam)) {
+      return NextResponse.json({ error: "不支援的匯出類型" }, { status: 400 });
+    }
+    const type = typeParam;
 
     const directory = await loadUserDirectory();
 
@@ -102,7 +111,7 @@ export async function GET(req: NextRequest) {
     let name: string;
 
     if (type === "records") {
-      const docs = await TokenUsage.find(buildUsageMatch(filters, directory))
+      const docs = await TokenUsage.find(await buildUsageMatch(filters, directory))
         .sort({ createdAt: -1 })
         .limit(MAX_RECORDS)
         .lean();
@@ -208,7 +217,9 @@ export async function GET(req: NextRequest) {
             ? report.bySchool
             : type === "subject"
               ? report.bySubject
-              : report.byTopic;
+              : type === "model"
+                ? report.byModel
+                : report.byTopic;
         csv = toCsv(SUMMARY_HEADER, summaryRows(rows));
         name = `token-usage-by-${type}`;
       }

@@ -23,8 +23,62 @@ import {
   getProgress,
   type QuizQuestion,
 } from "@/lib/wenyan-progress";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+import { BADGE_COPY, WENYAN_COPY } from "../wenyan-copy";
 
 const QUESTION_COUNT = 10;
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    heading: "常用字大挑戰",
+    introBefore: "每題會給你一句文言文，當中有一個 ",
+    introYellow: "黃色",
+    introMiddle: " 的常用詞。 在 ",
+    introSeconds: "15 秒",
+    introAfter: (count: number) =>
+      ` 內選出它的正確意思， 答得越快分數越高！題目全部選自學習模式的四篇文章，共 ${count} 題，滿分 100 分。`,
+    chipTimed: "限時作答",
+    chipFast: "快答有獎勵",
+    chipStreak: "連勝加倍爽",
+    promptBefore: "句中「",
+    promptAfter: (pinyin: string) => `」（${pinyin}）是甚麼意思？`,
+    correct: (gain: number) => `答對了！+${gain} 分 🎉`,
+    timedOut: "時間到了！下次快一點 ⏰",
+    wrong: "答錯了，沒關係，記住它吧！",
+    meaningBefore: "　「",
+    meaningMiddle: "」的意思是「",
+    meaningAfter: "」。",
+    msgPerfect: "滿分！你真是文言文大師！👑",
+    msg80: "太厲害了，繼續保持！🏅",
+    msg60: "不錯啊，再接再厲！⭐",
+    msgLow: "別灰心，多玩幾次就會進步！🌱",
+  },
+  en: {
+    heading: "Common Word Challenge",
+    introBefore: "Each question gives you a line of Classical Chinese with one common word in ",
+    introYellow: "yellow",
+    introMiddle: ". Pick its correct meaning within ",
+    introSeconds: "15 seconds",
+    introAfter: (count: number) =>
+      `. The faster you answer, the more points you get! All questions come from the four texts in Learn mode. There are ${count} questions, worth 100 points in total.`,
+    chipTimed: "Timed",
+    chipFast: "Bonus for speed",
+    chipStreak: "Build a streak",
+    promptBefore: "What does \u201c",
+    promptAfter: (pinyin: string) => `\u201d (${pinyin}) mean in this line?`,
+    correct: (gain: number) => `Correct! +${gain} ${gain === 1 ? "point" : "points"} 🎉`,
+    timedOut: "Time's up! Be a bit quicker next time ⏰",
+    wrong: "Not quite. That's OK, just remember it!",
+    meaningBefore: " \u201c",
+    meaningMiddle: "\u201d means \u201c",
+    meaningAfter: "\u201d.",
+    msgPerfect: "Full marks! You're a Classical Chinese master! 👑",
+    msg80: "Amazing, keep it up! 🏅",
+    msg60: "Nice work, keep going! ⭐",
+    msgLow: "Don't give up. Play a few more times and you'll improve! 🌱",
+  },
+});
 const TIME_PER_Q_MS = 15000;
 const MAX_PER_Q = 10; // total max = 100
 
@@ -37,6 +91,7 @@ function pointsFor(remainingMs: number) {
 }
 
 export default function WenyanChallengePage() {
+  const shared = useCopy(WENYAN_COPY);
   const [phase, setPhase] = useState<Phase>("intro");
   const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
   const [current, setCurrent] = useState(0);
@@ -145,11 +200,11 @@ export default function WenyanChallengePage() {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ChevronLeft className="size-4" />
-          返回遊戲首頁
+          {shared.backToGame}
         </Link>
         <div className="flex items-center gap-2">
           <Swords className="size-4 text-[#f59e0b]" />
-          <span className="text-sm font-semibold text-[#080808]">挑戰模式 - 常用詞翻譯</span>
+          <span className="text-sm font-semibold text-[#080808]">{shared.challengeTitle(shared.modeTranslate)}</span>
         </div>
         <div className="w-[112px]" />
       </div>
@@ -197,6 +252,8 @@ export default function WenyanChallengePage() {
 /* ----------------------------------------------------------------- Intro */
 
 function Intro({ bestScore, onStart }: { bestScore: number; onStart: () => void }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   return (
     <div className="space-y-6 text-center wyt-fade-in-up">
       <div className="mx-auto flex size-16 items-center justify-center rounded-[18px] bg-[#f59e0b] text-white shadow-[6px_6px_0px_#1a1330] wyt-pop-in">
@@ -204,30 +261,30 @@ function Intro({ bestScore, onStart }: { bestScore: number; onStart: () => void 
       </div>
       <div className="space-y-2">
         <h1 className="font-serif text-[34px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-          常用字大挑戰
+          {copy.heading}
         </h1>
         <p className="mx-auto max-w-md text-sm leading-7 text-[#6b6385]">
-          每題會給你一句文言文，當中有一個 <span className="font-semibold text-[#f59e0b]">黃色</span> 的常用詞。
-          在 <span className="font-semibold text-[#f59e0b]">15 秒</span> 內選出它的正確意思，
-          答得越快分數越高！題目全部選自學習模式的四篇文章，共 {QUESTION_COUNT} 題，滿分 100 分。
+          {copy.introBefore}<span className="font-semibold text-[#f59e0b]">{copy.introYellow}</span>
+          {copy.introMiddle}<span className="font-semibold text-[#f59e0b]">{copy.introSeconds}</span>
+          {copy.introAfter(QUESTION_COUNT)}
         </p>
       </div>
 
       <div className="mx-auto flex max-w-sm flex-wrap items-center justify-center gap-2 text-xs text-[#6b6385]">
         <span className="inline-flex items-center gap-1 rounded-full border border-[#f6d9a8] bg-[#fffbeb] px-3 py-1.5 text-[#b45309]">
-          <TimerIcon className="size-3.5" /> 限時作答
+          <TimerIcon className="size-3.5" /> {copy.chipTimed}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-[#f6d9a8] bg-[#fffbeb] px-3 py-1.5 text-[#b45309]">
-          <Zap className="size-3.5" /> 快答有獎勵
+          <Zap className="size-3.5" /> {copy.chipFast}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-[#f6d9a8] bg-[#fffbeb] px-3 py-1.5 text-[#b45309]">
-          <Flame className="size-3.5" /> 連勝加倍爽
+          <Flame className="size-3.5" /> {copy.chipStreak}
         </span>
       </div>
 
       <div className="mx-auto flex max-w-xs items-center justify-center gap-2 rounded-[14px] border border-[#f6d9a8] bg-[#fffbeb] px-4 py-3 text-sm text-[#b45309]">
         <Trophy className="size-4" />
-        目前最高分：<span className="font-semibold">{bestScore}</span>
+        {shared.bestScoreLabel}<span className="font-semibold">{bestScore}</span>
       </div>
 
       <Button
@@ -235,7 +292,7 @@ function Intro({ bestScore, onStart }: { bestScore: number; onStart: () => void 
         className="gap-2 rounded-full bg-[#f59e0b] px-8 py-6 text-base text-white shadow-[0_6px_18px_rgba(245,158,11,0.32)] transition hover:-translate-y-0.5 hover:bg-[#d97706]"
       >
         <Sparkles className="size-5" />
-        開始挑戰
+        {shared.startChallenge}
       </Button>
     </div>
   );
@@ -321,6 +378,8 @@ function Playing({
   onPick: (i: number) => void;
   onNext: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   const isCorrect = answered && picked === q.answerIndex;
   const timedOut = answered && picked === null;
   const progressPct = Math.round(((index + (answered ? 1 : 0)) / total) * 100);
@@ -332,20 +391,20 @@ function Playing({
         <div className="flex items-center gap-3">
           <TimerRing remainingMs={remainingMs} />
           <span className="text-sm font-medium text-[#6b6385]">
-            第 {index + 1} / {total} 題
+            {shared.questionOf(index + 1, total)}
           </span>
         </div>
         <div className="flex items-center gap-3 text-sm">
           {streak >= 2 && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#fff1e6] px-2.5 py-1 font-semibold text-[#ea580c]">
               <Flame className="size-3.5 wyt-flame" />
-              連對 {streak}
+              {shared.streak(streak)}
             </span>
           )}
           <div className="relative">
             <span className="inline-flex items-center gap-1 rounded-full bg-[#fffbeb] px-2.5 py-1 font-semibold text-[#b45309]">
               <Trophy className="size-3.5" />
-              {score} 分
+              {shared.points(score)}
             </span>
             {gain > 0 && (
               <span
@@ -370,15 +429,15 @@ function Playing({
       {/* Sentence fragment */}
       <div className="wyt-pop-in rounded-[18px] border border-[#f6d9a8] bg-white p-6 shadow-[0_10px_28px_rgba(245,158,11,0.10)] md:p-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[1px] text-[#c79a4f]">
-          文言文片段
+          {shared.passageFragment}
         </p>
         <p className="font-serif text-[24px] leading-[1.9] tracking-[0.03em] text-[#1a1330] md:text-[28px]">
           {highlightChar(q.sentence, q.char.char)}
         </p>
         <p className="mt-4 text-sm text-[#6b6385]">
-          句中「
+          {copy.promptBefore}
           <span className="font-serif font-semibold text-[#b45309]">{q.char.char}</span>
-          」（{q.char.pinyin}）是甚麼意思？
+          {copy.promptAfter(q.char.pinyin)}
         </p>
       </div>
 
@@ -440,19 +499,19 @@ function Playing({
             ].join(" ")}
           >
             {isCorrect
-              ? `答對了！+${gain} 分 🎉`
+              ? copy.correct(gain)
               : timedOut
-                ? "時間到了！下次快一點 ⏰"
-                : "答錯了，沒關係，記住它吧！"}
-            　「<span className="font-serif font-semibold">{q.char.char}</span>」的意思是「
-            <span className="font-semibold">{q.char.meaning}</span>」。
+                ? copy.timedOut
+                : copy.wrong}
+            {copy.meaningBefore}<span className="font-serif font-semibold">{q.char.char}</span>{copy.meaningMiddle}
+            <span className="font-semibold">{q.char.meaning}</span>{copy.meaningAfter}
           </div>
           <div className="flex justify-end">
             <Button
               onClick={onNext}
               className="gap-2 rounded-full bg-[#f59e0b] text-white shadow-[0_4px_14px_rgba(245,158,11,0.3)] transition hover:-translate-y-0.5 hover:bg-[#d97706]"
             >
-              {index + 1 < total ? "下一題" : "看成績"}
+              {index + 1 < total ? shared.nextQuestion : shared.seeResults}
               <ArrowRight className="size-4" />
             </Button>
           </div>
@@ -540,15 +599,18 @@ function Result({
   newBadges: string[];
   onReplay: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
+  const badgeCopy = useCopy(BADGE_COPY);
   const displayScore = useCountUp(score);
   const celebrate = score >= 60;
 
   const message = useMemo(() => {
-    if (score >= 100) return "滿分！你真是文言文大師！👑";
-    if (score >= 80) return "太厲害了，繼續保持！🏅";
-    if (score >= 60) return "不錯啊，再接再厲！⭐";
-    return "別灰心，多玩幾次就會進步！🌱";
-  }, [score]);
+    if (score >= 100) return copy.msgPerfect;
+    if (score >= 80) return copy.msg80;
+    if (score >= 60) return copy.msg60;
+    return copy.msgLow;
+  }, [score, copy]);
 
   return (
     <div className="relative space-y-6 text-center">
@@ -559,7 +621,7 @@ function Result({
       </div>
 
       <div className="space-y-1">
-        <p className="text-sm text-[#6b6385]">本場得分</p>
+        <p className="text-sm text-[#6b6385]">{shared.roundScore}</p>
         <p className="font-serif text-[56px] font-semibold leading-none text-[#1a1330]">
           {displayScore}
         </p>
@@ -567,14 +629,14 @@ function Result({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <ResultStat label="答對題數" value={`${correctCount}/${total}`} />
-        <ResultStat label="最長連對" value={`${maxStreak}`} />
-        <ResultStat label="歷來最高" value={`${bestScore}`} />
+        <ResultStat label={shared.correctAnswers} value={`${correctCount}/${total}`} />
+        <ResultStat label={shared.longestStreak} value={`${maxStreak}`} />
+        <ResultStat label={shared.allTimeBest} value={`${bestScore}`} />
       </div>
 
       {newBadges.length > 0 && (
         <div className="wyt-pop-in rounded-[16px] border border-[#f6d9a8] bg-[#fffbeb] p-5">
-          <p className="text-sm font-semibold text-[#b45309]">🎉 解鎖新獎章！</p>
+          <p className="text-sm font-semibold text-[#b45309]">{shared.newBadges}</p>
           <div className="mt-3 flex flex-wrap justify-center gap-3">
             {newBadges.map((id, i) => {
               const b = getBadge(id);
@@ -586,7 +648,7 @@ function Result({
                   className="wyt-pop-in flex items-center gap-2 rounded-full border border-[#f6d9a8] bg-white px-3 py-1.5 text-sm font-medium text-[#1a1330]"
                 >
                   <span className="text-lg">{b.emoji}</span>
-                  {b.label}
+                  {badgeCopy[b.id]?.label ?? b.label}
                 </div>
               );
             })}
@@ -600,7 +662,7 @@ function Result({
           className="gap-2 rounded-full bg-[#f59e0b] px-6 text-white shadow-[0_4px_14px_rgba(245,158,11,0.3)] transition hover:-translate-y-0.5 hover:bg-[#d97706]"
         >
           <RotateCcw className="size-4" />
-          再玩一次
+          {shared.playAgain}
         </Button>
         <Link href="/chinese/wenyan">
           <Button
@@ -608,7 +670,7 @@ function Result({
             className="gap-2 rounded-full border-[#e0dbf0] bg-white text-[#5b4f7a] transition hover:border-[#c4b8ec] hover:bg-[#f7f4ff]"
           >
             <ChevronLeft className="size-4" />
-            回到首頁
+            {shared.backHome}
           </Button>
         </Link>
       </div>

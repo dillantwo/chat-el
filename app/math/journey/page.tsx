@@ -6,6 +6,100 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { basePath, cn } from "@/lib/utils";
 import { useVoiceInput } from "@/lib/use-voice-input";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+/**
+ * Interface wording only. The levels below (titles, prompts, segment labels,
+ * expected descriptions, series names) are lesson content marked by the AI in
+ * Chinese, so they stay as they are.
+ */
+const COPY = defineCopy({
+  "zh-Hant": {
+    pageTitle: "行程圖",
+    pageIntro: "選擇關卡，觀察距離和時間的關係，再逐段描述行程。",
+    levelNumber: (n: number) => `第 ${n} 關`,
+    chooseLevel: "關卡選擇",
+    answered: (done: number, total: number) => `${done} / ${total} 已填寫`,
+    describeSegment: "描述這一段的移動狀態。",
+    redo: "重做",
+    answerPlaceholder: "例如：這一段正在遠離原點，距離按固定速度增加......",
+    listening: "聆聽中…",
+    stopVoice: "停止語音輸入",
+    voice: "語音輸入",
+    aiCheck: "AI 檢查",
+    aiCheckHint: "完成全部段落後，按 AI 檢查查看對照與回饋。",
+    previous: "上一段",
+    next: "下一段",
+    backToEdit: "返回修改",
+    reviewTitle: "檢視與回饋",
+    reviewIntro: "比較你的描述與正確運動情況。",
+    reviewOffline: "暫時未能連接 AI 檢查，請稍後再試。",
+    segmentFeedbackOffline: "暫時未能取得這一段的回饋。",
+    yourAnswer: "你的答案",
+    notAnswered: "未填寫",
+    feedback: "回饋",
+    feedbackMissing: "暫時未能取得回饋。",
+    correctDescription: "正確描述",
+    watchMotion: "觀看運動",
+    watchMotionIntro: "實線代表正確圖線，虛線代表你描述出的圖線。",
+    correctLegend: (label?: string) => `${label ?? "正確"}（正確）`,
+    yoursLegend: (label?: string) => `${label ?? "你的"}（你的）`,
+    comparisonLabel: "原來線段和學生描述生成的線段對照動畫",
+    timeAxis: "時間（秒）",
+    distanceAxis: "距離（公尺）",
+    pause: "暫停",
+    play: "播放",
+    replay: "重新播放",
+    animationTime: "動畫時間",
+    restart: "重新開始",
+    feedbackIdle: "寫好描述後，按 AI 判斷查看回饋。",
+    feedbackChecking: "AI 正在判斷...",
+    score: (n: number) => `（${n} 分）`,
+  },
+  en: {
+    pageTitle: "Journey Graphs",
+    pageIntro: "Choose a level, look at how distance and time are related, then describe the journey part by part.",
+    levelNumber: (n: number) => `Level ${n}`,
+    chooseLevel: "Choose a level",
+    answered: (done: number, total: number) => `${done} / ${total} answered`,
+    describeSegment: "Describe how it moves in this part.",
+    redo: "Redo",
+    answerPlaceholder: "e.g. In this part it is moving away from the start, and the distance goes up at a steady speed...",
+    listening: "Listening…",
+    stopVoice: "Stop voice input",
+    voice: "Voice input",
+    aiCheck: "AI check",
+    aiCheckHint: "When you have finished every part, press AI check to compare and get feedback.",
+    previous: "Previous part",
+    next: "Next part",
+    backToEdit: "Back to edit",
+    reviewTitle: "Review and feedback",
+    reviewIntro: "Compare your description with the correct motion.",
+    reviewOffline: "Could not reach the AI check right now. Please try again later.",
+    segmentFeedbackOffline: "Could not get feedback for this part right now.",
+    yourAnswer: "Your answer",
+    notAnswered: "Not answered",
+    feedback: "Feedback",
+    feedbackMissing: "Could not get feedback right now.",
+    correctDescription: "Correct description",
+    watchMotion: "Watch the motion",
+    watchMotionIntro: "The solid line is the correct graph. The dashed line is the graph from your description.",
+    correctLegend: (label?: string) => `${label ?? "Correct"} (correct)`,
+    yoursLegend: (label?: string) => `${label ?? "Yours"} (yours)`,
+    comparisonLabel: "Animation comparing the original lines with the lines from your description",
+    timeAxis: "Time (s)",
+    distanceAxis: "Distance (m)",
+    pause: "Pause",
+    play: "Play",
+    replay: "Replay",
+    animationTime: "Animation time",
+    restart: "Start again",
+    feedbackIdle: "When you have written your description, press AI check to get feedback.",
+    feedbackChecking: "The AI is checking...",
+    score: (n: number) => ` (${n} marks)`,
+  },
+});
 
 type Point = { x: number; y: number };
 type Series = { id: string; label: string; color: string; points: Point[] };
@@ -55,6 +149,8 @@ type ReviewResult = {
   overallScore: number;
   summary: string;
   segments: SegmentReview[];
+  /** Set when the review request failed; the screen then shows the offline wording in the current locale. */
+  offline?: boolean;
 };
 
 const LEVELS: Level[] = [
@@ -416,6 +512,8 @@ function extractSpeedDistance(text: string, segmentDuration: number) {
 }
 
 export default function JourneyGraphPage() {
+  const copy = useCopy(COPY);
+  const { locale } = useLocale();
   const [level, setLevel] = useState<Level | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -436,6 +534,7 @@ export default function JourneyGraphPage() {
     rebase: rebaseDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     // Chinese doesn't separate words with spaces.
     separator: "",
     getBaseText: () => (currentAnswerKey ? answers[currentAnswerKey] ?? "" : ""),
@@ -514,12 +613,13 @@ export default function JourneyGraphPage() {
     } catch {
       setReview({
         overallScore: 0,
-        summary: "暫時未能連接 AI 檢查，請稍後再試。",
+        summary: "",
+        offline: true,
         segments: level.segments.map((segment) => ({
           segmentId: segment.id,
           isCorrect: false,
           score: 0,
-          feedback: "暫時未能取得這一段的回饋。",
+          feedback: "",
           correctDescription: segment.expectedDescription,
         })),
       });
@@ -533,8 +633,8 @@ export default function JourneyGraphPage() {
       <main className="min-h-full overflow-y-auto bg-[#f4f8fc] bg-[radial-gradient(#dce9f4_1px,transparent_1px)] [background-size:22px_22px] px-4 py-7 text-[#102033]">
         <div className="mx-auto max-w-5xl">
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold tracking-normal text-[#102033]">行程圖</h1>
-            <p className="mt-2 text-sm text-[#58708a]">選擇關卡，觀察距離和時間的關係，再逐段描述行程。</p>
+            <h1 className="text-2xl font-bold tracking-normal text-[#102033]">{copy.pageTitle}</h1>
+            <p className="mt-2 text-sm text-[#58708a]">{copy.pageIntro}</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {LEVELS.map((item) => (
@@ -545,7 +645,7 @@ export default function JourneyGraphPage() {
                 className="group rounded-[8px] bg-white p-4 text-left shadow-[0_10px_30px_rgba(27,60,92,0.08)] ring-1 ring-[#e2edf7] transition hover:-translate-y-0.5 hover:ring-[#0796bd]"
               >
                 <LevelPreview level={item} />
-                <span className="mt-3 inline-flex rounded-[4px] bg-[#e7f7fb] px-2 py-1 text-xs font-semibold text-[#007a9b]">第 {item.number} 關</span>
+                <span className="mt-3 inline-flex rounded-[4px] bg-[#e7f7fb] px-2 py-1 text-xs font-semibold text-[#007a9b]">{copy.levelNumber(item.number)}</span>
                 <h2 className="mt-2 text-lg font-bold text-[#102033]">{item.title}</h2>
                 <p className="mt-1 text-sm leading-6 text-[#58708a]">{item.subtitle}</p>
               </button>
@@ -570,15 +670,15 @@ export default function JourneyGraphPage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <Button variant="ghost" className="rounded-[6px] text-[#31506c]" onClick={() => { stopListening(); setLevel(null); }}>
             <ArrowLeft className="size-4" />
-            關卡選擇
+            {copy.chooseLevel}
           </Button>
           <div className="rounded-[6px] border border-[#d7e5f1] bg-white px-3 py-1.5 text-sm font-semibold text-[#31506c]">
-            {answeredCount} / {level.segments.length} 已填寫
+            {copy.answered(answeredCount, level.segments.length)}
           </div>
         </div>
 
         <header className="mb-4 text-center">
-          <p className="text-sm font-semibold text-[#0796bd]">第 {level.number} 關</p>
+          <p className="text-sm font-semibold text-[#0796bd]">{copy.levelNumber(level.number)}</p>
           <h1 className="text-2xl font-bold tracking-normal text-[#102033]">{level.title}</h1>
           <p className="mt-2 text-sm text-[#58708a]">{level.prompt}</p>
         </header>
@@ -596,12 +696,12 @@ export default function JourneyGraphPage() {
                 </span>
                 <div>
                   <h2 className="text-base font-bold text-[#102033]">{currentSegment.label}</h2>
-                  <p className="text-sm text-[#58708a]">描述這一段的移動狀態。</p>
+                  <p className="text-sm text-[#58708a]">{copy.describeSegment}</p>
                 </div>
               </div>
               <Button variant="outline" className="rounded-[6px]" onClick={resetLevel}>
                 <RotateCcw className="size-4" />
-                重做
+                {copy.redo}
               </Button>
             </div>
 
@@ -609,12 +709,12 @@ export default function JourneyGraphPage() {
               <Textarea
                 value={currentAnswer}
                 onChange={(event) => updateAnswer(event.target.value)}
-                placeholder="例如：這一段正在遠離原點，距離按固定速度增加......"
+                placeholder={copy.answerPlaceholder}
                 className="min-h-24 resize-y rounded-[8px] border-[#bfd3e6] bg-[#fbfdff] px-4 py-3 pb-12 pr-14 text-base shadow-none placeholder:text-[#94a9be] focus-visible:border-[#0796bd] focus-visible:ring-[#0796bd]/20"
               />
               <div className="absolute bottom-3 right-3 flex items-center gap-2">
                 {isListening && (
-                  <span aria-live="polite" className="text-xs font-medium text-red-500 animate-pulse">聆聽中…</span>
+                  <span aria-live="polite" className="text-xs font-medium text-red-500 animate-pulse">{copy.listening}</span>
                 )}
                 {!isListening && voiceError && (
                   <span role="alert" className="text-xs font-medium text-red-500">{voiceError.message}</span>
@@ -630,8 +730,8 @@ export default function JourneyGraphPage() {
                       ? "border-red-400 text-red-500 hover:border-red-500 hover:text-red-600"
                       : "border-[#bfd3e6] text-[#31506c] hover:border-[#0796bd] hover:text-[#0796bd]"
                   )}
-                  title={isListening ? "停止語音輸入" : "語音輸入"}
-                  aria-label={isListening ? "停止語音輸入" : "語音輸入"}
+                  title={isListening ? copy.stopVoice : copy.voice}
+                  aria-label={isListening ? copy.stopVoice : copy.voice}
                 >
                   {isListening ? <MicOff className="size-3.5" /> : <Mic className="size-3.5" />}
                 </Button>
@@ -645,9 +745,9 @@ export default function JourneyGraphPage() {
                 className="rounded-[6px] bg-[#0796bd] text-white hover:bg-[#067f9f]"
               >
                 {isReviewing ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                AI 檢查
+                {copy.aiCheck}
               </Button>
-              <p className="text-sm text-[#58708a]">完成全部段落後，按 AI 檢查查看對照與回饋。</p>
+              <p className="text-sm text-[#58708a]">{copy.aiCheckHint}</p>
             </div>
           </section>
         )}
@@ -660,7 +760,7 @@ export default function JourneyGraphPage() {
             onClick={() => { stopListening(); setStepIndex((value) => Math.max(value - 1, 0)); }}
           >
             <ChevronLeft className="size-4" />
-            上一段
+            {copy.previous}
           </Button>
           <div className="text-center text-sm font-semibold text-[#31506c]">{stepIndex + 1} / {level.segments.length}</div>
           <Button
@@ -669,7 +769,7 @@ export default function JourneyGraphPage() {
             disabled={stepIndex === level.segments.length - 1}
             onClick={() => { stopListening(); setStepIndex((value) => Math.min(value + 1, level.segments.length - 1)); }}
           >
-            下一段
+            {copy.next}
             <ChevronRight className="size-4" />
           </Button>
         </nav>
@@ -699,6 +799,7 @@ function JourneyReviewScreen({
   onBack: () => void;
   onChooseLevel: () => void;
 }) {
+  const copy = useCopy(COPY);
   const studentLevel = buildStudentLevel(level, answers, review);
   const reviewById = new Map(review.segments.map((item) => [item.segmentId, item]));
 
@@ -708,16 +809,16 @@ function JourneyReviewScreen({
         <div className="mb-4 flex items-center justify-between gap-3">
           <Button variant="ghost" className="rounded-[6px] text-[#31506c]" onClick={onBack}>
             <ArrowLeft className="size-4" />
-            返回修改
+            {copy.backToEdit}
           </Button>
           <Button variant="outline" className="rounded-[6px]" onClick={onChooseLevel}>
-            關卡選擇
+            {copy.chooseLevel}
           </Button>
         </div>
 
         <header className="mb-4 text-center">
-          <h1 className="text-2xl font-bold tracking-normal text-[#102033]">檢視與回饋</h1>
-          <p className="mt-2 text-sm text-[#58708a]">比較你的描述與正確運動情況。</p>
+          <h1 className="text-2xl font-bold tracking-normal text-[#102033]">{copy.reviewTitle}</h1>
+          <p className="mt-2 text-sm text-[#58708a]">{copy.reviewIntro}</p>
         </header>
 
         <section className="rounded-[8px] bg-white p-4 shadow-[0_12px_30px_rgba(27,60,92,0.08)] ring-1 ring-[#e2edf7]">
@@ -726,7 +827,7 @@ function JourneyReviewScreen({
 
         <section className="mt-4 rounded-[8px] border border-[#d7e5f1] bg-[#eef7fb] px-5 py-4 text-center">
           <div className="text-5xl font-black text-[#087f9b]">{Math.round(review.overallScore)}%</div>
-          <p className="mx-auto mt-3 max-w-3xl text-sm leading-7 text-[#31506c]">{review.summary}</p>
+          <p className="mx-auto mt-3 max-w-3xl text-sm leading-7 text-[#31506c]">{review.offline ? copy.reviewOffline : review.summary}</p>
         </section>
 
         <section className="mt-4 space-y-3">
@@ -758,15 +859,15 @@ function JourneyReviewScreen({
 
                 <div className="space-y-3 text-sm leading-7 text-[#31506c]">
                   <div>
-                    <p className="text-xs font-bold text-[#7c91a8]">你的答案</p>
-                    <p className="font-semibold text-[#102033]">{answerFor(answers, level, segment) || "未填寫"}</p>
+                    <p className="text-xs font-bold text-[#7c91a8]">{copy.yourAnswer}</p>
+                    <p className="font-semibold text-[#102033]">{answerFor(answers, level, segment) || copy.notAnswered}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#7c91a8]">回饋</p>
-                    <p>{item?.feedback ?? "暫時未能取得回饋。"}</p>
+                    <p className="text-xs font-bold text-[#7c91a8]">{copy.feedback}</p>
+                    <p>{review.offline ? copy.segmentFeedbackOffline : item?.feedback ?? copy.feedbackMissing}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#7c91a8]">正確描述</p>
+                    <p className="text-xs font-bold text-[#7c91a8]">{copy.correctDescription}</p>
                     <p>{item?.correctDescription ?? segment.expectedDescription}</p>
                   </div>
                 </div>
@@ -780,6 +881,7 @@ function JourneyReviewScreen({
 }
 
 function ReviewComparisonChart({ level, studentLevel }: { level: Level; studentLevel: Level }) {
+  const copy = useCopy(COPY);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -830,14 +932,14 @@ function ReviewComparisonChart({ level, studentLevel }: { level: Level; studentL
   return (
     <div className="mx-auto max-w-[760px]">
       <div className="mb-3 text-center">
-        <h2 className="text-xl font-bold text-[#102033]">觀看運動</h2>
-        <p className="mt-1 text-sm text-[#58708a]">實線代表正確圖線，虛線代表你描述出的圖線。</p>
+        <h2 className="text-xl font-bold text-[#102033]">{copy.watchMotion}</h2>
+        <p className="mt-1 text-sm text-[#58708a]">{copy.watchMotionIntro}</p>
       </div>
       <div className="mb-3 flex flex-wrap items-center justify-center gap-4 text-sm font-semibold text-[#31506c]">
-        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-8 bg-[#0796bd]" />{level.series[0]?.label ?? "正確"}（正確）</span>
-        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-8 border-t-2 border-dashed border-[#0796bd]" />{studentLevel.series[0]?.label ?? "你的"}（你的）</span>
+        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-8 bg-[#0796bd]" />{copy.correctLegend(level.series[0]?.label)}</span>
+        <span className="inline-flex items-center gap-2"><span className="h-0.5 w-8 border-t-2 border-dashed border-[#0796bd]" />{copy.yoursLegend(studentLevel.series[0]?.label)}</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-[300px] w-full rounded-[8px] bg-[#f8fbff]" role="img" aria-label="原來線段和學生描述生成的線段對照動畫">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[300px] w-full rounded-[8px] bg-[#f8fbff]" role="img" aria-label={copy.comparisonLabel}>
         <rect x="0" y="0" width={width} height={height} rx="8" fill="#f8fbff" />
         {Array.from({ length: 6 }).map((_, index) => {
           const x = pad + (innerW / 5) * index;
@@ -858,8 +960,8 @@ function ReviewComparisonChart({ level, studentLevel }: { level: Level; studentL
               <text x={pad - 10} y={12 + innerH - (innerH / 5) * tick + 4} textAnchor="end">{formatNumber((yMax / 5) * tick)}</text>
             </g>
           ))}
-          <text x={pad + innerW / 2} y={height - 2} textAnchor="middle">時間（秒）</text>
-          <text transform={`translate(12 ${12 + innerH / 2}) rotate(-90)`} textAnchor="middle">距離（公尺）</text>
+          <text x={pad + innerW / 2} y={height - 2} textAnchor="middle">{copy.timeAxis}</text>
+          <text transform={`translate(12 ${12 + innerH / 2}) rotate(-90)`} textAnchor="middle">{copy.distanceAxis}</text>
         </g>
 
         {level.series.map((series) => (
@@ -898,15 +1000,15 @@ function ReviewComparisonChart({ level, studentLevel }: { level: Level; studentL
       </svg>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <JourneyReadout title={`${level.series[0]?.label ?? "正確"}（正確）`} samples={originalSamples} />
-        <JourneyReadout title={`${studentLevel.series[0]?.label ?? "你的"}（你的）`} samples={studentSamples} />
+        <JourneyReadout title={copy.correctLegend(level.series[0]?.label)} samples={originalSamples} />
+        <JourneyReadout title={copy.yoursLegend(studentLevel.series[0]?.label)} samples={studentSamples} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" size="icon" className="rounded-[8px]" onClick={() => setIsPlaying((value) => !value)} aria-label={isPlaying ? "暫停" : "播放"}>
+        <Button type="button" variant="outline" size="icon" className="rounded-[8px]" onClick={() => setIsPlaying((value) => !value)} aria-label={isPlaying ? copy.pause : copy.play}>
           {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
         </Button>
-        <Button type="button" variant="outline" size="icon" className="rounded-[8px]" onClick={replay} aria-label="重新播放">
+        <Button type="button" variant="outline" size="icon" className="rounded-[8px]" onClick={replay} aria-label={copy.replay}>
           <RotateCcw className="size-4" />
         </Button>
         <Button type="button" variant="outline" size="sm" className="rounded-[8px]" onClick={() => setSpeed((value) => (value >= 2 ? 0.5 : value + 0.5))}>
@@ -923,14 +1025,14 @@ function ReviewComparisonChart({ level, studentLevel }: { level: Level; studentL
             setIsPlaying(false);
           }}
           className="h-2 min-w-48 flex-1 accent-[#0796bd]"
-          aria-label="動畫時間"
+          aria-label={copy.animationTime}
         />
         <span className="w-14 text-right text-sm font-bold tabular-nums text-[#31506c]">{formatNumber(clampedTime)} s</span>
       </div>
 
       <Button type="button" variant="outline" className="mt-4 w-full rounded-[8px]" onClick={replay}>
         <ArrowLeft className="size-4" />
-        重新開始
+        {copy.restart}
       </Button>
     </div>
   );
@@ -965,17 +1067,18 @@ function pointAtTime(points: Point[], time: number) {
 }
 
 function FeedbackBox({ feedback }: { feedback?: Feedback }) {
+  const copy = useCopy(COPY);
   if (!feedback || feedback.state === "idle") {
-    return <p className="text-sm text-[#58708a]">寫好描述後，按 AI 判斷查看回饋。</p>;
+    return <p className="text-sm text-[#58708a]">{copy.feedbackIdle}</p>;
   }
   if (feedback.state === "checking") {
-    return <p className="inline-flex items-center gap-2 text-sm font-semibold text-[#58708a]"><Loader2 className="size-4 animate-spin" />AI 正在判斷...</p>;
+    return <p className="inline-flex items-center gap-2 text-sm font-semibold text-[#58708a]"><Loader2 className="size-4 animate-spin" />{copy.feedbackChecking}</p>;
   }
   const correct = feedback.state === "correct";
   return (
     <div className={cn("flex min-w-0 flex-1 items-start gap-2 rounded-[6px] border px-3 py-2 text-sm", correct ? "border-[#b7e4c7] bg-[#f0fff4] text-[#1b6b3a]" : "border-[#ffd1dc] bg-[#fff5f7] text-[#9f1239]")}>
       {correct ? <Check className="mt-0.5 size-4 shrink-0" /> : <X className="mt-0.5 size-4 shrink-0" />}
-      <span>{feedback.message}{typeof feedback.score === "number" ? `（${Math.round(feedback.score)} 分）` : ""}</span>
+      <span>{feedback.message}{typeof feedback.score === "number" ? copy.score(Math.round(feedback.score)) : ""}</span>
     </div>
   );
 }
@@ -998,6 +1101,7 @@ function JourneyChart({ level, activeSegment }: { level: Level; activeSegment: S
 }
 
 function MiniChart({ level, activeSegment, className, showAxes = false }: { level: Level; activeSegment?: Segment | null; className?: string; showAxes?: boolean }) {
+  const copy = useCopy(COPY);
   const width = 620;
   const height = 260;
   const pad = showAxes ? 44 : 20;
@@ -1034,8 +1138,8 @@ function MiniChart({ level, activeSegment, className, showAxes = false }: { leve
               <text x={pad - 10} y={12 + innerH - (innerH / 5) * tick + 4} textAnchor="end">{Math.round((level.yMax / 5) * tick)}</text>
             </g>
           ))}
-          <text x={pad + innerW / 2} y={height - 2} textAnchor="middle">時間（秒）</text>
-          <text transform={`translate(12 ${12 + innerH / 2}) rotate(-90)`} textAnchor="middle">距離（公尺）</text>
+          <text x={pad + innerW / 2} y={height - 2} textAnchor="middle">{copy.timeAxis}</text>
+          <text transform={`translate(12 ${12 + innerH / 2}) rotate(-90)`} textAnchor="middle">{copy.distanceAxis}</text>
         </g>
       )}
 

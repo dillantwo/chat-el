@@ -10,6 +10,7 @@ import { getSession } from "@/lib/session";
 import { requireTopicApi } from "@/lib/subject-access";
 import { recordTokenUsage } from "@/lib/token-usage";
 import { retrieveContext, buildAugmentedPrompt, latestUserText } from "@/lib/rag";
+import { withReplyLanguage } from "@/lib/i18n/ai";
 
 // Each Science topic shares the same Azure-backed chat pipeline and only
 // differs by its system prompt. Add a new topic by extending this map and
@@ -118,7 +119,7 @@ export async function POST(
 
     const result = streamText({
       model: azure(deploymentName),
-      system: augmentedPrompt,
+      system: await withReplyLanguage(augmentedPrompt, "chat"),
       messages: toModelMessages(inputMessages),
     });
 

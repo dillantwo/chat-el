@@ -5,6 +5,17 @@ import { after } from "next/server";
 import { getSession } from "@/lib/session";
 import { getSubjectAccess, requireTopicApi } from "@/lib/subject-access";
 import { recordTokenUsage } from "@/lib/token-usage";
+import { getLocale } from "@/lib/i18n/server";
+
+/**
+ * Appended to the system prompt when the interface is in English. Rule 5 asks
+ * for Traditional Chinese; this has the last word so the diagram, its title and
+ * its fullscreen button come out in English instead.
+ */
+const HTML_ENGLISH_OVERRIDE = `
+
+## Language: English (OVERRIDES rule 5 and every other language rule above)
+The teacher uses the app in English. Write the title and every piece of text inside the HTML (headings, labels, legends, units, tooltips, buttons, including the fullscreen button) in clear, simple English. Every other rule above still applies.`;
 
 /**
  * Dedicated Azure provider for the math AI tool generator.
@@ -233,6 +244,8 @@ export async function POST(req: Request) {
       });
     }
 
+    const locale = await getLocale();
+
     const result = streamObject({
       model: htmlGenProvider(HTML_GEN_DEPLOYMENT),
       system: `你是一位資深前端互動教具工程師，專門為老師製作可直接在瀏覽器中運行的單檔 HTML 數學圖解。
@@ -290,7 +303,7 @@ C. 標題要跟老師要的東西一致：做靜態圖就不要叫「互動圖�
 
 請同時提供：
 - title：圖解名稱
-- html：完整 HTML 字串`,
+- html：完整 HTML 字串${locale === "en" ? HTML_ENGLISH_OVERRIDE : ""}`,
       schema: z.object({
         title: z.string().min(1),
         html: z.string().min(1),

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
 
 /**
  * 整數的部份 (Integer factor arrangements).
@@ -93,25 +95,60 @@ const STYLES = `
 .fa65-root.embedded .container{ box-shadow:none; border-radius:0; padding:1rem; }
 `;
 
-const BODY_HTML = `
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "整數的部分",
+    showAll: "顯示全部",
+    showOneByOne: "逐一顯示",
+    enterWhole: "輸入一個整數",
+    rowOnlyTitle: "只顯示橫排：列數比排數多的排列（例如 1×12、2×6）",
+    rowOnly: "⬌ 橫排",
+    colOnlyTitle: "只顯示豎排：排數比列數多的排列（例如 12×1、6×2）",
+    colOnly: "⬍ 豎排",
+    swap: "交換數字",
+    nextPair: "下一個因數組合",
+    rowCaption: (n: number) => `只顯示橫排（共 ${n} 種）`,
+    colCaption: (n: number) => `只顯示豎排（共 ${n} 種）`,
+    wrong: "錯誤",
+  },
+  en: {
+    title: "Fractional Parts of a Whole Number",
+    showAll: "Show all",
+    showOneByOne: "One at a time",
+    enterWhole: "Enter a whole number",
+    rowOnlyTitle: "Wide only: more columns than rows (e.g. 1×12, 2×6)",
+    rowOnly: "⬌ Wide",
+    colOnlyTitle: "Tall only: more rows than columns (e.g. 12×1, 6×2)",
+    colOnly: "⬍ Tall",
+    swap: "Swap numbers",
+    nextPair: "Next factor pair",
+    rowCaption: (n: number) => `Wide only (${n} ${n === 1 ? "way" : "ways"})`,
+    colCaption: (n: number) => `Tall only (${n} ${n === 1 ? "way" : "ways"})`,
+    wrong: "Wrong",
+  },
+});
+
+type Copy = (typeof COPY)["zh-Hant"];
+
+const buildBody = (copy: Copy) => `
 <div class="container">
   <div class="header">
     <div class="header-left">
-      <div class="title-badge">整數的部分</div>
+      <div class="title-badge">${copy.title}</div>
     </div>
     <div class="header-right">
-      <button id="toggleModeBtn" class="lang-btn btn-active-mode" onclick="window.__FA65.toggleMode()">顯示全部</button>
+      <button id="toggleModeBtn" class="lang-btn btn-active-mode" onclick="window.__FA65.toggleMode()">${copy.showAll}</button>
     </div>
   </div>
 
   <div class="input-section">
     <div style="display: flex; flex-direction: column; align-items: center;">
-      <div class="hint" style="margin-bottom: 10px;">輸入一個整數</div>
+      <div class="hint" style="margin-bottom: 10px;">${copy.enterWhole}</div>
       <div style="display: flex; align-items: center; gap: 12px;">
         <input type="number" id="mainNum" class="math-box" min="1" max="999" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
         <div id="layoutFilterGroup" style="display: none; flex-direction: column; gap: 8px;">
-          <button id="rowOnlyBtn" class="layout-btn" onclick="window.__FA65.setArrangeFilter('row')" title="只顯示橫排：列數比排數多的排列（例如 1×12、2×6）">⬌ 橫排</button>
-          <button id="colOnlyBtn" class="layout-btn" onclick="window.__FA65.setArrangeFilter('col')" title="只顯示豎排：排數比列數多的排列（例如 12×1、6×2）">⬍ 豎排</button>
+          <button id="rowOnlyBtn" class="layout-btn" onclick="window.__FA65.setArrangeFilter('row')" title="${copy.rowOnlyTitle}">${copy.rowOnly}</button>
+          <button id="colOnlyBtn" class="layout-btn" onclick="window.__FA65.setArrangeFilter('col')" title="${copy.colOnlyTitle}">${copy.colOnly}</button>
         </div>
       </div>
     </div>
@@ -129,8 +166,8 @@ const BODY_HTML = `
               onkeypress="return event.charCode >= 48 && event.charCode <= 57"
               onchange="window.__FA65.handleArrange(this.parentElement)"
               onclick="event.stopPropagation()">
-          <button class="swap-btn" onclick="window.__FA65.swapValues(event, this)" title="交換數字">⇄</button>
-          <button class="next-btn" onclick="window.__FA65.nextFactorPair(event)" title="下一個因數組合">⏭</button>
+          <button class="swap-btn" onclick="window.__FA65.swapValues(event, this)" title="${copy.swap}">⇄</button>
+          <button class="next-btn" onclick="window.__FA65.nextFactorPair(event)" title="${copy.nextPair}">⏭</button>
           <span class="status-indicator"></span>
         </div>
       </div>
@@ -158,6 +195,7 @@ declare global {
 }
 
 export default function FractionIntegerPage() {
+  const copy = useCopy(COPY);
   const rootRef = useRef<HTMLDivElement>(null);
   const [embedded, setEmbedded] = useState(false);
 
@@ -236,12 +274,12 @@ export default function FractionIntegerPage() {
       const btn = $e("toggleModeBtn");
       if (!btn) return;
       if (currentMode === 1) {
-        btn.innerText = "顯示全部";
+        btn.innerText = copy.showAll;
         btn.style.borderColor = "";
         btn.style.color = "";
         btn.style.boxShadow = "";
       } else {
-        btn.innerText = "逐一顯示";
+        btn.innerText = copy.showOneByOne;
         btn.style.borderColor = "#e67e22";
         btn.style.color = "#e67e22";
         btn.style.boxShadow = "0 3px 0 #e67e22";
@@ -324,8 +362,8 @@ export default function FractionIntegerPage() {
         caption.style.marginBottom = "5px";
         caption.innerText =
           arrangeFilter === "row"
-            ? `只顯示橫排（共 ${pairs.length} 種）`
-            : `只顯示豎排（共 ${pairs.length} 種）`;
+            ? copy.rowCaption(pairs.length)
+            : copy.colCaption(pairs.length);
         circleContainer.appendChild(caption);
       }
 
@@ -472,7 +510,7 @@ export default function FractionIntegerPage() {
       } else {
         row.classList.remove("active", "viewing");
         row.classList.add("error");
-        indicator.innerHTML = '<span class="status-error">錯誤</span>';
+        indicator.innerHTML = `<span class="status-error">${copy.wrong}</span>`;
         shakeRow(row);
         resetToScatter(targetTotal);
       }
@@ -496,7 +534,7 @@ export default function FractionIntegerPage() {
 
     de.style.setProperty("--circle-size", "45px");
     de.style.setProperty("--gap-size", "10px");
-    root.innerHTML = BODY_HTML;
+    root.innerHTML = buildBody(copy);
 
     const mainNumInput = $i("mainNum")!;
     const onInput = () => updateView();
@@ -525,7 +563,10 @@ export default function FractionIntegerPage() {
       de.style.removeProperty("--circle-size");
       de.style.removeProperty("--gap-size");
     };
-  }, []);
+    // `copy` is a stable per-locale object, so this re-runs only on a language
+    // switch: the old instance is torn down and the tool re-initialised in the
+    // new language (the in-progress exercise restarts from the URL params).
+  }, [copy]);
 
   return (
     <>

@@ -1,7 +1,10 @@
 import { azure } from "@ai-sdk/azure";
 import { generateObject } from "ai";
+import { after } from "next/server";
 import { z } from "zod";
+import { getSession } from "@/lib/session";
 import { requireSubjectApi } from "@/lib/subject-access";
+import { recordTokenUsage } from "@/lib/token-usage";
 
 const schema = z.object({
   annotations: z.array(
@@ -28,8 +31,11 @@ export async function POST(req: Request) {
   const chars = Array.from(text.trim());
   const numberedText = chars.map((ch, i) => `${ch}[${i}]`).join("");
 
+  const session = await getSession().catch(() => null);
+  const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o";
+
   const result = await generateObject({
-    model: azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o"),
+    model: azure(deploymentName),
     schema,
     prompt: `你是一位文言文虛詞專家。以下文言文中每個字後面的方括號數字是該字的索引編號。請逐一找出每個虛詞的每次出現，並為每次出現單獨標注。
 
@@ -44,6 +50,17 @@ export async function POST(req: Request) {
 
 帶編號原文：
 ${numberedText}`,
+  });
+
+  after(async () => {
+    await recordTokenUsage({
+      session,
+      subject: "chinese",
+      topic: "wenyan-function-words",
+      modelName: deploymentName,
+      endpoint: "/api/classical-chinese",
+      usage: result.usage,
+    });
   });
 
   // Validate positions and group by (word + meaning) for the frontend

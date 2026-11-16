@@ -2,6 +2,43 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "相等分數",
+    syncMode: "同步分子分母",
+    freeMode: "自由調整",
+    swap: "左右互換",
+    randomFraction: "隨機分數",
+    showNumberLine: "顯示數線",
+    animSpeed: (s: string) => `動畫速度: ${s} x`,
+    fillBlanks: "在空格內填上正確的數字",
+    simplify: "約分",
+    expand: "擴分",
+    result: "運算結果",
+    notDivisible: (fn: number, fd: number) => `⚠️ 錯誤：分子不能被 ${fn} 整除，或分母不能被 ${fd} 整除`,
+    mismatchHint: "⚠️ 提示：分子和分母乘以或除以不同的數字，分數值已改變。",
+  },
+  en: {
+    title: "Equivalent Fractions",
+    syncMode: "Same for both",
+    freeMode: "Free adjust",
+    swap: "Swap sides",
+    randomFraction: "Random fraction",
+    showNumberLine: "Show number line",
+    animSpeed: (s: string) => `Animation speed: ${s} x`,
+    fillBlanks: "Fill in the blanks with the correct numbers",
+    simplify: "Reduce",
+    expand: "Expand",
+    result: "Result",
+    notDivisible: (fn: number, fd: number) =>
+      `⚠️ Error: the numerator cannot be divided by ${fn}, or the denominator cannot be divided by ${fd}`,
+    mismatchHint:
+      "⚠️ Hint: the numerator and denominator were multiplied or divided by different numbers, so the value of the fraction has changed.",
+  },
+});
 
 // Mirrors LIMITS in FractionApp-es.html
 const LIMITS = { denStart: 100, expandFactor: 20 } as const;
@@ -186,6 +223,7 @@ const STYLES = `
 
 function FractionESInner() {
   const searchParams = useSearchParams();
+  const copy = useCopy(COPY);
 
   // ----- controlled inputs / mode state -----
   const [nStartStr, setNStartStr] = useState("2");
@@ -231,12 +269,12 @@ function FractionESInner() {
     if (fnVal === 0 || fdVal === 0) {
       canCalculate = false;
     } else if (n1 % fnVal !== 0 || d1 % fdVal !== 0) {
-      errorLines.push(`⚠️ 錯誤：分子不能被 ${fnVal} 整除，或分母不能被 ${fdVal} 整除`);
+      errorLines.push(copy.notDivisible(fnVal, fdVal));
       canCalculate = false;
     }
   }
   if (isNumMismatch) {
-    errorLines.push("⚠️ 提示：分子和分母乘以或除以不同的數字，分數值已改變。");
+    errorLines.push(copy.mismatchHint);
   }
 
   const n2: number | null = canCalculate ? (op === "*" ? n1 * fnVal : n1 / fnVal) : null;
@@ -779,24 +817,24 @@ function FractionESInner() {
               className={`lang-btn${isSyncMode ? " btn-active-mode" : ""}`}
               onClick={toggleSyncMode}
             >
-              {isSyncMode ? "同步分子分母" : "自由調整"}
+              {isSyncMode ? copy.syncMode : copy.freeMode}
             </button>
-            <div className="title-badge">相等分數</div>
+            <div className="title-badge">{copy.title}</div>
           </div>
           <div className="header-right">
             <button type="button" className="lang-btn" onClick={swapFractions}>
-              左右互換
+              {copy.swap}
             </button>
             <button type="button" className="lang-btn" onClick={generateRandomFraction}>
-              隨機分數
+              {copy.randomFraction}
             </button>
             <div className="controls-pill">
               <label className="checkbox-label">
-                <input type="checkbox" checked={showNumberLine} onChange={toggleNumberLine} /> 顯示數線
+                <input type="checkbox" checked={showNumberLine} onChange={toggleNumberLine} /> {copy.showNumberLine}
               </label>
               <div className="divider" />
               <div className="speed-ctrl">
-                <span>動畫速度: {speed.toFixed(1)} x</span>
+                <span>{copy.animSpeed(speed.toFixed(1))}</span>
                 <input
                   type="range"
                   min={0.5}
@@ -812,7 +850,7 @@ function FractionESInner() {
 
         {/* question banner */}
         <div className={`question-banner${showBanner ? " show" : ""}`}>
-          <div className="q-label">在空格內填上正確的數字</div>
+          <div className="q-label">{copy.fillBlanks}</div>
           <div className="q-equation">
             <span className="q-frac">
               <span className="q-num">{n1}</span>
@@ -840,7 +878,7 @@ function FractionESInner() {
             disabled={op === "/"}
             onClick={() => setMode("/")}
           >
-            約分
+            {copy.simplify}
           </button>
           <button
             type="button"
@@ -848,7 +886,7 @@ function FractionESInner() {
             disabled={op === "*"}
             onClick={() => setMode("*")}
           >
-            擴分
+            {copy.expand}
           </button>
         </div>
 
@@ -1022,7 +1060,7 @@ function FractionESInner() {
               className="bar-label"
               style={{ color: "var(--accent)", justifyContent: "space-between", width: "100%" }}
             >
-              <span>運算結果</span>
+              <span>{copy.result}</span>
             </div>
             <div
               style={{

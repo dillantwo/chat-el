@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       : 50;
 
     const directory = await loadUserDirectory();
-    const match = buildUsageMatch(filters, directory);
+    const match = await buildUsageMatch(filters, directory);
 
     const [total, docs] = await Promise.all([
       TokenUsage.countDocuments(match),

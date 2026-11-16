@@ -1,12 +1,26 @@
 import MaterialsBrowser from "@/components/MaterialsBrowser";
+import { defineCopy } from "@/lib/i18n/config";
+import { getCopy } from "@/lib/i18n/server";
 
-export default function MathMaterialsPage() {
+const COPY = defineCopy({
+  "zh-Hant": {
+    backLabel: "數學科",
+    heading: "數學科學習資源",
+  },
+  en: {
+    backLabel: "Mathematics",
+    heading: "Maths Learning Materials",
+  },
+});
+
+export default async function MathMaterialsPage() {
+  const copy = await getCopy(COPY);
   return (
     <MaterialsBrowser
       subject="math"
       backHref="/math"
-      backLabel="數學科"
-      heading="數學科學習資源"
+      backLabel={copy.backLabel}
+      heading={copy.heading}
     />
   );
 }

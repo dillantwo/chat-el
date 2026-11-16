@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ClipboardList, ExternalLink, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
+import { useLocale } from "@/components/LocaleProvider";
+import { defineCopy, type Locale } from "@/lib/i18n/config";
 import type { SubjectValue } from "@/lib/subjects";
 import { SURVEY_PHASES, type SurveyGroupDTO, type SurveyPhase } from "@/lib/surveys";
 import { basePath } from "@/lib/utils";
@@ -16,13 +18,22 @@ export interface SurveyBrowserProps {
   backLabel: string;
   /** Page heading. */
   heading?: string;
-  /** UI copy language. English Language uses `"en"`; every other subject is `"zh"`. */
-  lang?: "zh" | "en";
+  /**
+   * Forces the UI copy language. English Language passes `"en"` so its pages
+   * stay English in both locales. Omitted means the current interface locale.
+   * `"zh"` is the older spelling of `"zh-Hant"` and is still accepted.
+   */
+  lang?: "zh" | Locale;
 }
 
-/** All UI strings, so the English section can run fully in English. */
-const COPY = {
-  zh: {
+/**
+ * All UI strings, so the English section can run fully in English. Phase names
+ * are translated here rather than taken from PHASE_LABELS in lib/surveys.ts,
+ * which the admin screens use as-is.
+ */
+const COPY = defineCopy({
+  "zh-Hant": {
+    heading: "前測 / 後測問卷",
     phases: { pre: "前測", post: "後測" } as Record<SurveyPhase, string>,
     nav: "問卷列表",
     navToggle: "選擇問卷",
@@ -40,7 +51,8 @@ const COPY = {
     groupJoin: " · ",
   },
   en: {
-    phases: { pre: "Pre-test", post: "Post-test" } as Record<SurveyPhase, string>,
+    heading: "Pre-test / Post-test",
+    phases: { pre: "Pre-test", post: "Post-test" },
     nav: "Questionnaires",
     navToggle: "Choose a questionnaire",
     loading: "Loading the questionnaire…",
@@ -57,7 +69,7 @@ const COPY = {
     phaseCount: (n: number, phase: string) => `${n} ${phase}${n === 1 ? "" : "s"}`,
     groupJoin: " · ",
   },
-} as const;
+});
 
 /**
  * How many 類別 stay open on arrival. A page with one or two 類別 reads better
@@ -117,10 +129,12 @@ export default function SurveyBrowser({
   subject,
   backHref,
   backLabel,
-  heading = "前測 / 後測問卷",
-  lang = "zh",
+  heading: headingProp,
+  lang,
 }: SurveyBrowserProps) {
-  const copy = COPY[lang];
+  const { locale } = useLocale();
+  const copy = COPY[lang === undefined ? locale : lang === "en" ? "en" : "zh-Hant"];
+  const heading = headingProp ?? copy.heading;
   const [groups, setGroups] = useState<SurveyGroupDTO[]>([]);
   const [loading, setLoading] = useState(true);
   // Kept as a flag rather than a message, so the copy follows `lang` at render.

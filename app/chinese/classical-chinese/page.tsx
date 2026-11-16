@@ -24,6 +24,8 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { basePath } from "@/lib/utils";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 
 interface Annotation {
   word: string;
@@ -43,9 +45,47 @@ const COLORS = [
   { bg: "bg-[#ee1d36]/18", text: "text-[#7d1020]", ring: "ring-[#ee1d36]/55", activeBg: "bg-[#ee1d36]/10" },
 ];
 
+const COPY = defineCopy({
+  "zh-Hant": {
+    back: "返回中文科",
+    inputTitle: "輸入文言文",
+    placeholder: "在此貼上文言文內容…",
+    analyzing: "分析中…",
+    analyze: "AI 標註虛詞",
+    loadSample: "載入範例",
+    clearMarks: "清除標記",
+    analyzeFailed: "分析失敗，請稍後再試",
+    analyzeError: "分析時發生錯誤",
+    wordCount: (n: number) => `${n} 個虛詞`,
+    markCount: (n: number) => `${n} 處標記`,
+    resultTitle: "標註結果",
+    clearFilter: "取消篩選",
+    listTitle: "虛詞列表",
+    showAll: "顯示全部",
+  },
+  en: {
+    back: "Back to Chinese",
+    inputTitle: "Enter Classical Chinese (文言文)",
+    placeholder: "Paste a Classical Chinese passage here…",
+    analyzing: "Analysing…",
+    analyze: "AI: mark function words (虛詞)",
+    loadSample: "Load example",
+    clearMarks: "Clear marks",
+    analyzeFailed: "Analysis failed. Please try again later.",
+    analyzeError: "Something went wrong while analysing.",
+    wordCount: (n: number) => `${n} function word${n === 1 ? "" : "s"} (虛詞)`,
+    markCount: (n: number) => `${n} mark${n === 1 ? "" : "s"}`,
+    resultTitle: "Marked passage",
+    clearFilter: "Clear filter",
+    listTitle: "Function words (虛詞)",
+    showAll: "Show all",
+  },
+});
+
 const SAMPLE_TEXT = `魚，我所欲也；熊掌，亦我所欲也。二者不可得兼，舍魚而取熊掌者也。生，亦我所欲也；義，亦我所欲也。二者不可得兼，舍生而取義者也。`;
 
 export default function ClassicalChinesePage() {
+  const copy = useCopy(COPY);
   const [text, setText] = useState("");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,13 +108,13 @@ export default function ClassicalChinesePage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "分析失敗，請稍後再試");
+        throw new Error(data?.error ?? copy.analyzeFailed);
       }
 
       const data = await res.json();
       setAnnotations(data.annotations ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "分析時發生錯誤");
+      setError(err instanceof Error ? err.message : copy.analyzeError);
     } finally {
       setLoading(false);
     }
@@ -123,7 +163,7 @@ export default function ClassicalChinesePage() {
 
   return (
     <>
-      <Header backHref="/chinese" backLabel="返回中文科" />
+      <Header backHref="/chinese" backLabel={copy.back} />
 
       <main className="relative flex flex-1 flex-col overflow-y-auto bg-[radial-gradient(circle_at_10%_8%,rgba(88,174,255,0.16),transparent_36%),radial-gradient(circle_at_85%_12%,rgba(255,190,120,0.2),transparent_35%),radial-gradient(circle_at_50%_100%,rgba(142,234,198,0.2),transparent_42%),linear-gradient(180deg,#f8fbff_0%,#f5f7fd_100%)] px-4 py-5 md:px-6 md:py-7">
         <div className="relative z-10 mx-auto w-full max-w-5xl space-y-5 md:space-y-6">
@@ -135,14 +175,14 @@ export default function ClassicalChinesePage() {
                 <div className="flex size-7 items-center justify-center rounded-[8px] bg-[#3b89ff] text-white">
                   <Highlighter className="size-3.5" />
                 </div>
-                輸入文言文
+                {copy.inputTitle}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pt-4 pb-4 md:space-y-5 md:pb-5">
               <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="在此貼上文言文內容…"
+                placeholder={copy.placeholder}
                 className="min-h-[148px] resize-y rounded-[12px] border-[#cfdbef] bg-[#fbfdff] font-serif text-[20px] leading-[1.6] text-[#132544] shadow-none focus-visible:ring-[#3b89ff]"
               />
               <div className="flex flex-wrap items-center gap-2">
@@ -156,7 +196,7 @@ export default function ClassicalChinesePage() {
                   ) : (
                     <Sparkles className="size-4" />
                   )}
-                  {loading ? "分析中…" : "AI 標註虛詞"}
+                  {loading ? copy.analyzing : copy.analyze}
                 </Button>
                 <Button
                   variant="outline"
@@ -169,7 +209,7 @@ export default function ClassicalChinesePage() {
                   className="gap-1.5 rounded-[10px] border-[#cfdbef] bg-white text-[#1b2a47] transition duration-200 hover:-translate-y-0.5 hover:border-[#9fb8de] hover:bg-[#f8fbff]"
                 >
                   <BookOpen className="size-3.5" />
-                  載入範例
+                  {copy.loadSample}
                 </Button>
                 {annotations.length > 0 && (
                   <Button
@@ -179,7 +219,7 @@ export default function ClassicalChinesePage() {
                     className="gap-1 rounded-[10px] text-[#5d6b84] transition duration-200 hover:bg-[#eef5ff] hover:text-[#2f78e8]"
                   >
                     <Eraser className="size-3.5" />
-                    清除標記
+                    {copy.clearMarks}
                   </Button>
                 )}
               </div>
@@ -231,11 +271,11 @@ export default function ClassicalChinesePage() {
               <div className="flex items-center gap-3 px-1 md:gap-4">
                 <Badge className="gap-1.5 rounded-full border border-[#c8daf6] bg-[#eaf2ff] px-3 py-1 text-[#255cae] hover:bg-[#eaf2ff]">
                   <ScrollText className="size-3" />
-                  {wordGroups.length} 個虛詞
+                  {copy.wordCount(wordGroups.length)}
                 </Badge>
                 <Badge className="gap-1.5 rounded-full border border-[#c8daf6] bg-[#eaf2ff] px-3 py-1 text-[#255cae] hover:bg-[#eaf2ff]">
                   <Highlighter className="size-3" />
-                  {totalHighlighted} 處標記
+                  {copy.markCount(totalHighlighted)}
                 </Badge>
               </div>
 
@@ -245,7 +285,7 @@ export default function ClassicalChinesePage() {
                   <CardHeader className="flex-row items-center justify-between border-b border-[#dbe5f5] bg-[linear-gradient(90deg,#e9f2ff_0%,#f4f8ff_50%,#eef9ff_100%)] py-4">
                     <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-[0.2px] text-[#1b2a47]">
                       <BookOpen className="size-4 text-[#3b89ff]" />
-                      標註結果
+                      {copy.resultTitle}
                     </CardTitle>
                     {activeWord !== null && (
                       <Button
@@ -254,7 +294,7 @@ export default function ClassicalChinesePage() {
                         onClick={() => setActiveWord(null)}
                         className="h-7 rounded-[10px] text-xs text-[#5d6b84] transition duration-200 hover:bg-[#eef5ff] hover:text-[#2f78e8]"
                       >
-                        取消篩選
+                        {copy.clearFilter}
                       </Button>
                     )}
                   </CardHeader>
@@ -330,7 +370,7 @@ export default function ClassicalChinesePage() {
                   <CardHeader className="border-b border-[#dbe5f5] bg-[linear-gradient(90deg,#e9f2ff_0%,#f4f8ff_50%,#eef9ff_100%)] py-4">
                     <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-[0.2px] text-[#1b2a47]">
                       <List className="size-4 text-[#3b89ff]" />
-                      虛詞列表
+                      {copy.listTitle}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-2">
@@ -345,7 +385,7 @@ export default function ClassicalChinesePage() {
                             : "text-[#1b2a47] hover:bg-[#f3f8ff]",
                         ].join(" ")}
                       >
-                        <span>顯示全部</span>
+                        <span>{copy.showAll}</span>
                         <Badge
                           variant={
                             activeWord === null ? "default" : "secondary"

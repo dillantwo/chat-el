@@ -38,8 +38,7 @@ const topics: TopicCard[] = [
     id: "wenyan",
     label: "學習文言文",
     labelEn: "Classical Chinese",
-    description:
-      "遊戲化學習文言文：學習模式追蹤進度，挑戰模式限時選擇題猜常用字，賺分數和獎章。",
+    description: "遊戲化學習文言文：學習模式追蹤進度，挑戰模式限時選擇題猜常用字，賺分數和獎章。",
     href: "/chinese/wenyan",
     icon: ScrollText,
     accent: "#ed52cb",
@@ -52,8 +51,8 @@ const topics: TopicCard[] = [
     href: "/chinese/pre-post-test",
     icon: ClipboardList,
     accent: "#0f766e",
-    cta: "打開問卷",
     group: "resource",
+    cta: "打開問卷",
   },
   {
     id: "learning-materials",
@@ -63,8 +62,8 @@ const topics: TopicCard[] = [
     href: "/chinese/materials",
     icon: FolderDown,
     accent: "#7a3dff",
-    cta: "打開資源",
     group: "resource",
+    cta: "打開資源",
   },
 ];
 

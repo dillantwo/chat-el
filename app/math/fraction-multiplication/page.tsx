@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { renderWordProblemHtml } from "@/lib/math-word-problem";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
 
 /**
  * 分數乘法教學 (Multiplication of fractions).
@@ -198,29 +200,122 @@ const STYLES = `
 .fa45-root.embedded .container{ box-shadow:none; border-radius:0; padding:1rem; }
 `;
 
-const BODY_HTML = `
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "分數相乘",
+    restartTitle: "回到這一題的初始狀態，重新開始操作",
+    restart: "↺ 重新開始",
+    showMixed: "顯示帶分數",
+    showNumberLine: "顯示數線",
+    speedTitle: "調整動畫速度",
+    speed: "動畫速度: ",
+    random: "🎲 隨機出題",
+    frac1Title: "點擊設定被乘數圖形",
+    frac2Title: "點擊播放乘法動畫",
+    start: "💡 準備中...請先點擊上方的「被乘數」",
+    historyTitle: "📋 步驟紀錄",
+    historyHint: "上面是目前的長條圖，下面依序保留每一步做完的樣子",
+    step: (n: number) => `步驟 ${n}`,
+    step1Done: (frac: string) => `已顯示被乘數（紅）的長條圖。👉 點擊 × ${frac} 繼續`,
+    step1Card: (frac: string, d: number) => `被乘數 ${frac} 的長條圖：每個整體平均分成 <b>${d}</b> 份`,
+    preparing: "準備中...",
+    step2: (d: number) =>
+      `引入乘數的分母 <b style="color:var(--blue)">${d}</b>，把被乘數的每一格平均再切分成 <b>${d}</b> 份`,
+    step3Extract: (c: number, d: number) =>
+      `依乘數的分子 <b style="color:var(--blue)">${c}</b>，從每 <b>${d}</b> 小格中提取 <b style="color:var(--red)">${c}</b> 格（其餘淡出）`,
+    step3Extra: (c: number) => `乘數大於 1，補上不足的格子，共提取 <b style="color:var(--red)">${c}</b> 倍的份量`,
+    step4: "把提取出的紅色微細格子依序移動，整齊排列在一起",
+    step4Prompt: (step4: string) => `👉 點擊上方的長條圖，${step4}`,
+    step5: (n: number, d: number) =>
+      `數一數！紅色微細格子共 <b style="color:var(--red)">${n}</b> 格（分子）；每個整體分成 <b style="color:var(--blue)">${d}</b> 格（分母）。請填寫答案，也可點擊上方的長條圖切換排列。`,
+    inProgress: "進行中",
+    waitingClick: "等你點擊",
+    done: "完成",
+    rearrangeTitle: "點擊方塊整齊排列",
+    toggleArrangeTitle: "點擊方塊切換排列",
+    perfect: "🎉 完全正確！而且已經是最簡化的答案了！",
+    rightValue: "🌟 答對了數值！但試試看，這個答案可以再「約分」或「轉成帶分數」喔！",
+    wrong: "❌ 答案不對喔！請再觀察一下紅色的方塊總數。",
+    wordProblems: [
+      "一盒巧克力重 [FRAC1] 公斤，小明買了 [FRAC2] 盒。請問總共重多少公斤？",
+      "一塊農田面積為 [FRAC1] 公頃，第二塊面積是第一塊的 [FRAC2] 倍。請問第二塊農田的面積是多少公頃？",
+      "媽媽做一塊蛋糕需要 [FRAC1] 杯麵粉，她做了 [FRAC2] 塊蛋糕。請問總共需要多少杯麵粉？",
+      "水桶容量為 [FRAC1] 公升，目前裝了 [FRAC2] 桶水。請問總共有多少公升的水？",
+      "紅彩帶長 [FRAC1] 公尺，藍彩帶長度是紅彩帶的 [FRAC2] 倍。請問藍彩帶長多少公尺？",
+    ],
+  },
+  en: {
+    title: "Multiplication of Fractions",
+    restartTitle: "Go back to the start of this question and try again",
+    restart: "↺ Restart",
+    showMixed: "Show mixed numbers",
+    showNumberLine: "Show number line",
+    speedTitle: "Change the animation speed",
+    speed: "Animation speed: ",
+    random: "🎲 Random question",
+    frac1Title: "Click to show the bar for the first number",
+    frac2Title: "Click to play the multiplication animation",
+    start: "💡 Getting ready... First click the first number above.",
+    historyTitle: "📋 Steps so far",
+    historyHint: "The bar on top is the current one. Below, you can see how it looked after each step.",
+    step: (n: number) => `Step ${n}`,
+    step1Done: (frac: string) => `The bar for the first number (red) is shown. 👉 Click × ${frac} to continue`,
+    step1Card: (frac: string, d: number) =>
+      `Bar for the first number ${frac}: each whole is split into <b>${d}</b> equal parts`,
+    preparing: "Getting ready...",
+    step2: (d: number) =>
+      `Use the second number's denominator, <b style="color:var(--blue)">${d}</b>, to split each part of the first number into <b>${d}</b> equal parts`,
+    step3Extract: (c: number, d: number) =>
+      `Use the second number's numerator, <b style="color:var(--blue)">${c}</b>: keep <b style="color:var(--red)">${c}</b> of every <b>${d}</b> small parts (the rest fade out)`,
+    step3Extra: (c: number) =>
+      `The second number is greater than 1, so fill in the missing parts: take <b style="color:var(--red)">${c}</b> times as many in total`,
+    step4: "Move the red small parts you kept, one by one, and line them up neatly",
+    step4Prompt: () => "👉 Click the bar above to move the red small parts you kept and line them up neatly",
+    step5: (n: number, d: number) =>
+      `Count them! There are <b style="color:var(--red)">${n}</b> red small parts (numerator), and each whole has <b style="color:var(--blue)">${d}</b> parts (denominator). Write your answer. You can also click the bar above to switch the arrangement.`,
+    inProgress: "In progress",
+    waitingClick: "Your turn: click",
+    done: "Done",
+    rearrangeTitle: "Click to line up the parts",
+    toggleArrangeTitle: "Click to switch the arrangement",
+    perfect: "🎉 Completely correct! And it is already in its simplest form!",
+    rightValue: "🌟 The value is correct! But can you reduce it or change it into a mixed number?",
+    wrong: "❌ Not quite! Look again at how many red parts there are in total.",
+    wordProblems: [
+      "A box of chocolates weighs [FRAC1] kg. Siu Ming bought [FRAC2] boxes. How many kilograms do they weigh altogether?",
+      "A field has an area of [FRAC1] hectares. A second field is [FRAC2] times as big. What is the area of the second field in hectares?",
+      "Mum needs [FRAC1] cups of flour to make one cake. She made [FRAC2] cakes. How many cups of flour did she need altogether?",
+      "A bucket holds [FRAC1] litres. There are [FRAC2] buckets of water now. How many litres of water are there altogether?",
+      "A red ribbon is [FRAC1] m long. A blue ribbon is [FRAC2] times as long as the red ribbon. How long is the blue ribbon in metres?",
+    ],
+  },
+});
+
+type Copy = (typeof COPY)["zh-Hant"];
+
+const buildBody = (copy: Copy) => `
 <div class="container">
   <div class="header">
     <div class="header-left">
-      <div class="title-badge">分數相乘</div>
-      <button class="lang-btn btn-restart" onclick="window.__FA45.restart()" title="回到這一題的初始狀態，重新開始操作">↺ 重新開始</button>
+      <div class="title-badge">${copy.title}</div>
+      <button class="lang-btn btn-restart" onclick="window.__FA45.restart()" title="${copy.restartTitle}">${copy.restart}</button>
     </div>
     <div class="header-right">
       <div class="controls-pill">
         <label class="checkbox-label">
-          <input type="checkbox" id="show-whole-cb" onchange="window.__FA45.toggleWholeNumber()"> 顯示帶分數
+          <input type="checkbox" id="show-whole-cb" onchange="window.__FA45.toggleWholeNumber()"> ${copy.showMixed}
         </label>
         <span class="divider"></span>
         <label class="checkbox-label">
-          <input type="checkbox" id="show-nl-cb" onchange="window.__FA45.toggleNumberLine()" checked> 顯示數線
+          <input type="checkbox" id="show-nl-cb" onchange="window.__FA45.toggleNumberLine()" checked> ${copy.showNumberLine}
         </label>
         <span class="divider"></span>
         <div class="speed-ctrl">
-          <label for="speed-slider" title="調整動畫速度">動畫速度: <span id="speed-val" style="color: var(--blue);">1.0</span>x</label>
+          <label for="speed-slider" title="${copy.speedTitle}">${copy.speed}<span id="speed-val" style="color: var(--blue);">1.0</span>x</label>
           <input type="range" id="speed-slider" min="0.5" max="3" step="0.1" value="1.0" oninput="window.__FA45.updateSpeed()">
         </div>
       </div>
-      <button class="lang-btn btn-random" onclick="window.__FA45.randomChallenge()">🎲 隨機出題</button>
+      <button class="lang-btn btn-random" onclick="window.__FA45.randomChallenge()">${copy.random}</button>
     </div>
   </div>
 
@@ -228,7 +323,7 @@ const BODY_HTML = `
 
   <div class="answer-zone">
     <div class="formula">
-      <div class="mixed-frac" id="frac1-group" onclick="window.__FA45.onFrac1Click()" title="點擊設定被乘數圖形">
+      <div class="mixed-frac" id="frac1-group" onclick="window.__FA45.onFrac1Click()" title="${copy.frac1Title}">
         <input type="number" class="whole-input" id="w1" placeholder=" " min="0" max="10" oninput="window.__FA45.updateUI()" onchange="window.__FA45.updateUI()">
         <div class="frac">
           <input type="number" class="frac-input" id="n1" value="2" min="1" max="10" oninput="window.__FA45.updateUI()" onchange="window.__FA45.updateUI()">
@@ -236,8 +331,8 @@ const BODY_HTML = `
           <input type="number" class="frac-input" id="d1" value="3" min="1" max="10" oninput="window.__FA45.updateUI()" onchange="window.__FA45.updateUI()">
         </div>
       </div>
-      <span style="cursor:pointer;" onclick="window.__FA45.onFrac2Click()" title="點擊播放乘法動畫">×</span>
-      <div class="mixed-frac" id="frac2-group" onclick="window.__FA45.onFrac2Click()" title="點擊播放乘法動畫">
+      <span style="cursor:pointer;" onclick="window.__FA45.onFrac2Click()" title="${copy.frac2Title}">×</span>
+      <div class="mixed-frac" id="frac2-group" onclick="window.__FA45.onFrac2Click()" title="${copy.frac2Title}">
         <input type="number" class="whole-input" id="w2" placeholder=" " min="0" max="10" oninput="window.__FA45.updateUI()" onchange="window.__FA45.updateUI()">
         <div class="frac">
           <input type="number" class="frac-input" id="n2" value="1" min="1" max="10" oninput="window.__FA45.updateUI()" onchange="window.__FA45.updateUI()">
@@ -249,7 +344,7 @@ const BODY_HTML = `
   </div>
 
   <div class="animation-zone" id="anim-zone">
-    <div id="drag-instruction" class="instruction-text">💡 準備中...請先點擊上方的「被乘數」</div>
+    <div id="drag-instruction" class="instruction-text">${copy.start}</div>
     <div id="anim-area">
       <div id="bar1-row" style="display:none; position:relative; width:100%; min-height:80px; align-items:center; justify-content:space-between;">
         <div id="label1" style="width:15%; text-align:center; font-size:1.3rem; transition: opacity 0.5s; opacity: 1; font-weight:bold;"></div>
@@ -280,8 +375,8 @@ const BODY_HTML = `
 
       <div id="step-history">
         <div class="step-history-head">
-          📋 步驟紀錄
-          <span class="step-history-hint">上面是目前的長條圖，下面依序保留每一步做完的樣子</span>
+          ${copy.historyTitle}
+          <span class="step-history-hint">${copy.historyHint}</span>
         </div>
         <div id="step-history-list"></div>
       </div>
@@ -312,6 +407,7 @@ declare global {
 type AnimBlock = { el: HTMLElement; state: string };
 
 export default function FractionMultiplicationPage() {
+  const copy = useCopy(COPY);
   const rootRef = useRef<HTMLDivElement>(null);
   const [embedded, setEmbedded] = useState(false);
 
@@ -385,15 +481,9 @@ export default function FractionMultiplicationPage() {
     const ms = (v: number) => v / currentSpeed;
 
     /** 步驟 4 的說明，提示文字與步驟紀錄卡片共用同一句。 */
-    const STEP4_TEXT = "把提取出的紅色微細格子依序移動，整齊排列在一起";
+    const STEP4_TEXT = copy.step4;
 
-    const wordProblemTemplates = [
-      "一盒巧克力重 [FRAC1] 公斤，小明買了 [FRAC2] 盒。請問總共重多少公斤？",
-      "一塊農田面積為 [FRAC1] 公頃，第二塊面積是第一塊的 [FRAC2] 倍。請問第二塊農田的面積是多少公頃？",
-      "媽媽做一塊蛋糕需要 [FRAC1] 杯麵粉，她做了 [FRAC2] 塊蛋糕。請問總共需要多少杯麵粉？",
-      "水桶容量為 [FRAC1] 公升，目前裝了 [FRAC2] 桶水。請問總共有多少公升的水？",
-      "紅彩帶長 [FRAC1] 公尺，藍彩帶長度是紅彩帶的 [FRAC2] 倍。請問藍彩帶長多少公尺？",
-    ];
+    const wordProblemTemplates = copy.wordProblems;
 
     // ---------- tutorial finger ----------
     function pointAtTarget(element: HTMLElement | null) {
@@ -616,7 +706,7 @@ export default function FractionMultiplicationPage() {
       clearStepHistory();
       $e("bottom-answer-zone")!.style.display = "none";
       $e("bottom-answer-zone")!.style.opacity = "0";
-      $e("drag-instruction")!.innerHTML = `💡 準備中...請先點擊上方的「被乘數」`;
+      $e("drag-instruction")!.innerHTML = copy.start;
     }
 
     function getFracHtml(n: number, d: number, color = "inherit") {
@@ -741,7 +831,7 @@ export default function FractionMultiplicationPage() {
 
       const title = document.createElement("div");
       title.className = "step-card-title";
-      title.innerHTML = `<span class="step-card-badge">✓ 步驟 ${num}</span><span class="step-card-text">${text}</span>`;
+      title.innerHTML = `<span class="step-card-badge">✓ ${copy.step(num)}</span><span class="step-card-text">${text}</span>`;
       card.appendChild(title);
 
       const column = document.createElement("div");
@@ -771,7 +861,7 @@ export default function FractionMultiplicationPage() {
       const el = $e("label1");
       if (!el) return;
       el.style.opacity = "1";
-      el.innerHTML = `<span class="live-step-badge${done ? " done" : ""}">步驟 ${num}<small>${note}</small></span>`;
+      el.innerHTML = `<span class="live-step-badge${done ? " done" : ""}">${copy.step(num)}<small>${note}</small></span>`;
     }
 
     function onFrac1Click() {
@@ -828,8 +918,8 @@ export default function FractionMultiplicationPage() {
       toggleNumberLine();
 
       $e("drag-instruction")!.innerHTML =
-        `<span style="display:inline-block; background:var(--success); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">步驟 1 / 5</span>` +
-        `<span style="vertical-align:middle;">已顯示被乘數（紅）的長條圖。👉 點擊 × ${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")} 繼續</span>`;
+        `<span style="display:inline-block; background:var(--success); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">${copy.step(1)} / 5</span>` +
+        `<span style="vertical-align:middle;">${copy.step1Done(getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)"))}</span>`;
       $e("bottom-answer-zone")!.style.display = "none";
       $e("bottom-answer-zone")!.style.opacity = "0";
     }
@@ -840,7 +930,7 @@ export default function FractionMultiplicationPage() {
     function setAnimStep(num: number, text: string) {
       const el = $e("drag-instruction");
       if (!el) return;
-      el.innerHTML = `<span style="display:inline-block; background:var(--blue); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">步驟 ${num} / 5</span><span style="color:var(--dark); font-weight:bold; vertical-align:middle;">${text}</span>`;
+      el.innerHTML = `<span style="display:inline-block; background:var(--blue); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">${copy.step(num)} / 5</span><span style="color:var(--dark); font-weight:bold; vertical-align:middle;">${text}</span>`;
     }
 
     function makeGhost(rect: DOMRect, travelMs: number) {
@@ -1017,7 +1107,7 @@ export default function FractionMultiplicationPage() {
       // 步驟 1 的長條圖等一下會被重建成細分後的版本，先存一張到下面的步驟紀錄。
       snapshotStep(
         1,
-        `被乘數 ${getCompactDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")} 的長條圖：每個整體平均分成 <b>${vals.d1}</b> 份`,
+        copy.step1Card(getCompactDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)"), vals.d1),
       );
 
       const A = vals.total_n1;
@@ -1026,7 +1116,7 @@ export default function FractionMultiplicationPage() {
       const D = vals.d2;
       const maxW = updateMaxWholes();
 
-      setAnimStep(2, "準備中...");
+      setAnimStep(2, copy.preparing);
 
       const wrap = $e("main-bar-wrap")!;
       wrap.innerHTML = "";
@@ -1095,9 +1185,9 @@ export default function FractionMultiplicationPage() {
       }
 
       // Step 2: subdivide by multiplier's denominator
-      const step2Text = `引入乘數的分母 <b style="color:var(--blue)">${D}</b>，把被乘數的每一格平均再切分成 <b>${D}</b> 份`;
+      const step2Text = copy.step2(D);
       setAnimStep(2, step2Text);
-      setLiveStepTag(2, "進行中");
+      setLiveStepTag(2, copy.inProgress);
       // 先讓學生讀完說明再開始動。
       await delay(ms(TIMING.readStep));
       if (!alive) return;
@@ -1114,10 +1204,10 @@ export default function FractionMultiplicationPage() {
       // Step 3: extract by multiplier's numerator
       const step3Text =
         C <= D
-          ? `依乘數的分子 <b style="color:var(--blue)">${C}</b>，從每 <b>${D}</b> 小格中提取 <b style="color:var(--red)">${C}</b> 格（其餘淡出）`
-          : `乘數大於 1，補上不足的格子，共提取 <b style="color:var(--red)">${C}</b> 倍的份量`;
+          ? copy.step3Extract(C, D)
+          : copy.step3Extra(C);
       setAnimStep(3, step3Text);
-      setLiveStepTag(3, "進行中");
+      setLiveStepTag(3, copy.inProgress);
       await delay(ms(TIMING.readStep));
       if (!alive) return;
       await animateExtract(ms(TIMING.extract));
@@ -1140,11 +1230,11 @@ export default function FractionMultiplicationPage() {
       isAnimating = false;
       awaitingRearrangeClick = true;
       currentTutorialStep = 2;
-      setAnimStep(4, `👉 點擊上方的長條圖，${STEP4_TEXT}`);
-      setLiveStepTag(4, "等你點擊");
+      setAnimStep(4, copy.step4Prompt(STEP4_TEXT));
+      setLiveStepTag(4, copy.waitingClick);
       const wrap2 = $e("main-bar-wrap")!;
       wrap2.style.cursor = "pointer";
-      wrap2.title = "點擊方塊整齊排列";
+      wrap2.title = copy.rearrangeTitle;
       pointAtTarget(wrap2);
     }
 
@@ -1164,9 +1254,9 @@ export default function FractionMultiplicationPage() {
       const resultN = A * C;
 
       $e("drag-instruction")!.innerHTML =
-        `<span style="display:inline-block; background:var(--success); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">步驟 5 / 5</span>` +
-        `<span style="color:var(--dark); font-weight:bold; vertical-align:middle;">數一數！紅色微細格子共 <b style="color:var(--red)">${resultN}</b> 格（分子）；每個整體分成 <b style="color:var(--blue)">${resultD}</b> 格（分母）。請填寫答案，也可點擊上方的長條圖切換排列。</span>`;
-      setLiveStepTag(5, "完成", true);
+        `<span style="display:inline-block; background:var(--success); color:#fff; border-radius:12px; padding:2px 10px; font-size:0.95rem; margin-right:8px; vertical-align:middle;">${copy.step(5)} / 5</span>` +
+        `<span style="color:var(--dark); font-weight:bold; vertical-align:middle;">${copy.step5(resultN, resultD)}</span>`;
+      setLiveStepTag(5, copy.done, true);
 
       $e("bottom-answer-zone")!.style.display = "flex";
       T(() => ($e("bottom-answer-zone")!.style.opacity = "1"), 50);
@@ -1187,7 +1277,7 @@ export default function FractionMultiplicationPage() {
 
       const wrap = $e("main-bar-wrap")!;
       wrap.style.cursor = "pointer";
-      wrap.title = "點擊方塊切換排列";
+      wrap.title = copy.toggleArrangeTitle;
     }
 
     function toggleRearrange() {
@@ -1197,7 +1287,7 @@ export default function FractionMultiplicationPage() {
         isAnimating = true;
         isRearranging = true;
         setAnimStep(4, STEP4_TEXT);
-        setLiveStepTag(4, "進行中");
+        setLiveStepTag(4, copy.inProgress);
         rearrangeForward().then(() => {
           isRearranging = false;
           // 排好之後停一下再進到填答案，並把步驟 4 也存進紀錄（之後學生切換排列也不會影響紀錄）。
@@ -1252,14 +1342,14 @@ export default function FractionMultiplicationPage() {
         else if (ansW === 0 && ansN === simpleN && ansD === simpleD) isSimplest = true;
 
         if (isSimplest) {
-          fb.innerHTML = "🎉 完全正確！而且已經是最簡化的答案了！";
+          fb.innerHTML = copy.perfect;
         } else {
-          fb.innerHTML = '🌟 答對了數值！但試試看，這個答案可以再「約分」或「轉成帶分數」喔！';
+          fb.innerHTML = copy.rightValue;
         }
         fb.style.opacity = "1";
         fb.style.color = "var(--success)";
       } else {
-        fb.innerHTML = "❌ 答案不對喔！請再觀察一下紅色的方塊總數。";
+        fb.innerHTML = copy.wrong;
         fb.style.opacity = "1";
         fb.style.color = "var(--red)";
       }
@@ -1304,7 +1394,7 @@ export default function FractionMultiplicationPage() {
 
       updateUI();
       $e("bar1-row")!.style.display = "none";
-      $e("drag-instruction")!.innerHTML = `💡 準備中...請先點擊上方的「被乘數」`;
+      $e("drag-instruction")!.innerHTML = copy.start;
       $e("bottom-answer-zone")!.style.display = "none";
       $e("word-problem")!.style.display = "block";
     }
@@ -1327,7 +1417,7 @@ export default function FractionMultiplicationPage() {
     de.style.setProperty("--max-wholes", "1");
     de.style.setProperty("--unit-min-w", "120px");
     de.style.setProperty("--anim-time", "0.6s");
-    root.innerHTML = BODY_HTML;
+    root.innerHTML = buildBody(copy);
 
     const finger = document.createElement("div");
     finger.id = "tutorial-finger";
@@ -1435,7 +1525,10 @@ export default function FractionMultiplicationPage() {
       de.style.removeProperty("--unit-min-w");
       de.style.removeProperty("--anim-time");
     };
-  }, []);
+    // `copy` is a stable per-locale object, so this re-runs only on a language
+    // switch: the old instance is torn down and the tool re-initialised in the
+    // new language (the in-progress exercise restarts from the URL params).
+  }, [copy]);
 
   return (
     <>

@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Noto_Sans_TC, Noto_Serif_TC } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
+import { AnnouncementProvider } from "@/components/AnnouncementProvider";
+import { LocaleProvider } from "@/components/LocaleProvider";
+import { htmlLang } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,18 +34,24 @@ export const metadata: Metadata = {
   description: "Generate, Edit and Explore design with AI, Export code as well",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+
   return (
     <html
-      lang="zh-Hant"
+      lang={htmlLang(locale)}
       className={`${geistSans.variable} ${geistMono.variable} ${notoSansTC.variable} ${notoSerifTC.variable} h-full antialiased`}
     >
       <body suppressHydrationWarning className="h-full flex flex-col font-sans overflow-hidden">
-        <AuthProvider>{children}</AuthProvider>
+        <LocaleProvider initialLocale={locale}>
+          <AuthProvider>
+            <AnnouncementProvider>{children}</AnnouncementProvider>
+          </AuthProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

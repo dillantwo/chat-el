@@ -21,9 +21,13 @@ export interface TopicMeta {
 export const USAGE_TOPICS: TopicMeta[] = [
   // 數學科
   { key: "math-tutor", subject: "math", label: "數學導師對話" },
+  { key: "ai-diagram", subject: "math", label: "AI 生成圖解對話" },
   { key: "question-classify", subject: "math", label: "題目分類" },
+  { key: "tool-recommend", subject: "math", label: "工具推薦" },
+  { key: "tool-params", subject: "math", label: "工具參數提取" },
   { key: "clock", subject: "math", label: "時鐘" },
   { key: "volume", subject: "math", label: "體積" },
+  { key: "journey-graph", subject: "math", label: "行程圖" },
   { key: "tool-generator", subject: "math", label: "教學工具生成" },
   // 中國語文科
   { key: "chinese-tutor", subject: "chinese", label: "中文導師對話" },
@@ -32,6 +36,7 @@ export const USAGE_TOPICS: TopicMeta[] = [
   { key: "character", subject: "chinese", label: "人物描寫" },
   { key: "wenyan-translation", subject: "chinese", label: "文言文翻譯" },
   { key: "wenyan-application", subject: "chinese", label: "文言文應用" },
+  { key: "wenyan-function-words", subject: "chinese", label: "文言虛詞標註" },
   // English Language
   { key: "english-tutor", subject: "english", label: "English Tutor Chat" },
   { key: "location-direction", subject: "english", label: "Location & Direction" },
@@ -101,6 +106,15 @@ export function topicFromEndpoint(
       return "wenyan-translation";
     case "/api/wenyan-application":
       return "wenyan-application";
+    case "/api/classical-chinese":
+      return "wenyan-function-words";
+    case "/api/recommend-tools":
+      return "tool-recommend";
+    case "/api/extract-params":
+      return "tool-params";
+    case "/api/journey-check":
+    case "/api/journey-review":
+      return "journey-graph";
     case "/api/english-location-direction":
       return "location-direction";
     case "/api/english-reading-comprehension":

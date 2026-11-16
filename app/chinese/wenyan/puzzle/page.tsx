@@ -21,8 +21,66 @@ import {
   type PuzzlePassage,
 } from "@/lib/wenyan-puzzle";
 import { recordChallenge, getBadge, getProgress } from "@/lib/wenyan-progress";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+import { BADGE_COPY, WENYAN_COPY } from "../wenyan-copy";
 
 const ACCENT = "#0d9488";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    introPart1: "每一段文言文都被抽走了一兩個 ",
+    introCommonWords: "常用詞",
+    introPart2: "。下方每個詞語都附有意思，把正確的詞語 ",
+    introDrag: "拖放",
+    introPart3: "（或點選）到空格裏。當中混有 ",
+    introDistractors: "干擾項",
+    introPart4: (count: number) => `，不一定用得上。共 ${count} 段，全對得 100 分！`,
+    chipDrag: "拖放或點選",
+    chipMeanings: "詞語附意思",
+    chipDistractors: "小心干擾項",
+    startPuzzle: "開始拼圖",
+    passageOf: (n: number, total: number) => `第 ${n} / ${total} 段`,
+    bankHintFilled: "想改的話，可把空格的詞語點走再放新的",
+    bankHint: "把下面的常用詞放到空格（有些是干擾項，不一定用得上）：",
+    bankEmpty: "（空格可點選取回詞語）",
+    passageResult: (correct: number, total: number) => `這段答對 ${correct} / ${total} 個常用詞。`,
+    nextPassage: "下一段",
+    checkAnswers: "檢查答案",
+    msgPerfect: "全部答對！常用詞難不到你！👑",
+    msg80: "很厲害，幾乎全對！🏅",
+    msg60: "做得不錯，再接再厲！⭐",
+    msgLow: "多讀幾次原文，就會記得更牢！🌱",
+    wordsPlaced: "放對詞語",
+  },
+  en: {
+    introPart1: "One or two ",
+    introCommonWords: "common words",
+    introPart2: " have been taken out of each Classical Chinese passage. Each word below comes with its meaning. ",
+    introDrag: "Drag",
+    introPart3: " (or tap) the right word into each gap. Some are ",
+    introDistractors: "extra words",
+    introPart4: (count: number) =>
+      ` that don't belong, so you won't need them all. There are ${count} passages. Get them all right for 100 points!`,
+    chipDrag: "Drag or tap",
+    chipMeanings: "Meanings shown",
+    chipDistractors: "Watch out for extras",
+    startPuzzle: "Start puzzle",
+    passageOf: (n: number, total: number) => `Passage ${n} / ${total}`,
+    bankHintFilled: "To change a word, tap it in the gap to take it out, then put in a new one",
+    bankHint: "Put these common words into the gaps (some are extras you won't need):",
+    bankEmpty: "(Tap a gap to take a word back)",
+    passageResult: (correct: number, total: number) =>
+      `You got ${correct} / ${total} common words right in this passage.`,
+    nextPassage: "Next passage",
+    checkAnswers: "Check answers",
+    msgPerfect: "All correct! Common words are no problem for you! 👑",
+    msg80: "Amazing, nearly all correct! 🏅",
+    msg60: "Good work, keep going! ⭐",
+    msgLow: "Read the texts a few more times and the words will stick! 🌱",
+    wordsPlaced: "Words placed right",
+  },
+});
 
 type Phase = "intro" | "playing" | "result";
 
@@ -34,6 +92,7 @@ interface Token {
 }
 
 export default function WenyanPuzzlePage() {
+  const shared = useCopy(WENYAN_COPY);
   const [phase, setPhase] = useState<Phase>("intro");
   const [passages, setPassages] = useState<PuzzlePassage[]>([]);
   const [current, setCurrent] = useState(0);
@@ -100,12 +159,12 @@ export default function WenyanPuzzlePage() {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ChevronLeft className="size-4" />
-          返回遊戲首頁
+          {shared.backToGame}
         </Link>
         <div className="flex items-center gap-2">
           <PuzzleIcon className="size-4" style={{ color: ACCENT }} />
           <span className="text-sm font-semibold text-[#080808]">
-            挑戰模式 - 常用詞拼圖
+            {shared.challengeTitle(shared.modePuzzle)}
           </span>
         </div>
         <div className="w-[112px]" />
@@ -146,6 +205,8 @@ export default function WenyanPuzzlePage() {
 /* ----------------------------------------------------------------- Intro */
 
 function Intro({ bestScore, onStart }: { bestScore: number; onStart: () => void }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   return (
     <div className="space-y-6 text-center wyt-fade-in-up">
       <div
@@ -156,40 +217,40 @@ function Intro({ bestScore, onStart }: { bestScore: number; onStart: () => void 
       </div>
       <div className="space-y-2">
         <h1 className="font-serif text-[34px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-          常用詞拼圖
+          {shared.modePuzzle}
         </h1>
         <p className="mx-auto max-w-md text-sm leading-7 text-[#6b6385]">
-          每一段文言文都被抽走了一兩個{" "}
+          {copy.introPart1}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            常用詞
+            {copy.introCommonWords}
           </span>
-          。下方每個詞語都附有意思，把正確的詞語{" "}
+          {copy.introPart2}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            拖放
+            {copy.introDrag}
           </span>
-          （或點選）到空格裏。當中混有{" "}
+          {copy.introPart3}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            干擾項
+            {copy.introDistractors}
           </span>
-          ，不一定用得上。共 {PUZZLE_PASSAGE_COUNT} 段，全對得 100 分！
+          {copy.introPart4(PUZZLE_PASSAGE_COUNT)}
         </p>
       </div>
 
       <div className="mx-auto flex max-w-sm flex-wrap items-center justify-center gap-2 text-xs text-[#6b6385]">
         <span className="inline-flex items-center gap-1 rounded-full border border-[#bdeae3] bg-[#effbf8] px-3 py-1.5 text-[#0f766e]">
-          <Hand className="size-3.5" /> 拖放或點選
+          <Hand className="size-3.5" /> {copy.chipDrag}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-[#bdeae3] bg-[#effbf8] px-3 py-1.5 text-[#0f766e]">
-          <Lightbulb className="size-3.5" /> 詞語附意思
+          <Lightbulb className="size-3.5" /> {copy.chipMeanings}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-[#bdeae3] bg-[#effbf8] px-3 py-1.5 text-[#0f766e]">
-          <Sparkles className="size-3.5" /> 小心干擾項
+          <Sparkles className="size-3.5" /> {copy.chipDistractors}
         </span>
       </div>
 
       <div className="mx-auto flex max-w-xs items-center justify-center gap-2 rounded-[14px] border border-[#bdeae3] bg-[#effbf8] px-4 py-3 text-sm text-[#0f766e]">
         <Trophy className="size-4" />
-        目前最高分：<span className="font-semibold">{bestScore}</span>
+        {shared.bestScoreLabel}<span className="font-semibold">{bestScore}</span>
       </div>
 
       <Button
@@ -198,7 +259,7 @@ function Intro({ bestScore, onStart }: { bestScore: number; onStart: () => void 
         style={{ backgroundColor: ACCENT }}
       >
         <Sparkles className="size-5" />
-        開始拼圖
+        {copy.startPuzzle}
       </Button>
     </div>
   );
@@ -217,6 +278,8 @@ function PassagePlay({
   total: number;
   onDone: (r: { correct: number; total: number; longestRun: number }) => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   // Build stable tokens (answers + distractors) and a shuffled display order.
   const tokens = useMemo<Token[]>(
     () => [
@@ -323,7 +386,7 @@ function PassagePlay({
       {/* HUD */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[#6b6385]">
-          第 {index + 1} / {total} 段
+          {copy.passageOf(index + 1, total)}
         </span>
         <span
           className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
@@ -347,7 +410,7 @@ function PassagePlay({
         style={{ borderColor: "#bdeae3" }}
       >
         <p className="mb-3 text-xs font-semibold uppercase tracking-[1px] text-[#0f766e]">
-          文言文片段
+          {shared.passageFragment}
         </p>
         <p className="font-serif text-[23px] leading-[2.2] tracking-[0.03em] text-[#1a1330] md:text-[26px]">
           {passage.parts.map((part, i) =>
@@ -382,9 +445,7 @@ function PassagePlay({
         }}
       >
         <p className="mb-2 text-xs font-medium text-[#0f766e]">
-          {allSlotsFilled
-            ? "想改的話，可把空格的詞語點走再放新的"
-            : "把下面的常用詞放到空格（有些是干擾項，不一定用得上）："}
+          {allSlotsFilled ? copy.bankHintFilled : copy.bankHint}
         </p>
         <div className="flex flex-wrap gap-2">
           {bankTokens.map((t) => (
@@ -420,7 +481,7 @@ function PassagePlay({
             </button>
           ))}
           {bankTokens.length === 0 && (
-            <span className="py-2 text-sm text-[#9bbdb6]">（空格可點選取回詞語）</span>
+            <span className="py-2 text-sm text-[#9bbdb6]">{copy.bankEmpty}</span>
           )}
         </div>
       </div>
@@ -436,7 +497,7 @@ function PassagePlay({
                 : "border-[#f59e0b]/30 bg-[#fffbeb] text-[#b45309]",
             ].join(" ")}
           >
-            這段答對 {correctNow} / {passage.blanks.length} 個常用詞。
+            {copy.passageResult(correctNow, passage.blanks.length)}
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
               {passage.blanks.map((b, i) => (
                 <span key={i} className="inline-flex items-center gap-1">
@@ -454,7 +515,7 @@ function PassagePlay({
               className="gap-2 rounded-full text-white shadow-[0_4px_14px_rgba(13,148,136,0.3)] transition hover:-translate-y-0.5"
               style={{ backgroundColor: ACCENT }}
             >
-              {index + 1 < total ? "下一段" : "看成績"}
+              {index + 1 < total ? copy.nextPassage : shared.seeResults}
               <ArrowRight className="size-4" />
             </Button>
           </div>
@@ -468,7 +529,7 @@ function PassagePlay({
             style={{ backgroundColor: allSlotsFilled ? ACCENT : undefined }}
           >
             <CheckCircle2 className="size-4" />
-            檢查答案
+            {copy.checkAnswers}
           </Button>
         </div>
       )}
@@ -580,13 +641,16 @@ function Result({
   newBadges: string[];
   onReplay: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
+  const badgeCopy = useCopy(BADGE_COPY);
   const displayScore = useCountUp(score);
   const message = useMemo(() => {
-    if (score >= 100) return "全部答對！常用詞難不到你！👑";
-    if (score >= 80) return "很厲害，幾乎全對！🏅";
-    if (score >= 60) return "做得不錯，再接再厲！⭐";
-    return "多讀幾次原文，就會記得更牢！🌱";
-  }, [score]);
+    if (score >= 100) return copy.msgPerfect;
+    if (score >= 80) return copy.msg80;
+    if (score >= 60) return copy.msg60;
+    return copy.msgLow;
+  }, [score, copy]);
 
   return (
     <div className="relative space-y-6 text-center">
@@ -598,7 +662,7 @@ function Result({
       </div>
 
       <div className="space-y-1">
-        <p className="text-sm text-[#6b6385]">本場得分</p>
+        <p className="text-sm text-[#6b6385]">{shared.roundScore}</p>
         <p className="font-serif text-[56px] font-semibold leading-none text-[#1a1330]">
           {displayScore}
         </p>
@@ -606,14 +670,14 @@ function Result({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <ResultStat label="放對詞語" value={`${correct}/${total}`} />
-        <ResultStat label="最長連對" value={`${maxStreak}`} />
-        <ResultStat label="歷來最高" value={`${bestScore}`} />
+        <ResultStat label={copy.wordsPlaced} value={`${correct}/${total}`} />
+        <ResultStat label={shared.longestStreak} value={`${maxStreak}`} />
+        <ResultStat label={shared.allTimeBest} value={`${bestScore}`} />
       </div>
 
       {newBadges.length > 0 && (
         <div className="wyt-pop-in rounded-[16px] border border-[#bdeae3] bg-[#effbf8] p-5">
-          <p className="text-sm font-semibold text-[#0f766e]">🎉 解鎖新獎章！</p>
+          <p className="text-sm font-semibold text-[#0f766e]">{shared.newBadges}</p>
           <div className="mt-3 flex flex-wrap justify-center gap-3">
             {newBadges.map((id, i) => {
               const b = getBadge(id);
@@ -625,7 +689,7 @@ function Result({
                   className="wyt-pop-in flex items-center gap-2 rounded-full border border-[#bdeae3] bg-white px-3 py-1.5 text-sm font-medium text-[#1a1330]"
                 >
                   <span className="text-lg">{b.emoji}</span>
-                  {b.label}
+                  {badgeCopy[b.id]?.label ?? b.label}
                 </div>
               );
             })}
@@ -640,7 +704,7 @@ function Result({
           style={{ backgroundColor: ACCENT }}
         >
           <RotateCcw className="size-4" />
-          再玩一次
+          {shared.playAgain}
         </Button>
         <Link href="/chinese/wenyan">
           <Button
@@ -648,7 +712,7 @@ function Result({
             className="gap-2 rounded-full border-[#e0dbf0] bg-white text-[#5b4f7a] transition hover:border-[#c4b8ec] hover:bg-[#f7f4ff]"
           >
             <ChevronLeft className="size-4" />
-            回到首頁
+            {shared.backHome}
           </Button>
         </Link>
       </div>

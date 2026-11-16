@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { renderWordProblemHtml } from "@/lib/math-word-problem";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
 
 /**
  * 異分母分數加法 (Addition of fractions with unlike denominators).
@@ -181,30 +183,109 @@ const STYLES = `
 .fa47-root .scale-viewport > .container{ transform-origin:top center; flex:none; }
 `;
 
-const BODY_HTML = `
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "分數相加",
+    restartTitle: "回到這一題的初始狀態，重新開始操作",
+    restart: "↺ 重新開始",
+    showMixed: "顯示帶分數",
+    showNumberLine: "顯示數線",
+    speed: "速度: ",
+    random: "🎲 隨機出題",
+    preparing: "💡 準備中...",
+    clickFraction: "💡 點擊上方分數，顯示圖形！",
+    tryMerge: "💡 試著將兩條長條圖拖拉在一起合併，看看會發生什麼事？（或點擊「擴/約分」讓分母相同）",
+    notCommonDenom:
+      "💡 發現了嗎？因為「分母」不相同，無法用相同的格線算出來。<br>請試著在上方的算式點擊「擴分/約分」尋找公共的分母！",
+    sameDenom: "💡 分母相同了！請將上方的色塊「拖拉」或「點擊」到下方合併結果區。",
+    allMerged: "💡 太棒了！全部合併完成，請填寫下方最終答案！",
+    mixedOrImproper: " (可填帶分數或假分數)",
+    undoHint: "想重新試試？點一下「合併結果」裡的色塊，就能一份一份退回原來的長條圖。",
+    commonUnit: "💡 公共分數單位為： ",
+    expand: "➕ 擴分",
+    simplify: "➖ 約分",
+    unmerged: "未通分合併",
+    noGridLines: "(分母不同，無格線)",
+    mergeResult: "合併結果",
+    clickOrDrag: "(點擊或拖拉)",
+    returnBlockTitle: "點一下退回原本的長條圖",
+    perfect: "🎉 完全正確！而且已經是最簡化的答案了！",
+    rightValue: "🌟 答對了數值！但試試看，這個答案可以再「約分」或「轉成帶分數」喔！",
+    lcmHint: "（提示：你通分時使用的分母不是最小公倍數喔！雖然算得對，但數字會比較大。）",
+    wrong: "👀 答案不對喔，再檢查一下整數和分子相加的結果！",
+    wordProblems: [
+      "小明吃了 [FRAC1] 塊披薩，小紅吃了 [FRAC2] 塊。請問他們共吃了多少塊披薩？",
+      "第一塊農田面積為 [FRAC1] 公頃，第二塊為 [FRAC2] 公頃。請問兩塊農田的面積共是多少公頃？",
+      "媽媽買了 [FRAC1] 公斤的蘋果和 [FRAC2] 公斤的橘子。請問水果總共有多少公斤？",
+      "水桶裡原有 [FRAC1] 公升的水，又加入了 [FRAC2] 公升。請問現在水桶裡共有多少公升的水？",
+      "紅彩帶長 [FRAC1] 公尺，藍彩帶長 [FRAC2] 公尺。請問兩條彩帶接在一起共長多少公尺？",
+    ],
+  },
+  en: {
+    title: "Addition of Fractions",
+    restartTitle: "Go back to the start of this question and try again",
+    restart: "↺ Restart",
+    showMixed: "Show mixed numbers",
+    showNumberLine: "Show number line",
+    speed: "Speed: ",
+    random: "🎲 Random question",
+    preparing: "💡 Getting ready...",
+    clickFraction: "💡 Click the fractions above to show the bars!",
+    tryMerge: "💡 Try dragging the two bars together. What happens? (Or click Expand / Reduce to make the denominators the same.)",
+    notCommonDenom:
+      "💡 Did you notice? The denominators are different, so the grid lines do not match.<br>Click Expand / Reduce in the number sentence above to find a common denominator!",
+    sameDenom: "💡 The denominators are the same now! Drag or click the coloured blocks above into the result area below.",
+    allMerged: "💡 Well done! Everything is combined. Now write the final answer below!",
+    mixedOrImproper: " (You can write a mixed number or an improper fraction.)",
+    undoHint: "Want to try again? Click a block in the Result bar to send it back to its bar, one part at a time.",
+    commonUnit: "💡 Common fraction unit: ",
+    expand: "➕ Expand",
+    simplify: "➖ Reduce",
+    unmerged: "Without a common denominator",
+    noGridLines: "(Different denominators, no grid lines)",
+    mergeResult: "Result",
+    clickOrDrag: "(Click or drag)",
+    returnBlockTitle: "Click to send it back to its bar",
+    perfect: "🎉 Completely correct! And it is already in its simplest form!",
+    rightValue: "🌟 The value is correct! But can you reduce it or change it into a mixed number?",
+    lcmHint: "(Hint: the common denominator you used is not the least common multiple. Your answer is right, but the numbers are bigger.)",
+    wrong: "👀 Not quite. Check your whole numbers and numerators again!",
+    wordProblems: [
+      "Siu Ming ate [FRAC1] pizzas and Siu Hung ate [FRAC2] pizzas. How many pizzas did they eat altogether?",
+      "The first field has an area of [FRAC1] hectares and the second has [FRAC2] hectares. What is the total area of the two fields in hectares?",
+      "Mum bought [FRAC1] kg of apples and [FRAC2] kg of oranges. How many kilograms of fruit did she buy altogether?",
+      "A bucket had [FRAC1] litres of water. Then [FRAC2] litres more were added. How many litres of water are in the bucket now?",
+      "A red ribbon is [FRAC1] m long and a blue ribbon is [FRAC2] m long. How long are the two ribbons when joined together?",
+    ],
+  },
+});
+
+type Copy = (typeof COPY)["zh-Hant"];
+
+const buildBody = (copy: Copy) => `
 <div class="scale-viewport">
 <div class="container">
   <div class="header">
     <div class="header-left">
-      <div class="title-badge">分數相加</div>
-      <button class="lang-btn btn-restart" onclick="window.__FA47.restart()" title="回到這一題的初始狀態，重新開始操作">↺ 重新開始</button>
+      <div class="title-badge">${copy.title}</div>
+      <button class="lang-btn btn-restart" onclick="window.__FA47.restart()" title="${copy.restartTitle}">${copy.restart}</button>
     </div>
     <div class="header-right">
       <div class="controls-pill">
         <label class="checkbox-label">
-          <input type="checkbox" id="show-whole-cb" onchange="window.__FA47.toggleWholeNumber()"> 顯示帶分數
+          <input type="checkbox" id="show-whole-cb" onchange="window.__FA47.toggleWholeNumber()"> ${copy.showMixed}
         </label>
         <span class="divider"></span>
         <label class="checkbox-label">
-          <input type="checkbox" id="show-nl-cb" onchange="window.__FA47.toggleNumberLine()" checked> 顯示數線
+          <input type="checkbox" id="show-nl-cb" onchange="window.__FA47.toggleNumberLine()" checked> ${copy.showNumberLine}
         </label>
         <span class="divider"></span>
         <div class="speed-ctrl">
-          <label for="speed-slider">速度: <span id="speed-val" style="color: var(--blue);">1.0</span>x</label>
+          <label for="speed-slider">${copy.speed}<span id="speed-val" style="color: var(--blue);">1.0</span>x</label>
           <input type="range" id="speed-slider" min="0.5" max="3" step="0.1" value="1.0" oninput="window.__FA47.updateSpeed()">
         </div>
       </div>
-      <button class="lang-btn btn-random" onclick="window.__FA47.randomChallenge()">🎲 隨機出題</button>
+      <button class="lang-btn btn-random" onclick="window.__FA47.randomChallenge()">${copy.random}</button>
     </div>
   </div>
 
@@ -233,7 +314,7 @@ const BODY_HTML = `
   </div>
 
   <div class="animation-zone" id="anim-zone">
-    <div id="drag-instruction" class="instruction-text">💡 準備中...</div>
+    <div id="drag-instruction" class="instruction-text">${copy.preparing}</div>
     <div id="anim-area"></div>
 
     <div id="bottom-answer-zone">
@@ -279,6 +360,7 @@ declare global {
 }
 
 export default function FractionAdditionPage() {
+  const copy = useCopy(COPY);
   const rootRef = useRef<HTMLDivElement>(null);
   const [embedded, setEmbedded] = useState(false);
 
@@ -475,13 +557,7 @@ export default function FractionAdditionPage() {
       }
     }
 
-    const wordProblemTemplates = [
-      "小明吃了 [FRAC1] 塊披薩，小紅吃了 [FRAC2] 塊。請問他們共吃了多少塊披薩？",
-      "第一塊農田面積為 [FRAC1] 公頃，第二塊為 [FRAC2] 公頃。請問兩塊農田的面積共是多少公頃？",
-      "媽媽買了 [FRAC1] 公斤的蘋果和 [FRAC2] 公斤的橘子。請問水果總共有多少公斤？",
-      "水桶裡原有 [FRAC1] 公升的水，又加入了 [FRAC2] 公升。請問現在水桶裡共有多少公升的水？",
-      "紅彩帶長 [FRAC1] 公尺，藍彩帶長 [FRAC2] 公尺。請問兩條彩帶接在一起共長多少公尺？",
-    ];
+    const wordProblemTemplates = copy.wordProblems;
 
     /**
      * 「重新開始」要回到的狀態。載入時（套用完 dashboard 傳進來的題目參數之後）拍一次快照，
@@ -1165,7 +1241,7 @@ export default function FractionAdditionPage() {
         block.style.boxSizing = "border-box";
         block.style.zIndex = "1";
         block.style.cursor = "pointer";
-        block.title = "點一下退回原本的長條圖";
+        block.title = copy.returnBlockTitle;
 
         block.onclick = () => {
           const removed = mergedBlocks.splice(i, 1)[0];
@@ -1210,7 +1286,7 @@ export default function FractionAdditionPage() {
       }
 
       const labelError = $e("label-error")!;
-      labelError.innerHTML = `<div style="display:inline-flex; align-items:center;">${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}<span style="margin: 0 5px;">+</span>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</div><span style="font-size:0.8rem; color:var(--red); margin-top:5px;">(分母不同，無格線)</span>`;
+      labelError.innerHTML = `<div style="display:inline-flex; align-items:center;">${getDisplayHtml(vals.w1, vals.n1, vals.d1, "var(--red)")}<span style="margin: 0 5px;">+</span>${getDisplayHtml(vals.w2, vals.n2, vals.d2, "var(--blue)")}</div><span style="font-size:0.8rem; color:var(--red); margin-top:5px;">${copy.noGridLines}</span>`;
 
       const nlWrap = $e("bar-error-nl");
       if (nlWrap) {
@@ -1262,7 +1338,7 @@ export default function FractionAdditionPage() {
         if (b.id && b.id.startsWith("drag-2")) moveToBarErrorMode(b);
       });
 
-      $e("drag-instruction")!.innerHTML = `💡 發現了嗎？因為「分母」不相同，無法用相同的格線算出來。<br>請試著在上方的算式點擊「擴分/約分」尋找公共的分母！`;
+      $e("drag-instruction")!.innerHTML = copy.notCommonDenom;
     }
 
     function moveToBarErrorMode(block: HTMLElement) {
@@ -1328,7 +1404,7 @@ export default function FractionAdditionPage() {
           wrap3.appendChild(unit);
         }
         const label3 = $e("label3")!;
-        label3.innerHTML = `合併結果<span style="font-size:0.8rem; color:var(--orange); margin-top:5px;">(點擊或拖拉)</span>`;
+        label3.innerHTML = `${copy.mergeResult}<span style="font-size:0.8rem; color:var(--orange); margin-top:5px;">${copy.clickOrDrag}</span>`;
         wrap3.querySelectorAll(".bar-grid").forEach((gridContainer) => {
           applyGridAnimation(gridContainer as HTMLElement, cd1, 1, 1, "none");
         });
@@ -1442,14 +1518,14 @@ export default function FractionAdditionPage() {
         let hint = "";
         if (exactN >= exactD) {
           $e("ans-w")!.style.display = "inline-block";
-          hint = " (可填帶分數或假分數)";
+          hint = copy.mixedOrImproper;
         } else {
           $e("ans-w")!.style.display = "none";
           $i("ans-w")!.value = "";
         }
 
-        $e("bot-public-unit")!.innerHTML = `💡 公共分數單位為： <b style="display:inline-flex; align-items:center; vertical-align:middle;">${getFracHtml(1, cd1, "var(--dark)")}</b>`;
-        $e("drag-instruction")!.innerHTML = `💡 太棒了！全部合併完成，請填寫下方最終答案！${hint}<br><span style="font-size:0.9rem; color:var(--dark);">想重新試試？點一下「合併結果」裡的色塊，就能一份一份退回原來的長條圖。</span>`;
+        $e("bot-public-unit")!.innerHTML = `${copy.commonUnit}<b style="display:inline-flex; align-items:center; vertical-align:middle;">${getFracHtml(1, cd1, "var(--dark)")}</b>`;
+        $e("drag-instruction")!.innerHTML = `${copy.allMerged}${hint}<br><span style="font-size:0.9rem; color:var(--dark);">${copy.undoHint}</span>`;
 
         const bar1Row = $e("bar1-row");
         const bar2Row = $e("bar2-row");
@@ -1479,7 +1555,7 @@ export default function FractionAdditionPage() {
             $e("bottom-answer-zone")!.style.display = "none";
           }
         }, 300);
-        $e("drag-instruction")!.innerHTML = `💡 分母相同了！請將上方的色塊「拖拉」或「點擊」到下方合併結果區。`;
+        $e("drag-instruction")!.innerHTML = copy.sameDenom;
       }
     }
 
@@ -1496,13 +1572,13 @@ export default function FractionAdditionPage() {
       T(() => ($e("bottom-answer-zone")!.style.display = "none"), 300);
 
       if (isCommonDenomReady) {
-        $e("drag-instruction")!.innerHTML = `💡 分母相同了！請將上方的色塊「拖拉」或「點擊」到下方合併結果區。`;
+        $e("drag-instruction")!.innerHTML = copy.sameDenom;
       } else {
         const errorRow = $e("bar-error-row");
         if (errorRow && errorRow.style.display === "flex") {
-          $e("drag-instruction")!.innerHTML = `💡 發現了嗎？因為「分母」不相同，無法用相同的格線算出來。<br>請試著在上方的算式點擊「擴分/約分」尋找公共的分母！`;
+          $e("drag-instruction")!.innerHTML = copy.notCommonDenom;
         } else {
-          $e("drag-instruction")!.innerHTML = `💡 試著將兩條長條圖拖拉在一起合併，看看會發生什麼事？（或點擊「擴/約分」讓分母相同）`;
+          $e("drag-instruction")!.innerHTML = copy.tryMerge;
         }
       }
     }
@@ -1555,8 +1631,8 @@ export default function FractionAdditionPage() {
                 <div id="bar1-nl" class="nl-wrap-container" style="display:none;"></div>
             </div>
             <div style="width:15%; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-                <button class="tool-btn" onclick="window.__FA47.applyTool(1, 'expand')">➕ 擴分</button>
-                <button class="tool-btn" onclick="window.__FA47.applyTool(1, 'simplify')">➖ 約分</button>
+                <button class="tool-btn" onclick="window.__FA47.applyTool(1, 'expand')">${copy.expand}</button>
+                <button class="tool-btn" onclick="window.__FA47.applyTool(1, 'simplify')">${copy.simplify}</button>
             </div>
         </div>
         <div id="bar2-row" style="display:none; position:relative; width:100%; min-height:80px; align-items:center; justify-content:space-between;">
@@ -1566,14 +1642,14 @@ export default function FractionAdditionPage() {
                 <div id="bar2-nl" class="nl-wrap-container" style="display:none;"></div>
             </div>
             <div style="width:15%; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-                <button class="tool-btn" onclick="window.__FA47.applyTool(2, 'expand')">➕ 擴分</button>
-                <button class="tool-btn" onclick="window.__FA47.applyTool(2, 'simplify')">➖ 約分</button>
+                <button class="tool-btn" onclick="window.__FA47.applyTool(2, 'expand')">${copy.expand}</button>
+                <button class="tool-btn" onclick="window.__FA47.applyTool(2, 'simplify')">${copy.simplify}</button>
             </div>
         </div>
 
         <div id="bar-error-row" style="display:none; position:relative; width:100%; min-height:80px; align-items:center; justify-content:space-between; margin-top: 10px; padding-top: 15px; border-top: 2px dashed #ccc;">
             <div id="label-error" style="width:15%; text-align:center; font-weight:bold; color:var(--dark); font-size:1.1rem; display:flex; flex-direction:column; align-items:center;">
-                未通分合併
+                ${copy.unmerged}
             </div>
             <div class="bars-column">
                 <div id="bar-error-wrap" class="bar-wrap-container droppable-area" style="min-height: 50px; outline: 3px dashed var(--red); background-color: #fafafa; border-radius: 4px;"></div>
@@ -1584,8 +1660,8 @@ export default function FractionAdditionPage() {
 
         <div id="bar3-row" style="display:none; position:relative; width:100%; min-height:80px; align-items:center; justify-content:space-between; margin-top: 10px; padding-top: 15px; border-top: 2px dashed #ccc;">
             <div id="label3" style="width:15%; text-align:center; font-weight:bold; color:var(--dark); font-size:1.1rem; display:flex; flex-direction:column; align-items:center;">
-                合併結果
-                <span style="font-size:0.8rem; color:var(--orange); margin-top:5px;">(點擊或拖拉)</span>
+                ${copy.mergeResult}
+                <span style="font-size:0.8rem; color:var(--orange); margin-top:5px;">${copy.clickOrDrag}</span>
             </div>
             <div class="bars-column">
                 <div id="bar3-wrap" class="bar-wrap-container droppable-area" style="min-height: 50px; outline: 3px dashed var(--orange); outline-offset: 4px; border-radius: 4px; transition: 0.3s;"></div>
@@ -1597,7 +1673,7 @@ export default function FractionAdditionPage() {
 
       renderBar(1, "none");
       renderBar(2, "none");
-      $e("drag-instruction")!.innerHTML = `💡 點擊上方分數，顯示圖形！`;
+      $e("drag-instruction")!.innerHTML = copy.clickFraction;
       resetInactivityTimer();
     }
 
@@ -1673,13 +1749,12 @@ export default function FractionAdditionPage() {
           if (ansN === 0 && ansW === simpleW && simpleMixedN === 0) isSimplest = true;
 
           if (isSimplest) {
-            msg = "🎉 完全正確！而且已經是最簡化的答案了！";
+            msg = copy.perfect;
           } else {
-            msg = '🌟 答對了數值！但試試看，這個答案可以再「約分」或「轉成帶分數」喔！';
+            msg = copy.rightValue;
           }
           if (currentD !== LcmD) {
-            msg +=
-              '<br><span style="color:var(--orange); font-size:1rem; font-weight:normal;">（提示：你通分時使用的分母不是最小公倍數喔！雖然算得對，但數字會比較大。）</span>';
+            msg += `<br><span style="color:var(--orange); font-size:1rem; font-weight:normal;">${copy.lcmHint}</span>`;
           }
           fb.style.opacity = "1";
           fb.style.color = "var(--success)";
@@ -1687,7 +1762,7 @@ export default function FractionAdditionPage() {
         } else {
           fb.style.opacity = "1";
           fb.style.color = "var(--red)";
-          fb.innerText = "👀 答案不對喔，再檢查一下整數和分子相加的結果！";
+          fb.innerText = copy.wrong;
         }
       } else {
         fb.style.opacity = "0";
@@ -1712,7 +1787,7 @@ export default function FractionAdditionPage() {
     de.style.setProperty("--max-wholes", "1");
     de.style.setProperty("--unit-min-w", "120px");
     de.style.setProperty("--anim-time", "0.6s");
-    root.innerHTML = BODY_HTML;
+    root.innerHTML = buildBody(copy);
 
     const hand = document.createElement("div");
     hand.id = "tutorial-hand";
@@ -1820,7 +1895,10 @@ export default function FractionAdditionPage() {
       de.style.removeProperty("--unit-min-w");
       de.style.removeProperty("--anim-time");
     };
-  }, []);
+    // `copy` is a stable per-locale object, so this re-runs only on a language
+    // switch: the old instance is torn down and the tool re-initialised in the
+    // new language (the in-progress exercise restarts from the URL params).
+  }, [copy]);
 
   return (
     <>

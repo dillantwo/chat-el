@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { getSession } from "@/lib/session";
 import { canUseMathTool, mathToolDenied } from "@/lib/toolbox-access";
 import { recordTokenUsage } from "@/lib/token-usage";
+import { withReplyLanguage } from "@/lib/i18n/ai";
 
 type Clock24HoursState = {
   tool: "clock-24hrs";
@@ -168,7 +169,7 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: azure(deploymentName),
-      system: buildSystemPrompt(clockState ?? null),
+      system: await withReplyLanguage(buildSystemPrompt(clockState ?? null), "chat"),
       messages: uiMessagesToModelMessages(messages),
     });
 

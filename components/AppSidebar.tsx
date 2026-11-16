@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/components/AuthProvider";
 import { useToolbox, toolIconMap } from "@/contexts/ToolboxContext";
+import { toolDisplayName, toolGroupDisplayName } from "@/lib/math-tool-labels";
 import {
   Tooltip,
   TooltipContent,
@@ -52,6 +53,93 @@ import { deleteMathChatHistoryItem, getMathChatHistory, getMathChatHistoryItem, 
 import { getEnglishChatHistory, getEnglishChatHistoryItem, deleteEnglishChatHistoryItem, type EnglishChatHistorySummary } from "@/lib/english-chat-history";
 import { getChineseChatHistory, getChineseChatHistoryItem, deleteChineseChatHistoryItem, type ChineseChatHistorySummary } from "@/lib/chinese-chat-history";
 import { VocabBank } from "@/components/VocabBank";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useLocale } from "@/components/LocaleProvider";
+import { defineCopy, intlLocale, type Locale } from "@/lib/i18n/config";
+import { COMMON_COPY } from "@/lib/i18n/common";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    newDiagram: "新圖解",
+    newChat: "+ 新聊天",
+    addQuestion: "加入題目",
+    addNewQuestion: "+ Add New Question",
+    recommendedTools: "AI 推薦工具",
+    analysingQuestion: "正在分析題目...",
+    noRecommendedTools: "沒有特別推薦的工具，請從下方選擇。",
+    allTools: "全部工具",
+    diagramHistory: "圖解生成記錄",
+    diagramHistoryHintTeacher: "已保存的圖解（可分享給學生）",
+    diagramHistoryHintStudent: "老師分享給你的圖解",
+    sharedPrefix: "已分享 · ",
+    unshareTitle: "已分享給學生，點擊取消",
+    shareTitle: "分享給學生",
+    deleteRecord: "刪除記錄",
+    noDiagramsTeacher: "暫無圖解生成記錄",
+    noDiagramsStudent: "老師還沒有分享圖解",
+    deleteDiagramTitle: "刪除圖解記錄",
+    cannotUndo: "此操作無法復原。",
+    deleteSharedWarning: "此圖解已分享給學生，刪除後他們亦無法再開啟。",
+    cancel: "取消",
+    delete: "刪除",
+    shareUpdateFailed: "更新分享狀態失敗，請稍後再試。",
+    deleteFailed: "刪除失敗，請稍後再試。",
+    chatHistory: "聊天記錄",
+    englishChatHistory: "Chat History",
+    englishTask: (task: string | number) => `Task ${task}`,
+    englishGeneral: "General",
+    noRecords: "暫無記錄",
+    shareHistory: "分享記錄",
+    history: "歷史記錄",
+    shareHistoryDescription: "過去的聊天分享記錄",
+    historyDescription: "過去的提問記錄",
+    mathToolPrefix: (tool: string) => `工具: ${tool}`,
+    mathGeneral: "一般數學對話",
+    mathVolume: "體積工具",
+    mathClock24: "24小時時鐘",
+    mathClockDifference: "時間差時鐘",
+  },
+  en: {
+    newDiagram: "New diagram",
+    newChat: "+ New Chat",
+    addQuestion: "Add a question",
+    addNewQuestion: "+ Add New Question",
+    recommendedTools: "AI recommended tools",
+    analysingQuestion: "Looking at the question...",
+    noRecommendedTools: "No tools to recommend. Please pick one below.",
+    allTools: "All tools",
+    diagramHistory: "Diagram history",
+    diagramHistoryHintTeacher: "Saved diagrams (you can share them with pupils)",
+    diagramHistoryHintStudent: "Diagrams your teacher shared with you",
+    sharedPrefix: "Shared · ",
+    unshareTitle: "Shared with pupils. Click to stop sharing",
+    shareTitle: "Share with pupils",
+    deleteRecord: "Delete",
+    noDiagramsTeacher: "No diagrams yet",
+    noDiagramsStudent: "Your teacher hasn't shared any diagrams yet",
+    deleteDiagramTitle: "Delete diagram",
+    cannotUndo: "This can't be undone.",
+    deleteSharedWarning: "This diagram is shared with pupils. Once deleted, they can't open it any more.",
+    cancel: "Cancel",
+    delete: "Delete",
+    shareUpdateFailed: "Couldn't update sharing. Please try again later.",
+    deleteFailed: "Couldn't delete. Please try again later.",
+    chatHistory: "Chat history",
+    englishChatHistory: "Chat History",
+    englishTask: (task: string | number) => `Task ${task}`,
+    englishGeneral: "General",
+    noRecords: "No records yet",
+    shareHistory: "Shared chats",
+    history: "History",
+    shareHistoryDescription: "Chats you shared before",
+    historyDescription: "Questions you asked before",
+    mathToolPrefix: (tool: string) => `Tool: ${tool}`,
+    mathGeneral: "General maths chat",
+    mathVolume: "Volume tool",
+    mathClock24: "24-hour clock",
+    mathClockDifference: "Time difference clock",
+  },
+});
 
 interface SavedMessagePart {
   type: "text" | "file";
@@ -106,7 +194,9 @@ function ToolItem({
           <SidebarMenuSubButton
             onClick={onClick}
             isActive={isActive}
-            className={`relative gap-2.5 ${
+            // Long names (mostly the English ones) wrap onto a second line instead of
+            // being cut off with "…": an iPad has no hover, so the tooltip never shows.
+            className={`relative h-auto min-h-7 gap-2.5 py-1 ${
               isActive
                 ? "bg-blue-50 text-blue-700 font-semibold ring-1 ring-blue-300 pl-3 hover:bg-blue-100 hover:text-blue-700 data-active:bg-blue-50 data-active:text-blue-700"
                 : ""
@@ -126,7 +216,7 @@ function ToolItem({
               <Icon className="size-3" strokeWidth={2.5} />
             </span>
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-xs">
+              <span className="whitespace-normal break-words text-xs leading-snug">
                 {groupLabel && (
                   <span className="text-muted-foreground">{groupLabel} · </span>
                 )}
@@ -139,7 +229,7 @@ function ToolItem({
           </SidebarMenuSubButton>
       </TooltipTrigger>
       <TooltipContent side="right" className="text-xs">
-        {groupLabel && `${groupLabel} · `}{label} — {sub}
+        {groupLabel && `${groupLabel} · `}{label}{sub && ` — ${sub}`}
       </TooltipContent>
     </Tooltip>
   );
@@ -174,6 +264,15 @@ export function AppSidebar() {
     pathname.startsWith('/english/reading-comprehension') && pathname.endsWith('/roleplay');
   const isTeacher = user?.role === "teacher";
   const isStudent = user?.role === "student";
+
+  // English-subject screens are English by design, so the sidebar stays English
+  // there whatever the interface language; everywhere else it follows the locale.
+  const { locale } = useLocale();
+  const sidebarLocale: Locale = pathname.startsWith('/english') ? "en" : locale;
+  const copy = COPY[sidebarLocale];
+  const common = COMMON_COPY[sidebarLocale];
+  const formatDate = (value: string | number | Date) =>
+    new Date(value).toLocaleString(intlLocale(sidebarLocale));
 
   const allToolGroups = toolbox?.allToolGroups ?? [];
   const isAnalyzingTools = toolbox?.isAnalyzingTools ?? false;
@@ -244,7 +343,7 @@ export function AppSidebar() {
       if (!res.ok) throw new Error("Failed to update sharing");
       fetchSavedAiTools();
     } catch {
-      alert("更新分享狀態失敗，請稍後再試。");
+      alert(copy.shareUpdateFailed);
     }
   }
 
@@ -283,7 +382,7 @@ export function AppSidebar() {
       closeDeleteToolDialog();
       fetchSavedAiTools();
     } catch {
-      setDeleteToolError("刪除失敗，請稍後再試。");
+      setDeleteToolError(copy.deleteFailed);
     } finally {
       setDeletingTool(false);
     }
@@ -437,9 +536,13 @@ export function AppSidebar() {
   const toolGroupLabelMap: Record<string, string> = {};
   for (const group of allToolGroups) {
     for (const t of group.tools) {
-      toolGroupLabelMap[t.key] = group.label;
+      toolGroupLabelMap[t.key] = toolGroupDisplayName(group.type, group.label, sidebarLocale);
     }
   }
+
+  // The stored `sub` ("FractionApp (Addition)") is the English hint in the
+  // Chinese tooltip; in English the name already is English, so it is dropped.
+  const toolSub = (tool: { sub: string }) => (sidebarLocale === "en" ? "" : tool.sub);
 
   function getMathHistoryIcon(kind: MathChatHistorySummary["kind"], selectedTool?: string | null) {
     if (kind === "volume-cubes") return Box;
@@ -473,7 +576,7 @@ export function AppSidebar() {
               onClick={() => window.dispatchEvent(new CustomEvent('diagram:new'))}
             >
               <Sparkles className="size-4" />
-              新圖解
+              {copy.newDiagram}
             </Button>
           )
         ) : (
@@ -507,7 +610,7 @@ export function AppSidebar() {
           }
           router.push(`/${subject}`);
         }}>
-          {isEnglishDashboard ? '+ New Chat' : isChineseLikeChat ? '+ 新聊天' : isMathDashboard ? '加入題目' : '+ Add New Question'}
+          {isEnglishDashboard || isChineseLikeChat ? copy.newChat : isMathDashboard ? copy.addQuestion : copy.addNewQuestion}
         </Button>
         )}
       </SidebarHeader>
@@ -518,7 +621,7 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel className="flex items-center gap-1.5">
               <Sparkles className="size-3.5" />
-              AI 推薦工具
+              {copy.recommendedTools}
             </SidebarGroupLabel>
             {recommendedSteps.length > 0 ? (
               <SidebarMenuSub>
@@ -527,8 +630,8 @@ export function AppSidebar() {
                   <ToolItem
                     key={`${index}-${step.toolKey}`}
                     toolKey={tool.key}
-                    label={tool.label}
-                    sub={tool.sub}
+                    label={toolDisplayName(tool, sidebarLocale)}
+                    sub={toolSub(tool)}
                     icon={tool.icon}
                     iconBg={tool.iconBg}
                     isActive={selectedTool === tool.key && selectedStepIndex === index}
@@ -539,11 +642,11 @@ export function AppSidebar() {
               </SidebarMenuSub>
             ) : isAnalyzingTools ? (
               <p className="text-xs text-muted-foreground px-2 py-1 animate-pulse">
-                正在分析題目...
+                {copy.analysingQuestion}
               </p>
             ) : (
               <p className="text-xs text-muted-foreground px-2 py-1">
-                沒有特別推薦的工具，請從下方選擇。
+                {copy.noRecommendedTools}
               </p>
             )}
           </SidebarGroup>
@@ -552,20 +655,20 @@ export function AppSidebar() {
         {/* All Tools grouped by type */}
         {allToolGroups.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>全部工具</SidebarGroupLabel>
+            <SidebarGroupLabel>{copy.allTools}</SidebarGroupLabel>
             <SidebarMenu>
               {allToolGroups.map((group) => (
                 <SidebarMenuItem key={group.label}>
                   <SidebarMenuButton className="text-xs font-medium text-muted-foreground pointer-events-none">
-                    {group.label}
+                    {toolGroupDisplayName(group.type, group.label, sidebarLocale)}
                   </SidebarMenuButton>
                   <SidebarMenuSub>
                     {group.tools.map((t) => (
                       <ToolItem
                         key={t.key}
                         toolKey={t.key}
-                        label={t.label}
-                        sub={t.sub}
+                        label={toolDisplayName(t, sidebarLocale)}
+                        sub={toolSub(t)}
                         icon={t.icon}
                         iconBg={t.iconBg}
                         isActive={selectedTool === t.key}
@@ -584,10 +687,10 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel className="flex items-center gap-1.5">
               <Clock className="size-3.5" />
-              圖解生成記錄
+              {copy.diagramHistory}
             </SidebarGroupLabel>
             <p className="px-3 pb-1 text-[10px] text-muted-foreground">
-              {isTeacher ? "已保存的圖解（可分享給學生）" : "老師分享給你的圖解"}
+              {isTeacher ? copy.diagramHistoryHintTeacher : copy.diagramHistoryHintStudent}
             </p>
             {savedAiTools.length > 0 ? (
               <div className="space-y-0.5 px-1">
@@ -620,8 +723,8 @@ export function AppSidebar() {
                           {item.title}
                         </div>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {!isTeacher && item.sharedWithStudents && "已分享 · "}
-                          {item.updatedAt ? new Date(item.updatedAt).toLocaleString("zh-HK") : ""}
+                          {!isTeacher && item.sharedWithStudents && copy.sharedPrefix}
+                          {item.updatedAt ? formatDate(item.updatedAt) : ""}
                         </p>
                       </div>
                     </button>
@@ -636,7 +739,7 @@ export function AppSidebar() {
                               ? "size-7 shrink-0 bg-[#146ef5] text-white hover:bg-[#0055d4]"
                               : "size-7 shrink-0"
                           }
-                          title={item.sharedWithStudents ? "已分享給學生，點擊取消" : "分享給學生"}
+                          title={item.sharedWithStudents ? copy.unshareTitle : copy.shareTitle}
                           onClick={(event) => {
                             event.stopPropagation();
                             void toggleShareAiTool(item.toolKey, !item.sharedWithStudents);
@@ -649,7 +752,7 @@ export function AppSidebar() {
                           size="icon-sm"
                           variant="ghost"
                           className="size-7 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
-                          title="刪除記錄"
+                          title={copy.deleteRecord}
                           onClick={(event) => {
                             event.stopPropagation();
                             setDeleteToolError(null);
@@ -665,7 +768,7 @@ export function AppSidebar() {
               </div>
             ) : (
               <p className="px-3 py-2 text-xs text-muted-foreground">
-                {isTeacher ? "暫無圖解生成記錄" : "老師還沒有分享圖解"}
+                {isTeacher ? copy.noDiagramsTeacher : copy.noDiagramsStudent}
               </p>
             )}
 
@@ -684,8 +787,8 @@ export function AppSidebar() {
             >
               <DialogContent className="max-w-sm">
                 <DialogHeader>
-                  <DialogTitle>刪除圖解記錄</DialogTitle>
-                  <DialogDescription>此操作無法復原。</DialogDescription>
+                  <DialogTitle>{copy.deleteDiagramTitle}</DialogTitle>
+                  <DialogDescription>{copy.cannotUndo}</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-2">
@@ -694,7 +797,7 @@ export function AppSidebar() {
                   </p>
                   {pendingDeleteTool?.sharedWithStudents && (
                     <p className="rounded-lg bg-[#fee2e2] px-3 py-2 text-xs text-[#b91c1c]">
-                      此圖解已分享給學生，刪除後他們亦無法再開啟。
+                      {copy.deleteSharedWarning}
                     </p>
                   )}
                   {deleteToolError && <p className="text-sm text-destructive">{deleteToolError}</p>}
@@ -702,7 +805,7 @@ export function AppSidebar() {
 
                 <DialogFooter className="flex-row justify-end gap-2">
                   <Button variant="outline" disabled={deletingTool} onClick={closeDeleteToolDialog}>
-                    取消
+                    {copy.cancel}
                   </Button>
                   <Button
                     variant="destructive"
@@ -712,7 +815,7 @@ export function AppSidebar() {
                     }}
                   >
                     {deletingTool && <Loader2 className="size-4 animate-spin" />}
-                    刪除
+                    {copy.delete}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -725,7 +828,7 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel className="flex items-center gap-1.5">
               <Clock className="size-3.5" />
-              Chat History
+              {copy.englishChatHistory}
             </SidebarGroupLabel>
             {englishChatHistory.length > 0 ? (
               <div className="space-y-0.5 px-1">
@@ -751,9 +854,9 @@ export function AppSidebar() {
                           {item.title}
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {item.selectedTask ? `Task ${item.selectedTask}` : "General"}
+                          {item.selectedTask ? copy.englishTask(item.selectedTask) : copy.englishGeneral}
                           {" · "}
-                          {new Date(item.updatedAt).toLocaleString("zh-HK")}
+                          {formatDate(item.updatedAt)}
                         </p>
                       </div>
                     </button>
@@ -762,7 +865,7 @@ export function AppSidebar() {
                       size="icon-sm"
                       variant="ghost"
                       className="mt-0.5 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
-                      title="刪除記錄"
+                      title={copy.deleteRecord}
                       onClick={(event) => {
                         event.stopPropagation();
                         void deleteEnglishChatHistoryItem(item.id);
@@ -774,7 +877,7 @@ export function AppSidebar() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground px-3 py-2">暫無記錄</p>
+              <p className="text-xs text-muted-foreground px-3 py-2">{copy.noRecords}</p>
             )}
           </SidebarGroup>
         )}
@@ -784,7 +887,7 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel className="flex items-center gap-1.5">
               <Clock className="size-3.5" />
-              聊天記錄
+              {copy.chatHistory}
             </SidebarGroupLabel>
             {chineseChatHistory.length > 0 ? (
               <div className="space-y-0.5 px-1">
@@ -810,7 +913,7 @@ export function AppSidebar() {
                           {item.title}
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(item.updatedAt).toLocaleString("zh-HK")}
+                          {formatDate(item.updatedAt)}
                         </p>
                       </div>
                     </button>
@@ -819,7 +922,7 @@ export function AppSidebar() {
                       size="icon-sm"
                       variant="ghost"
                       className="mt-0.5 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
-                      title="刪除記錄"
+                      title={copy.deleteRecord}
                       onClick={(event) => {
                         event.stopPropagation();
                         void deleteChineseChatHistoryItem(item.id);
@@ -831,7 +934,7 @@ export function AppSidebar() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground px-3 py-2">暫無記錄</p>
+              <p className="text-xs text-muted-foreground px-3 py-2">{copy.noRecords}</p>
             )}
           </SidebarGroup>
         )}
@@ -852,16 +955,16 @@ export function AppSidebar() {
             }
           >
             <Clock className="size-3.5" />
-            {isEnglishDashboard ? "分享記錄" : "歷史記錄"}
+            {isEnglishDashboard ? copy.shareHistory : copy.history}
           </SheetTrigger>
           <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="px-4 pt-4 pb-2">
               <SheetTitle className="flex items-center gap-2 text-sm">
                 <Clock className="size-4" />
-                {isEnglishDashboard ? "分享記錄" : "歷史記錄"}
+                {isEnglishDashboard ? copy.shareHistory : copy.history}
               </SheetTitle>
               <SheetDescription className="text-xs">
-                {isEnglishDashboard ? "過去的聊天分享記錄" : "過去的提問記錄"}
+                {isEnglishDashboard ? copy.shareHistoryDescription : copy.historyDescription}
               </SheetDescription>
             </SheetHeader>
             <Separator />
@@ -896,14 +999,14 @@ export function AppSidebar() {
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             {item.kind === "general"
-                              ? (item.selectedTool ? `工具: ${item.selectedTool}` : "一般數學對話")
+                              ? (item.selectedTool ? copy.mathToolPrefix(item.selectedTool) : copy.mathGeneral)
                               : item.kind === "volume-cubes"
-                                ? "體積工具"
+                                ? copy.mathVolume
                                 : item.kind === "clock-24hrs"
-                                  ? "24小時時鐘"
-                                  : "時間差時鐘"}
+                                  ? copy.mathClock24
+                                  : copy.mathClockDifference}
                             {" · "}
-                            {new Date(item.updatedAt).toLocaleString("zh-HK")}
+                            {formatDate(item.updatedAt)}
                           </p>
                         </div>
                       </button>
@@ -912,7 +1015,7 @@ export function AppSidebar() {
                         size="icon-sm"
                         variant="ghost"
                         className="mt-0.5 shrink-0 rounded-[4px] text-muted-foreground hover:bg-[#fee2e2] hover:text-[#b91c1c]"
-                        title="刪除記錄"
+                        title={copy.deleteRecord}
                         onClick={(event) => {
                           event.stopPropagation();
                           void deleteMathChatHistoryItem(item.id);
@@ -926,7 +1029,7 @@ export function AppSidebar() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <Clock className="size-8 mb-2 opacity-30" />
-                  <p className="text-xs">暫無記錄</p>
+                  <p className="text-xs">{copy.noRecords}</p>
                 </div>
               )}
             </div>
@@ -943,17 +1046,19 @@ export function AppSidebar() {
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col flex-1 min-w-0">
-            <span className="text-sm truncate">{user?.displayName ?? "用戶"}</span>
+            <span className="text-sm truncate">{user?.displayName ?? common.user}</span>
             {user && (
               <span className="text-xs text-muted-foreground capitalize">
-                {user.role === "teacher" ? "教師" : "學生"}
+                {user.role === "teacher" ? common.roles.teacher : common.roles.student}
               </span>
             )}
           </div>
+          {/* The sidebar is off-canvas when collapsed, so the switch goes with it. */}
+          <LanguageSwitcher />
           {user && (
             <button
               onClick={logout}
-              title="登出"
+              title={common.logout}
               className="ml-auto inline-flex items-center rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <LogOut className="size-4" />

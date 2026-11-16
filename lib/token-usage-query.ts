@@ -120,6 +120,42 @@ export async function loadUserDirectory(): Promise<Map<string, UserInfo>> {
   return map;
 }
 
+/** Records written before TokenUsage.topic existed (or by a route that omitted it). */
+const NO_STORED_TOPIC = { $in: [null, ""] };
+
+/**
+ * Mongo condition selecting the records whose *resolved* topic is `topic`.
+ *
+ * The report attributes a record to a topic via resolveTopicKey(): the stored
+ * topic wins, otherwise the topic is derived from endpoint (+ subject). Records
+ * with a stored topic are matched directly. For the rest, the distinct
+ * (endpoint, subject) pairs in range are resolved in JS with the same function,
+ * so the filter always agrees with the 主題 breakdown, including "other".
+ */
+async function buildTopicCondition(
+  topic: string,
+  base: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const pairs = await TokenUsage.aggregate<{
+    _id: { endpoint: string | null; subject: string | null };
+  }>([
+    { $match: { ...base, topic: NO_STORED_TOPIC } },
+    { $group: { _id: { endpoint: "$endpoint", subject: "$subject" } } },
+  ]);
+
+  const legacy = pairs
+    .filter(
+      (p) =>
+        resolveTopicKey({ topic: null, endpoint: p._id.endpoint, subject: p._id.subject }) ===
+        topic,
+    )
+    .map((p) => ({ endpoint: p._id.endpoint ?? null, subject: p._id.subject ?? null }));
+
+  const or: Record<string, unknown>[] = [{ topic }];
+  if (legacy.length > 0) or.push({ topic: NO_STORED_TOPIC, $or: legacy });
+  return { $or: or };
+}
+
 /**
  * Build the Mongo $match for a set of filters.
  *
@@ -127,15 +163,20 @@ export async function loadUserDirectory(): Promise<Map<string, UserInfo>> {
  * the query stays index-friendly (userId is indexed) instead of needing a
  * per-document $lookup.
  */
-export function buildUsageMatch(
+export async function buildUsageMatch(
   filters: UsageFilters,
   directory: Map<string, UserInfo>,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const match: Record<string, unknown> = {
     createdAt: { $gte: filters.from, $lte: filters.to },
   };
 
   if (filters.subject) match.subject = filters.subject;
+
+  // Kept in $and so it cannot collide with the school $or below.
+  if (filters.topic) {
+    match.$and = [await buildTopicCondition(filters.topic, match)];
+  }
 
   if (filters.userId) {
     match.userId = filters.userId;
@@ -159,10 +200,21 @@ export function buildUsageMatch(
       ids.push(info.id);
     }
 
-    if (filters.schoolId && filters.schoolId !== NO_SCHOOL && !filters.role && !rx) {
+    if (filters.schoolId && !filters.role && !rx) {
       // Also catch records whose user has since been deleted but which carry
-      // the school denormalized on the record itself.
-      match.$or = [{ userId: { $in: ids } }, { schoolId: filters.schoolId }];
+      // the school denormalized on the record itself. Restricted to users that
+      // no longer exist: a live user who moved schools is attributed to their
+      // current school by the report, so their old records must not leak into
+      // the old school's filter.
+      match.$or = [
+        { userId: { $in: ids } },
+        {
+          // null also matches a missing field, which is how the report
+          // buckets a deleted user with no school under 未綁定學校.
+          schoolId: filters.schoolId === NO_SCHOOL ? null : filters.schoolId,
+          userId: { $nin: [...directory.keys()] },
+        },
+      ];
     } else {
       match.userId = { $in: ids };
     }
@@ -376,6 +428,42 @@ function finalizeRows(map: Map<string, RowAcc>, totalCost: number): UsageRow[] {
     .sort((a, b) => b.cost - a.cost || b.totalTokens - a.totalTokens);
 }
 
+/** Never emit more bars than this, whatever range was requested. */
+const MAX_TREND_DAYS = 366 * 2;
+
+/** `yyyy-mm-dd` of an instant, in the report timezone. */
+function reportDay(d: Date): string {
+  // en-CA formats as yyyy-mm-dd.
+  return d.toLocaleDateString("en-CA", { timeZone: REPORT_TIMEZONE });
+}
+
+/**
+ * One point per day from `from` to `to`, with zeros for days without usage, so
+ * the chart's x-axis is time rather than "days that had traffic".
+ */
+function fillTrendGaps(
+  points: Map<string, UsageTrendPoint>,
+  from: Date,
+  to: Date,
+): UsageTrendPoint[] {
+  const sorted = [...points.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const first = reportDay(from);
+  const last = reportDay(to);
+  if (first > last) return sorted;
+
+  const out: UsageTrendPoint[] = [];
+  // Walk calendar days at UTC noon so no DST/offset edge can skip or repeat one.
+  const cursor = new Date(`${first}T12:00:00Z`);
+  for (let i = 0; i < MAX_TREND_DAYS; i++) {
+    const day = cursor.toISOString().slice(0, 10);
+    if (day > last) return out;
+    out.push(points.get(day) ?? { date: day, requests: 0, totalTokens: 0, cost: 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  // Range too long to chart day by day; fall back to the days that have data.
+  return sorted;
+}
+
 /**
  * Run the usage report.
  *
@@ -389,7 +477,7 @@ export async function buildUsageReport(
   directory: Map<string, UserInfo>,
   options: { userLimit?: number } = {},
 ): Promise<UsageReport> {
-  const match = buildUsageMatch(filters, directory);
+  const match = await buildUsageMatch(filters, directory);
 
   const [facet] = await TokenUsage.aggregate<{
     buckets: UsageBucket[];
@@ -588,10 +676,11 @@ export async function buildUsageReport(
     summary: {
       ...summaryMetrics,
       activeUsers: users.size,
-      activeSchools: schools.size,
+      // 未綁定學校 is a bucket, not a school.
+      activeSchools: schools.size - (schools.has(NO_SCHOOL) ? 1 : 0),
       activeTopics: topics.size,
     },
-    trend: [...trendMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    trend: fillTrendGaps(trendMap, filters.from, filters.to),
     bySchool: finalizeRows(schools, totalCost),
     bySubject: finalizeRows(subjects, totalCost),
     byTopic: finalizeRows(topics, totalCost),

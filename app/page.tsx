@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import Header from "@/components/Header";
 import { useAuth } from "@/components/AuthProvider";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 import type { Subject } from "@/models/User";
 
 /**
@@ -35,8 +37,6 @@ type SubjectTile = {
   id: Subject;
   label: string;
   labelEn: string;
-  /** What is actually inside the subject, in the pupil's words. */
-  topics: string[];
   icon: LucideIcon;
   href: string;
   available: boolean;
@@ -51,7 +51,6 @@ const subjects: SubjectTile[] = [
     id: "math",
     label: "數學科",
     labelEn: "Mathematics",
-    topics: ["解題工具", "即時回饋"],
     icon: Calculator,
     href: "/math",
     available: true,
@@ -62,7 +61,6 @@ const subjects: SubjectTile[] = [
     id: "chinese",
     label: "中國語文科",
     labelEn: "Chinese Language",
-    topics: ["閱讀理解", "寫作引導", "文言文"],
     icon: BookOpen,
     href: "/chinese",
     available: true,
@@ -73,9 +71,6 @@ const subjects: SubjectTile[] = [
     id: "english",
     label: "英國語文科",
     labelEn: "English Language",
-    // The topic titles exactly as /english names them — abbreviating them left a
-    // sticker reading "Reading", which is not a topic a pupil can go and find.
-    topics: ["Location and Direction", "Thank-you Letter", "Reading Comprehension"],
     icon: Globe,
     href: "/english",
     available: true,
@@ -86,7 +81,6 @@ const subjects: SubjectTile[] = [
     id: "science",
     label: "科學科",
     labelEn: "Science",
-    topics: ["電路", "航天科技"],
     icon: FlaskConical,
     href: "/science",
     available: true,
@@ -97,7 +91,6 @@ const subjects: SubjectTile[] = [
     id: "humanities",
     label: "人文科",
     labelEn: "Humanities",
-    topics: ["水資源", "抗日戰爭"],
     icon: Landmark,
     href: "/humanities",
     available: true,
@@ -105,6 +98,52 @@ const subjects: SubjectTile[] = [
     tilt: "-rotate-3",
   },
 ];
+
+// The English topics are the titles exactly as /english names them, in both
+// languages — abbreviating them left a sticker reading "Reading", which is not
+// a topic a pupil can go and find.
+const ENGLISH_TOPICS = ["Location and Direction", "Thank-you Letter", "Reading Comprehension"];
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    heading: "今天想學哪一科？",
+    intro: "按下面的卡片，就可以進入那一科的練習和學習材料。",
+    teacherArea: "教師專區",
+    viewStudentData: "查看學生數據",
+    noSubjectsTitle: "還沒有開通任何科目",
+    noSubjectsBody: "你的帳戶現在沒有可以進入的科目。請告訴老師或管理員，幫你開通權限。",
+    comingSoon: "準備中",
+    start: "開始學習",
+    notOpen: "還未開放",
+    /** What is actually inside each subject, in the pupil's words. */
+    topics: {
+      math: ["AI 解題輔助（分數學習）", "AI 生成圖解（解文字題）"],
+      chinese: ["閱讀理解", "寫作引導", "文言文"],
+      english: ENGLISH_TOPICS,
+      science: ["電與電路", "航天科技"],
+      humanities: ["水資源", "抗日戰爭"],
+    } as Record<Subject, string[]>,
+  },
+  en: {
+    heading: "Which subject today?",
+    intro: "Tap a card below to open that subject's practice and learning materials.",
+    teacherArea: "Teacher area",
+    viewStudentData: "View student data",
+    noSubjectsTitle: "No subjects open yet",
+    noSubjectsBody: "Your account has no subjects to open yet. Please ask your teacher or the admin to open them for you.",
+    comingSoon: "Coming soon",
+    start: "Start learning",
+    notOpen: "Not open yet",
+    topics: {
+      math: ["AI Problem Solving (Fractions)", "AI Diagram Generator (Word Problems)"],
+      // Never shown: the Chinese card always uses the zh-Hant half.
+      chinese: ["閱讀理解", "寫作引導", "文言文"],
+      english: ENGLISH_TOPICS,
+      science: ["Electricity and Circuits", "Aerospace"],
+      humanities: ["Water Resources", "War of Resistance"],
+    },
+  },
+});
 
 /** One tap target per subject: a pressable card, so the whole tile is the button.
  *
@@ -120,6 +159,8 @@ const TILE_GRID = "grid auto-rows-fr gap-5 sm:grid-cols-2 lg:grid-cols-3";
 export default function Home() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const copy = useCopy(COPY);
+  const { locale } = useLocale();
   const userSubjects = user?.subjects ?? [];
 
   // Only the subjects the user's school has opened for them are shown at all.
@@ -145,13 +186,13 @@ export default function Home() {
           {/* ── Greeting ─────────────────────────────────────────────────── */}
           <section>
             <h1 className="text-[30px] leading-[1.15] font-bold tracking-[-0.01em] sm:text-[38px]">
-              今天想學哪一科？
+              {copy.heading}
             </h1>
             {/* Hand-drawn-looking rule instead of a hairline: it belongs to the
                 heading and reads as a marker stroke a child recognises. */}
             <span aria-hidden className="mt-3 block h-[6px] w-24 rounded-full bg-[#ffae13]" />
             <p className="mt-4 max-w-xl text-[16px] leading-7 text-[#4d4d4d]">
-              按下面的卡片，就可以進入那一科的練習和學習材料。
+              {copy.intro}
             </p>
           </section>
 
@@ -170,9 +211,9 @@ export default function Home() {
                   <BarChart3 className="size-6" strokeWidth={2.5} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold text-[#5a5a5a]">教師專區</span>
+                  <span className="block text-[14px] font-semibold text-[#5a5a5a]">{copy.teacherArea}</span>
                   <span className="block text-[21px] font-bold leading-[1.2] sm:text-[23px]">
-                    查看學生數據
+                    {copy.viewStudentData}
                   </span>
                 </span>
                 <ArrowRight
@@ -205,16 +246,26 @@ export default function Home() {
             ) : visibleSubjects.length === 0 ? (
               <div className="rounded-[18px] border-2 border-dashed border-[#080808]/35 bg-white/70 p-6 sm:p-8">
                 <h2 className="text-[24px] font-bold leading-[1.2] sm:text-[26px]">
-                  還沒有開通任何科目
+                  {copy.noSubjectsTitle}
                 </h2>
                 <p className="mt-3 max-w-lg text-[16px] leading-7 text-[#4d4d4d]">
-                  你的帳戶現在沒有可以進入的科目。請告訴老師或管理員，幫你開通權限。
+                  {copy.noSubjectsBody}
                 </p>
               </div>
             ) : (
               <ul className={TILE_GRID}>
                 {visibleSubjects.map(
-                  ({ id, label, labelEn, topics, icon: Icon, href, available, accent, tilt }) => {
+                  ({ id, label, labelEn, icon: Icon, href, available, accent, tilt }) => {
+                    // The Chinese Language subject looks the same in both
+                    // interface languages (see app/chinese/layout.tsx), so its
+                    // card is always the Chinese card.
+                    const tileLocale = id === "chinese" ? "zh-Hant" : locale;
+                    const tileCopy = COPY[tileLocale];
+                    const topics = tileCopy.topics[id] ?? [];
+                    // In English the English name is the heading, so the second
+                    // line would only repeat it.
+                    const title = tileLocale === "en" ? labelEn : label;
+                    const subtitle = labelEn === title ? null : labelEn;
                     const inner = (
                       <>
                         <span className="flex items-start justify-between gap-3">
@@ -231,7 +282,7 @@ export default function Home() {
                           </span>
                           {!available && (
                             <span className="rounded-full border-2 border-[#080808]/25 bg-white px-3 py-1 text-[14px] font-semibold text-[#5a5a5a]">
-                              準備中
+                              {tileCopy.comingSoon}
                             </span>
                           )}
                         </span>
@@ -243,11 +294,13 @@ export default function Home() {
                               available ? "text-[#080808]" : "text-[#080808]/45",
                             ].join(" ")}
                           >
-                            {label}
+                            {title}
                           </span>
-                          <span className="mt-1 block text-[14px] font-medium text-[#767676]">
-                            {labelEn}
-                          </span>
+                          {subtitle && (
+                            <span className="mt-1 block text-[14px] font-medium text-[#767676]">
+                              {subtitle}
+                            </span>
+                          )}
                         </span>
 
                         {/* The topics as small stickers: a pupil can see what is
@@ -279,7 +332,7 @@ export default function Home() {
                           ].join(" ")}
                           style={available ? { backgroundColor: accent } : undefined}
                         >
-                          {available ? "開始學習" : "還未開放"}
+                          {available ? tileCopy.start : tileCopy.notOpen}
                           {available && (
                             <ArrowRight
                               aria-hidden
@@ -292,7 +345,7 @@ export default function Home() {
                     );
 
                     return (
-                      <li key={id}>
+                      <li key={id} lang={tileLocale === locale ? undefined : tileLocale}>
                         {available ? (
                           <Link
                             href={href}

@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+const COPY = defineCopy({
+  "zh-Hant": { codeFeedLabel: "AI 正在生成的 HTML 程式碼" },
+  en: { codeFeedLabel: "HTML code the AI is writing" },
+});
 
 /**
  * Runtime pieces shared by the AI 圖解 workspace (app/math/diagram).
@@ -41,6 +48,7 @@ const GEN_CODE_TAIL_CHARS = 8000;
  * the server sends when generation finishes.
  */
 export function GeneratingCodeFeed({ code, className }: { code: string; className?: string }) {
+  const copy = useCopy(COPY);
   const boxRef = useRef<HTMLPreElement>(null);
 
   // Follow the newest output.
@@ -55,7 +63,7 @@ export function GeneratingCodeFeed({ code, className }: { code: string; classNam
     <pre
       ref={boxRef}
       aria-live="polite"
-      aria-label="AI 正在生成的 HTML 程式碼"
+      aria-label={copy.codeFeedLabel}
       className={`overflow-auto whitespace-pre-wrap break-all rounded-[6px] border border-[#e4e4e4] bg-[#fafafa] p-3 text-left font-mono text-[11px] leading-[1.55] text-[#3a3a3a] ${className ?? ""}`}
     >
       {tail || "…"}

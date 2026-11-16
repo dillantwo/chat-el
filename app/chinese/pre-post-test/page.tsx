@@ -7,6 +7,7 @@ export default function ChinesePrePostTestPage() {
       backHref="/chinese"
       backLabel="中國語文科"
       heading="中國語文科前測 / 後測"
+      lang="zh"
     />
   );
 }

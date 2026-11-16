@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import Header from "@/components/Header";
 import { useAuth } from "@/components/AuthProvider";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { COMMON_COPY } from "@/lib/i18n/common";
+import { defineCopy, intlLocale } from "@/lib/i18n/config";
 import { basePath } from "@/lib/utils";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 
@@ -36,13 +39,98 @@ interface RecordingMeta {
   updatedAt: string;
 }
 
-const SCRIPT_IDEAS: string[] = [
-  "介紹「三年零八個月」裡，香港人的日常生活是怎樣的。",
-  "講述抗戰小英雄李石的勇敢故事。",
-  "帶聽眾走訪一個抗戰歷史遺跡（例如西貢玫瑰小堂、羅家大屋）。",
-  "用訪問的形式，想像訪問一位經歷過抗戰的長者。",
-  "反思：為什麼我們今天要珍惜和平？",
-];
+// Errors are kept as keys (or the server's own message) rather than finished
+// strings, so a message already on screen follows a language switch.
+type ErrorKey = "mic" | "tooBig" | "saveFailed" | "saveNetwork";
+type RenameErrorKey = "renameFailed" | "renameNetwork";
+type ShownError<K extends string> = K | { message: string } | null;
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    backLabel: "返回抗日戰爭",
+    heading: "創建語音播客 (Podcast)🎙️",
+    intro:
+      "當一次小小播客主持人吧！用你的聲音講述抗戰的故事，錄好之後會儲存起來，隨時可以重聽。先想想要說什麼，準備好就按下錄音按鈕。✨",
+    ideasHeading: "💡 播客主題例子",
+    scriptIdeas: [
+      "介紹「三年零八個月」裡，香港人的日常生活是怎樣的。",
+      "講述抗戰小英雄李石的勇敢故事。",
+      "帶聽眾走訪一個抗戰歷史遺跡（例如西貢玫瑰小堂、羅家大屋）。",
+      "用訪問的形式，想像訪問一位經歷過抗戰的長者。",
+      "反思：為什麼我們今天要珍惜和平？",
+    ],
+    loginRequired: "請先登入才能錄製和儲存你的播客。",
+    titleLabel: "播客標題",
+    titlePlaceholder: "例如：三年零八個月的香港故事",
+    scriptLabel: "我的腳本 / 筆記（可選）",
+    scriptPlaceholder: "先寫下你想說的重點，錄音時可以參考…",
+    rerecord: "重新錄音",
+    startRecording: "開始錄音",
+    stopRecording: "停止錄音",
+    duration: (time: string) => `時長 ${time}`,
+    saving: "儲存中…",
+    save: "儲存播客",
+    discard: "捨棄",
+    myPodcasts: "我的播客",
+    count: (n: number) => `（${n}）`,
+    empty: "還沒有播客。錄製你的第一集吧！🎧",
+    saveTitle: "儲存標題",
+    cancelEdit: "取消修改",
+    editTitle: "修改標題",
+    deletePodcast: "刪除播客",
+    loadAndPlay: "載入並播放",
+    errors: {
+      mic: "無法使用麥克風。請允許瀏覽器的麥克風權限後再試一次。🎙️",
+      tooBig: `錄音檔案太大了（上限 ${MAX_UPLOAD_LABEL}），請錄製較短的片段再儲存。`,
+      saveFailed: "儲存失敗，請稍後再試。",
+      saveNetwork: "儲存失敗，請檢查網絡後再試。",
+      renameFailed: "修改標題失敗，請稍後再試。",
+      renameNetwork: "修改標題失敗，請檢查網絡後再試。",
+    } as Record<ErrorKey | RenameErrorKey, string>,
+  },
+  en: {
+    backLabel: "Back to War of Resistance",
+    heading: "Make a Voice Podcast 🎙️",
+    intro:
+      "Be a little podcast host! Tell a story from the war in your own voice. Your recording is saved when you finish, so you can listen again any time. Think about what you want to say first, then press the record button when you are ready. ✨",
+    ideasHeading: "💡 Podcast topic ideas",
+    scriptIdeas: [
+      "Describe everyday life for people in Hong Kong during the Three Years and Eight Months.",
+      "Tell the brave story of the young war hero Lee Shek.",
+      "Take your listeners to a wartime historic site (for example, the Rosary Chapel in Sai Kung or Law Uk).",
+      "Do a pretend interview with an elderly person who lived through the war.",
+      "Think about it: why should we treasure peace today?",
+    ],
+    loginRequired: "Please log in first to record and save your podcast.",
+    titleLabel: "Podcast title",
+    titlePlaceholder: "For example: Hong Kong stories from the Three Years and Eight Months",
+    scriptLabel: "My script / notes (optional)",
+    scriptPlaceholder: "Write down the main points you want to say. You can look at them while recording…",
+    rerecord: "Record again",
+    startRecording: "Start recording",
+    stopRecording: "Stop recording",
+    duration: (time: string) => `Length ${time}`,
+    saving: "Saving…",
+    save: "Save podcast",
+    discard: "Discard",
+    myPodcasts: "My podcasts",
+    count: (n: number) => `(${n})`,
+    empty: "No podcasts yet. Record your first episode! 🎧",
+    saveTitle: "Save title",
+    cancelEdit: "Cancel",
+    editTitle: "Edit title",
+    deletePodcast: "Delete podcast",
+    loadAndPlay: "Load and play",
+    errors: {
+      mic: "Can't use the microphone. Please allow microphone access in your browser and try again. 🎙️",
+      tooBig: `The recording is too big (limit ${MAX_UPLOAD_LABEL}). Please record a shorter clip and save again.`,
+      saveFailed: "Couldn't save. Please try again later.",
+      saveNetwork: "Couldn't save. Please check your internet connection and try again.",
+      renameFailed: "Couldn't change the title. Please try again later.",
+      renameNetwork: "Couldn't change the title. Please check your internet connection and try again.",
+    },
+  },
+});
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
@@ -81,6 +169,11 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 export default function PodcastCreatorPage() {
   const { user, loading: authLoading } = useAuth();
+  const { locale } = useLocale();
+  const copy = useCopy(COPY);
+  const common = useCopy(COMMON_COPY);
+  const errorText = (e: ShownError<ErrorKey | RenameErrorKey>) =>
+    e === null ? "" : typeof e === "string" ? copy.errors[e] : e.message;
 
   const [status, setStatus] = useState<RecStatus>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -88,7 +181,7 @@ export default function PodcastCreatorPage() {
   const [recordedUrl, setRecordedUrl] = useState<string>("");
   const [title, setTitle] = useState("");
   const [script, setScript] = useState("");
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState<ShownError<ErrorKey>>(null);
   const [saving, setSaving] = useState(false);
 
   const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
@@ -99,7 +192,7 @@ export default function PodcastCreatorPage() {
   const [editingId, setEditingId] = useState<string>("");
   const [editTitle, setEditTitle] = useState("");
   const [renamingId, setRenamingId] = useState<string>("");
-  const [renameError, setRenameError] = useState<string>("");
+  const [renameError, setRenameError] = useState<ShownError<RenameErrorKey>>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -158,7 +251,7 @@ export default function PodcastCreatorPage() {
   }, []);
 
   const startRecording = useCallback(async () => {
-    setError("");
+    setError(null);
     resetRecording();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -185,7 +278,7 @@ export default function PodcastCreatorPage() {
       setElapsed(0);
       timerRef.current = setInterval(() => setElapsed((n) => n + 1), 1000);
     } catch {
-      setError("無法使用麥克風。請允許瀏覽器的麥克風權限後再試一次。🎙️");
+      setError("mic");
       stopStream();
       setStatus("idle");
     }
@@ -204,10 +297,10 @@ export default function PodcastCreatorPage() {
   const saveRecording = useCallback(async () => {
     if (!recordedBlob) return;
     if (recordedBlob.size > MAX_BLOB_BYTES) {
-      setError(`錄音檔案太大了（上限 ${MAX_UPLOAD_LABEL}），請錄製較短的片段再儲存。`);
+      setError("tooBig");
       return;
     }
-    setError("");
+    setError(null);
     setSaving(true);
     try {
       const audioData = await blobToDataUrl(recordedBlob);
@@ -222,6 +315,7 @@ export default function PodcastCreatorPage() {
         body: JSON.stringify({
           id,
           topic: TOPIC,
+          // Stored with the recording, so it stays in Chinese whatever the UI language.
           title: title.trim() || "未命名播客",
           script,
           audioData,
@@ -232,7 +326,7 @@ export default function PodcastCreatorPage() {
       });
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(json?.error || "儲存失敗，請稍後再試。");
+        setError(json?.error ? { message: json.error } : "saveFailed");
         return;
       }
       setTitle("");
@@ -240,7 +334,7 @@ export default function PodcastCreatorPage() {
       resetRecording();
       await loadRecordings();
     } catch {
-      setError("儲存失敗，請檢查網絡後再試。");
+      setError("saveNetwork");
     } finally {
       setSaving(false);
     }
@@ -294,19 +388,19 @@ export default function PodcastCreatorPage() {
   const startEditing = useCallback((rec: RecordingMeta) => {
     setEditingId(rec.id);
     setEditTitle(rec.title);
-    setRenameError("");
+    setRenameError(null);
   }, []);
 
   const cancelEditing = useCallback(() => {
     setEditingId("");
     setEditTitle("");
-    setRenameError("");
+    setRenameError(null);
   }, []);
 
   const saveTitle = useCallback(
     async (id: string) => {
       setRenamingId(id);
-      setRenameError("");
+      setRenameError(null);
       try {
         const res = await fetch(API, {
           method: "PATCH",
@@ -319,7 +413,7 @@ export default function PodcastCreatorPage() {
           error?: string;
         } | null;
         if (!res.ok || !json?.item) {
-          setRenameError(json?.error || "修改標題失敗，請稍後再試。");
+          setRenameError(json?.error ? { message: json.error } : "renameFailed");
           return;
         }
         const updated = json.item;
@@ -331,7 +425,7 @@ export default function PodcastCreatorPage() {
         setEditingId("");
         setEditTitle("");
       } catch {
-        setRenameError("修改標題失敗，請檢查網絡後再試。");
+        setRenameError("renameNetwork");
       } finally {
         setRenamingId("");
       }
@@ -343,7 +437,7 @@ export default function PodcastCreatorPage() {
 
   return (
     <>
-      <Header backHref="/humanities/anti-japanese-war" backLabel="返回抗日戰爭" />
+      <Header backHref="/humanities/anti-japanese-war" backLabel={copy.backLabel} />
 
       <main className="flex-1 min-h-0 overflow-y-auto bg-[#f8f7f4] text-[#080808]">
         <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 lg:py-8">
@@ -358,17 +452,17 @@ export default function PodcastCreatorPage() {
                   Voice Podcast
                 </p>
                 <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[34px]">
-                  創建語音播客 (Podcast)🎙️
+                  {copy.heading}
                 </h1>
               </div>
             </div>
             <p className="mt-4 text-sm leading-7 text-[#5a5a5a]">
-              當一次小小播客主持人吧！用你的聲音講述抗戰的故事，錄好之後會儲存起來，隨時可以重聽。先想想要說什麼，準備好就按下錄音按鈕。✨
+              {copy.intro}
             </p>
             <div className="mt-4 rounded-[8px] border border-[#e5e5e5] bg-[#faf9f6] p-4">
-              <p className="text-sm font-semibold text-[#080808]">💡 播客主題例子</p>
+              <p className="text-sm font-semibold text-[#080808]">{copy.ideasHeading}</p>
               <ul className="mt-2 space-y-1.5 text-sm leading-6 text-[#5a5a5a]">
-                {SCRIPT_IDEAS.map((idea) => (
+                {copy.scriptIdeas.map((idea) => (
                   <li key={idea} className="flex gap-2">
                     <span className="text-[#f59e0b]">•</span>
                     {idea}
@@ -380,7 +474,7 @@ export default function PodcastCreatorPage() {
 
           {!user && !authLoading ? (
             <div className="rounded-[10px] border border-[#d8d8d8] bg-white p-6 text-center text-sm text-[#5a5a5a]">
-              請先登入才能錄製和儲存你的播客。
+              {copy.loginRequired}
             </div>
           ) : (
             <>
@@ -388,24 +482,24 @@ export default function PodcastCreatorPage() {
               <section className="mb-6 rounded-[10px] border border-[#d8d8d8] bg-white p-6">
                 {/* Title + script */}
                 <label className="block text-sm font-semibold text-[#080808]">
-                  播客標題
+                  {copy.titleLabel}
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="例如：三年零八個月的香港故事"
+                  placeholder={copy.titlePlaceholder}
                   maxLength={80}
                   className="mt-1.5 w-full rounded-[6px] border border-[#d8d8d8] px-3 py-2 text-sm outline-none transition focus:border-[#080808]"
                 />
 
                 <label className="mt-4 block text-sm font-semibold text-[#080808]">
-                  我的腳本 / 筆記（可選）
+                  {copy.scriptLabel}
                 </label>
                 <textarea
                   value={script}
                   onChange={(e) => setScript(e.target.value)}
-                  placeholder="先寫下你想說的重點，錄音時可以參考…"
+                  placeholder={copy.scriptPlaceholder}
                   rows={4}
                   maxLength={5000}
                   className="mt-1.5 w-full resize-y rounded-[6px] border border-[#d8d8d8] px-3 py-2 text-sm leading-6 outline-none transition focus:border-[#080808]"
@@ -427,7 +521,7 @@ export default function PodcastCreatorPage() {
                       className="inline-flex items-center gap-2 rounded-full bg-[#ef4444] px-6 py-3 text-sm font-medium text-white shadow-[4px_4px_0px_#080808] transition hover:-translate-y-0.5 active:translate-y-0"
                     >
                       <Mic className="size-5" />
-                      {status === "recorded" ? "重新錄音" : "開始錄音"}
+                      {status === "recorded" ? copy.rerecord : copy.startRecording}
                     </button>
                   ) : (
                     <button
@@ -436,7 +530,7 @@ export default function PodcastCreatorPage() {
                       className="inline-flex items-center gap-2 rounded-full bg-[#080808] px-6 py-3 text-sm font-medium text-white shadow-[4px_4px_0px_#146ef5] transition hover:-translate-y-0.5 active:translate-y-0"
                     >
                       <Square className="size-5" />
-                      停止錄音
+                      {copy.stopRecording}
                     </button>
                   )}
 
@@ -445,7 +539,7 @@ export default function PodcastCreatorPage() {
                       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                       <audio controls src={recordedUrl} className="w-full" />
                       <div className="flex items-center justify-between text-xs text-[#5a5a5a]">
-                        <span>時長 {formatTime(elapsed)}</span>
+                        <span>{copy.duration(formatTime(elapsed))}</span>
                         <span>{formatBytes(recordedBlob?.size ?? 0)}</span>
                       </div>
                       <div className="flex flex-wrap gap-3">
@@ -460,7 +554,7 @@ export default function PodcastCreatorPage() {
                           ) : (
                             <Save className="size-4" />
                           )}
-                          {saving ? "儲存中…" : "儲存播客"}
+                          {saving ? copy.saving : copy.save}
                         </button>
                         <button
                           type="button"
@@ -469,7 +563,7 @@ export default function PodcastCreatorPage() {
                           className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d8d8d8] px-5 py-2.5 text-sm font-medium text-[#5a5a5a] transition hover:border-[#080808] hover:text-[#080808] disabled:opacity-50"
                         >
                           <Trash2 className="size-4" />
-                          捨棄
+                          {copy.discard}
                         </button>
                       </div>
                     </div>
@@ -479,7 +573,7 @@ export default function PodcastCreatorPage() {
                 {error && (
                   <p className="mt-4 flex items-start gap-2 rounded-[6px] bg-[#fef2f2] px-3 py-2 text-sm leading-6 text-[#b42318]">
                     <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                    {error}
+                    {errorText(error)}
                   </p>
                 )}
               </section>
@@ -487,21 +581,21 @@ export default function PodcastCreatorPage() {
               {/* Saved recordings */}
               <section>
                 <h2 className="mb-3 text-lg font-semibold tracking-tight">
-                  我的播客
+                  {copy.myPodcasts}
                   {recordings.length > 0 && (
                     <span className="ml-2 text-sm font-normal text-[#ababab]">
-                      （{recordings.length}）
+                      {copy.count(recordings.length)}
                     </span>
                   )}
                 </h2>
 
                 {listLoading ? (
                   <div className="flex items-center gap-2 rounded-[10px] border border-[#d8d8d8] bg-white p-5 text-sm text-[#5a5a5a]">
-                    <Loader2 className="size-4 animate-spin" /> 載入中…
+                    <Loader2 className="size-4 animate-spin" /> {common.loading}
                   </div>
                 ) : recordings.length === 0 ? (
                   <div className="rounded-[10px] border border-dashed border-[#d8d8d8] bg-white p-6 text-center text-sm text-[#5a5a5a]">
-                    還沒有播客。錄製你的第一集吧！🎧
+                    {copy.empty}
                   </div>
                 ) : (
                   <ul className="space-y-3">
@@ -529,14 +623,14 @@ export default function PodcastCreatorPage() {
                                   }}
                                   maxLength={80}
                                   autoFocus
-                                  aria-label="播客標題"
+                                  aria-label={copy.titleLabel}
                                   disabled={renamingId === rec.id}
                                   className="min-w-0 flex-1 rounded-[6px] border border-[#d8d8d8] px-3 py-1.5 text-sm outline-none transition focus:border-[#080808] disabled:opacity-60"
                                 />
                                 <button
                                   type="submit"
                                   disabled={renamingId === rec.id}
-                                  aria-label="儲存標題"
+                                  aria-label={copy.saveTitle}
                                   className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-[#146ef5] transition hover:bg-[#eef4ff] disabled:opacity-50"
                                 >
                                   {renamingId === rec.id ? (
@@ -549,7 +643,7 @@ export default function PodcastCreatorPage() {
                                   type="button"
                                   onClick={cancelEditing}
                                   disabled={renamingId === rec.id}
-                                  aria-label="取消修改"
+                                  aria-label={copy.cancelEdit}
                                   className="inline-flex shrink-0 items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#f2f2f2] hover:text-[#080808] disabled:opacity-50"
                                 >
                                   <X className="size-4" />
@@ -561,11 +655,11 @@ export default function PodcastCreatorPage() {
                               </p>
                             )}
                             {editingId === rec.id && renameError && (
-                              <p className="mt-1 text-xs text-[#b42318]">{renameError}</p>
+                              <p className="mt-1 text-xs text-[#b42318]">{errorText(renameError)}</p>
                             )}
                             <p className="mt-0.5 text-xs text-[#ababab]">
-                              時長 {formatTime(rec.durationSec)} · {formatBytes(rec.sizeBytes)} ·{" "}
-                              {new Date(rec.updatedAt).toLocaleDateString("zh-HK")}
+                              {copy.duration(formatTime(rec.durationSec))} · {formatBytes(rec.sizeBytes)} ·{" "}
+                              {new Date(rec.updatedAt).toLocaleDateString(intlLocale(locale))}
                             </p>
                           </div>
                           {editingId !== rec.id && (
@@ -573,8 +667,8 @@ export default function PodcastCreatorPage() {
                               <button
                                 type="button"
                                 onClick={() => startEditing(rec)}
-                                aria-label="修改標題"
-                                title="修改標題"
+                                aria-label={copy.editTitle}
+                                title={copy.editTitle}
                                 className="inline-flex items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#eef4ff] hover:text-[#146ef5]"
                               >
                                 <Pencil className="size-4" />
@@ -583,7 +677,7 @@ export default function PodcastCreatorPage() {
                                 type="button"
                                 onClick={() => deleteRecording(rec.id)}
                                 disabled={deletingId === rec.id}
-                                aria-label="刪除播客"
+                                aria-label={copy.deletePodcast}
                                 className="inline-flex items-center justify-center rounded-full p-2 text-[#ababab] transition hover:bg-[#fef2f2] hover:text-[#ef4444] disabled:opacity-50"
                               >
                                 {deletingId === rec.id ? (
@@ -618,7 +712,7 @@ export default function PodcastCreatorPage() {
                               ) : (
                                 <Mic className="size-4 text-[#146ef5]" />
                               )}
-                              載入並播放
+                              {copy.loadAndPlay}
                             </button>
                           )}
                         </div>

@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, Headphones, Loader2, MessageSquare, Mic, Users } from "lucide-react";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
 import { MarkdownBlock, MathText } from "@/components/student-data/markdown";
+import { COMMON_COPY } from "@/lib/i18n/common";
+import { defineCopy, intlLocale, type Locale } from "@/lib/i18n/config";
 import {
   fetchPodcastAudio,
   fetchStudentRecords,
   fetchStudents,
+  topicLabelOf,
   type ChatRecord,
   type EssayDraftRecord,
   type PodcastRecord,
@@ -32,16 +36,49 @@ interface BrowserRecord {
   podcast?: PodcastRecord;
 }
 
-const DRAFT_STAGES: { key: "first" | "revised" | "final"; label: string }[] = [
-  { key: "first", label: "初稿" },
-  { key: "revised", label: "修改版本" },
-  { key: "final", label: "終稿" },
-];
+const COPY = defineCopy({
+  "zh-Hant": {
+    unit: "單元",
+    allTopics: "全部",
+    students: (n: number) => `學生${n > 0 ? `（${n}）` : ""}`,
+    recordCount: (n: number) => `${n} 則`,
+    noStudents: "暫無學生記錄",
+    pickStudentFirst: "請先選擇學生",
+    noRecordsForStudent: "此學生暫無記錄",
+    pickStudentToView: "選擇學生以查看記錄",
+    pickRecordToView: "選擇記錄以查看內容",
+    noChatContent: "此記錄沒有對話內容。",
+    imageAlt: "image",
+    drafts: { first: "初稿", revised: "修改版本", final: "終稿" },
+    notWritten: "尚未撰寫",
+    duration: (time: string) => `時長 ${time}`,
+    loadAndPlay: "載入並播放",
+  },
+  en: {
+    unit: "Unit",
+    allTopics: "All",
+    students: (n: number) => `Students${n > 0 ? ` (${n})` : ""}`,
+    recordCount: (n: number) => `${n} ${n === 1 ? "record" : "records"}`,
+    noStudents: "No student records yet",
+    pickStudentFirst: "Choose a student first",
+    noRecordsForStudent: "No records for this student yet",
+    pickStudentToView: "Choose a student to see their records",
+    pickRecordToView: "Choose a record to see it",
+    noChatContent: "This record has no messages.",
+    imageAlt: "image",
+    drafts: { first: "First draft", revised: "Revised draft", final: "Final draft" },
+    notWritten: "Not written yet",
+    duration: (time: string) => `Length ${time}`,
+    loadAndPlay: "Load and play",
+  },
+});
 
-function formatDateTime(value: string | null | undefined): string {
+const DRAFT_STAGES: ("first" | "revised" | "final")[] = ["first", "revised", "final"];
+
+function formatDateTime(value: string | null | undefined, locale: Locale): string {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("zh-HK");
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(intlLocale(locale));
 }
 
 function formatDuration(totalSec: number): string {
@@ -122,6 +159,9 @@ export default function StudentDataBrowser({
   /** Empty means "all of the teacher's classes". */
   classId?: string;
 }) {
+  const copy = useCopy(COPY);
+  const common = useCopy(COMMON_COPY);
+  const { locale } = useLocale();
   const [topic, setTopic] = useState<string>(ALL_TOPICS);
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
@@ -133,8 +173,8 @@ export default function StudentDataBrowser({
   const [loadingAudioId, setLoadingAudioId] = useState<string>("");
 
   const topicLabel = useCallback(
-    (value: string) => view.topicLabels[value] ?? value,
-    [view.topicLabels],
+    (value: string) => topicLabelOf(view, value, locale),
+    [view, locale],
   );
 
   // Reset the topic filter when switching to another view.
@@ -228,9 +268,12 @@ export default function StudentDataBrowser({
       {view.filterTopics.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-[#e8e8e8] px-4 py-3">
           <span className="text-[11px] font-semibold uppercase tracking-[1px] text-[#ababab]">
-            單元
+            {copy.unit}
           </span>
-          {[{ value: ALL_TOPICS, label: "全部" }, ...view.filterTopics].map((option) => {
+          {[
+            { value: ALL_TOPICS, label: copy.allTopics },
+            ...view.filterTopics.map((t) => ({ value: t.value, label: t.label[locale] })),
+          ].map((option) => {
             const active = topic === option.value;
             return (
               <button
@@ -253,11 +296,11 @@ export default function StudentDataBrowser({
         {/* Pane 1: students */}
         <div className="max-h-56 shrink-0 overflow-y-auto border-b border-[#e8e8e8] bg-[#fbfbfb] p-2 lg:max-h-none lg:w-56 lg:border-b-0 lg:border-r">
           <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#ababab]">
-            學生{students.length > 0 ? `（${students.length}）` : ""}
+            {copy.students(students.length)}
           </p>
           {studentsLoading ? (
             <p className="flex items-center gap-2 px-3 py-2 text-xs text-[#5a5a5a]">
-              <Loader2 className="size-3.5 animate-spin" /> 載入中…
+              <Loader2 className="size-3.5 animate-spin" /> {common.loading}
             </p>
           ) : students.length > 0 ? (
             <div className="space-y-1">
@@ -286,7 +329,7 @@ export default function StudentDataBrowser({
                         {student.displayName}
                       </span>
                       <span className="block text-[10px] text-[#ababab]">
-                        @{student.username} · {student.count} 則
+                        @{student.username} · {copy.recordCount(student.count)}
                       </span>
                     </span>
                   </button>
@@ -296,7 +339,7 @@ export default function StudentDataBrowser({
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-[#ababab]">
               <Users className="mb-2 size-8 opacity-30" />
-              <p className="text-xs">暫無學生記錄</p>
+              <p className="text-xs">{copy.noStudents}</p>
             </div>
           )}
         </div>
@@ -304,13 +347,13 @@ export default function StudentDataBrowser({
         {/* Pane 2: the selected student's records */}
         <div className="max-h-56 shrink-0 overflow-y-auto border-b border-[#e8e8e8] p-2 lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r">
           <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#ababab]">
-            {view.label}
+            {view.label[locale]}
           </p>
           {!selectedStudentId ? (
-            <p className="px-3 py-2 text-xs text-[#ababab]">請先選擇學生</p>
+            <p className="px-3 py-2 text-xs text-[#ababab]">{copy.pickStudentFirst}</p>
           ) : recordsLoading ? (
             <p className="flex items-center gap-2 px-3 py-2 text-xs text-[#5a5a5a]">
-              <Loader2 className="size-3.5 animate-spin" /> 載入中…
+              <Loader2 className="size-3.5 animate-spin" /> {common.loading}
             </p>
           ) : records.length > 0 ? (
             <div className="space-y-1">
@@ -345,7 +388,7 @@ export default function StudentDataBrowser({
                         </span>
                         {record.podcast
                           ? `${formatDuration(record.podcast.durationSec)} · ${formatBytes(record.podcast.sizeBytes)}`
-                          : formatDateTime(record.updatedAt)}
+                          : formatDateTime(record.updatedAt, locale)}
                       </p>
                     </div>
                   </button>
@@ -353,7 +396,7 @@ export default function StudentDataBrowser({
               })}
             </div>
           ) : (
-            <p className="px-3 py-2 text-xs text-[#ababab]">此學生暫無記錄</p>
+            <p className="px-3 py-2 text-xs text-[#ababab]">{copy.noRecordsForStudent}</p>
           )}
         </div>
 
@@ -364,10 +407,10 @@ export default function StudentDataBrowser({
               <RecordIcon className="mb-2 size-10 opacity-30" />
               <p className="text-xs">
                 {!selectedStudentId
-                  ? "選擇學生以查看記錄"
+                  ? copy.pickStudentToView
                   : recordsLoading
-                    ? "載入中…"
-                    : "選擇記錄以查看內容"}
+                    ? common.loading
+                    : copy.pickRecordToView}
               </p>
             </div>
           ) : (
@@ -378,7 +421,7 @@ export default function StudentDataBrowser({
                 </h3>
                 <p className="text-[10px] text-[#ababab]">
                   {selectedStudent?.displayName} · {topicLabel(selectedRecord.topic)} ·{" "}
-                  {formatDateTime(selectedRecord.updatedAt)}
+                  {formatDateTime(selectedRecord.updatedAt, locale)}
                 </p>
               </div>
 
@@ -404,8 +447,9 @@ export default function StudentDataBrowser({
 }
 
 function ChatMessages({ record }: { record: ChatRecord }) {
+  const copy = useCopy(COPY);
   if (record.messages.length === 0) {
-    return <p className="text-xs text-[#ababab]">此記錄沒有對話內容。</p>;
+    return <p className="text-xs text-[#ababab]">{copy.noChatContent}</p>;
   }
 
   return (
@@ -425,7 +469,7 @@ function ChatMessages({ record }: { record: ChatRecord }) {
                       <img
                         key={idx}
                         src={img.url}
-                        alt={img.filename ?? "image"}
+                        alt={img.filename ?? copy.imageAlt}
                         className="max-h-[200px] max-w-[200px] rounded-[8px] object-contain"
                       />
                     ))}
@@ -452,20 +496,23 @@ function ChatMessages({ record }: { record: ChatRecord }) {
 }
 
 function EssayStages({ record }: { record: EssayDraftRecord }) {
+  // Essay drafts only exist for the Chinese Language subject, which looks the
+  // same in both interface languages, so the stage names stay Chinese.
+  const copy = COPY["zh-Hant"];
   return (
     <div className="space-y-4">
-      {DRAFT_STAGES.map(({ key, label }) => {
+      {DRAFT_STAGES.map((key) => {
         const content = record[key];
         return (
           <section key={key}>
-            <h4 className="mb-1.5 text-xs font-semibold text-[#363636]">{label}</h4>
+            <h4 className="mb-1.5 text-xs font-semibold text-[#363636]">{copy.drafts[key]}</h4>
             {content ? (
               <p className="whitespace-pre-wrap rounded-[6px] bg-[#faf9f6] px-3 py-2 text-sm leading-7 text-[#080808]">
                 {content}
               </p>
             ) : (
               <p className="rounded-[6px] border border-dashed border-[#d8d8d8] px-3 py-2 text-xs text-[#ababab]">
-                尚未撰寫
+                {copy.notWritten}
               </p>
             )}
           </section>
@@ -488,10 +535,11 @@ function PodcastPlayer({
   loading: boolean;
   onLoad: () => void;
 }) {
+  const copy = useCopy(COPY);
   return (
     <div className="space-y-3">
       <p className="text-xs text-[#ababab]">
-        時長 {formatDuration(record.durationSec)} · {formatBytes(record.sizeBytes)}
+        {copy.duration(formatDuration(record.durationSec))} · {formatBytes(record.sizeBytes)}
       </p>
 
       {record.script && (
@@ -515,7 +563,7 @@ function PodcastPlayer({
           ) : (
             <Mic className="size-4" style={{ color: accent }} />
           )}
-          載入並播放
+          {copy.loadAndPlay}
         </button>
       )}
     </div>

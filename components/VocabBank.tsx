@@ -4,6 +4,32 @@ import { useEffect, useRef, useState } from "react";
 import { BookMarked, Maximize2, Plus, Trash2, X } from "lucide-react";
 import { SidebarGroup, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { basePath } from "@/lib/utils";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+// The Word Bank only appears on English Language pages, so it is English in
+// both locales. The Chinese glosses are there for Chinese readers and are left
+// out when the interface is in English; the English-only strings stay inline.
+const COPY = defineCopy({
+  "zh-Hant": {
+    viewAllTitle: "View all saved words / 查看全部生詞",
+    addTitle: "Type a word to add / 自行輸入生詞",
+    inlinePlaceholder: "Type a word… 輸入生詞",
+    dropHintGloss: "把生詞拖到這裡，或按 Add 自行輸入。",
+    subtitle: "Words you saved while reading · 閱讀時儲存的生詞",
+    modalPlaceholder: "Add a word… 輸入生詞（可用逗號分隔）",
+    emptyGloss: "還沒有儲存任何生詞，試試在上面輸入，或把生詞拖進生詞欄。",
+  },
+  en: {
+    viewAllTitle: "View all saved words",
+    addTitle: "Type a word to add",
+    inlinePlaceholder: "Type a word…",
+    dropHintGloss: "",
+    subtitle: "Words you saved while reading",
+    modalPlaceholder: "Add a word… (separate with commas)",
+    emptyGloss: "",
+  },
+});
 
 // Words the student drags here are stored in MongoDB, tied to the logged-in
 // user (see app/api/english-vocab-bank/route.ts + models/VocabBank.ts), so the
@@ -44,6 +70,7 @@ function mergeWords(a: string[], b: string[]): string[] {
 }
 
 export function VocabBank() {
+  const copy = useCopy(COPY);
   const [words, setWords] = useState<string[]>([]);
   const [over, setOver] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -177,7 +204,7 @@ export function VocabBank() {
           type="button"
           onClick={() => setExpanded(true)}
           className="flex min-w-0 cursor-pointer items-center gap-1.5 transition-colors hover:text-[#0b4fc0]"
-          title="View all saved words / 查看全部生詞"
+          title={copy.viewAllTitle}
         >
           <BookMarked className="size-3.5" />
           Word Bank
@@ -200,7 +227,7 @@ export function VocabBank() {
               ? "border-[#146ef5] bg-[#146ef5] text-white"
               : "border-[#146ef5]/40 bg-[#146ef5]/10 text-[#146ef5] hover:bg-[#146ef5]/20"
           }`}
-          title="Type a word to add / 自行輸入生詞"
+          title={copy.addTitle}
         >
           {adding ? <X className="size-3" /> : <Plus className="size-3" />}
           Add
@@ -225,7 +252,7 @@ export function VocabBank() {
                 setDraft("");
               }
             }}
-            placeholder="Type a word… 輸入生詞"
+            placeholder={copy.inlinePlaceholder}
             aria-label="Add a word to your Word Bank"
             autoComplete="off"
             className="h-7 min-w-0 flex-1 rounded-lg border border-[#f59e0b]/50 bg-white px-2 text-[12px] text-[#b45309] outline-none placeholder:text-[#b45309]/45 focus:border-[#146ef5] focus:ring-2 focus:ring-[#146ef5]/20"
@@ -263,8 +290,12 @@ export function VocabBank() {
         {words.length === 0 ? (
           <p className="px-1 py-3 text-center text-[11px] leading-relaxed text-[#b45309]">
             Drag a new word here, or tap Add to type one.
-            <br />
-            把生詞拖到這裡，或按 Add 自行輸入。
+            {copy.dropHintGloss && (
+              <>
+                <br />
+                {copy.dropHintGloss}
+              </>
+            )}
           </p>
         ) : (
           <div className="flex max-h-[4.75rem] flex-wrap content-start gap-1.5 overflow-y-auto">
@@ -324,7 +355,7 @@ export function VocabBank() {
                     </span>
                   </h2>
                   <p className="mt-0.5 text-[11.5px] leading-snug text-white/80">
-                    Words you saved while reading · 閱讀時儲存的生詞
+                    {copy.subtitle}
                   </p>
                 </div>
                 <button
@@ -350,7 +381,7 @@ export function VocabBank() {
               <input
                 value={modalDraft}
                 onChange={(e) => setModalDraft(e.target.value)}
-                placeholder="Add a word… 輸入生詞（可用逗號分隔）"
+                placeholder={copy.modalPlaceholder}
                 aria-label="Add a word to your Word Bank"
                 autoComplete="off"
                 className="h-9 min-w-0 flex-1 rounded-xl border border-[#e4e4e4] bg-white px-3 text-[13px] text-[#2a2a2a] outline-none transition-colors placeholder:text-[#a8a8a8] focus:border-[#146ef5] focus:ring-2 focus:ring-[#146ef5]/20"
@@ -372,10 +403,12 @@ export function VocabBank() {
                   </span>
                   <p className="text-[13px] leading-relaxed text-[#7a7a7a]">
                     No saved words yet.
-                    <br />
-                    <span className="text-[#9a9a9a]">
-                      還沒有儲存任何生詞，試試在上面輸入，或把生詞拖進生詞欄。
-                    </span>
+                    {copy.emptyGloss && (
+                      <>
+                        <br />
+                        <span className="text-[#9a9a9a]">{copy.emptyGloss}</span>
+                      </>
+                    )}
                   </p>
                 </div>
               ) : (

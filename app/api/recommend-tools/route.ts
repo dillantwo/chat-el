@@ -1,8 +1,12 @@
 import { azure } from "@ai-sdk/azure";
 import { generateObject } from "ai";
+import { after } from "next/server";
 import { z } from "zod";
+import { getSession } from "@/lib/session";
 import { requireTopicApi } from "@/lib/subject-access";
+import { recordTokenUsage } from "@/lib/token-usage";
 import { sanitizeSteps, stepToolTakesNumbers } from "@/lib/math-tool-steps";
+import { withReplyLanguage } from "@/lib/i18n/ai";
 
 const numberSchema = z
   .object({
@@ -115,10 +119,13 @@ export async function POST(req: Request) {
     })
     .join("\n");
 
+  const session = await getSession().catch(() => null);
+  const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o";
+
   try {
     const result = await generateObject({
-      model: azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o"),
-      system: SYSTEM_PROMPT,
+      model: azure(deploymentName),
+      system: await withReplyLanguage(SYSTEM_PROMPT, "structured"),
       messages: [
         {
           role: "user",
@@ -126,6 +133,17 @@ export async function POST(req: Request) {
         },
       ],
       schema: planSchema,
+    });
+
+    after(async () => {
+      await recordTokenUsage({
+        session,
+        subject: "math",
+        topic: "tool-recommend",
+        modelName: deploymentName,
+        endpoint: "/api/recommend-tools",
+        usage: result.usage,
+      });
     });
 
     const allowedKeys = new Set(tools.map((t) => t.key));

@@ -9,6 +9,7 @@ import { connectDB } from "@/lib/mongodb";
  */
 const MATERIALS_BUCKET = "learningMaterials";
 const PODCAST_AUDIO_BUCKET = "podcastAudio";
+const ANNOUNCEMENT_IMAGES_BUCKET = "announcementImages";
 
 /** Resolve a GridFSBucket bound to the shared mongoose connection. */
 async function getBucket(bucketName: string): Promise<mongoose.mongo.GridFSBucket> {
@@ -100,4 +101,25 @@ export function deletePodcastAudio(fileId: mongoose.Types.ObjectId): Promise<voi
 
 export function readPodcastAudio(fileId: mongoose.Types.ObjectId): Promise<Buffer> {
   return readFromBucket(PODCAST_AUDIO_BUCKET, fileId);
+}
+
+// ---------- Announcement images (admin-uploaded pictures in 消息推送) ----------
+
+export function uploadAnnouncementImage(
+  buffer: Buffer,
+  filename: string,
+  contentType: string
+): Promise<mongoose.Types.ObjectId> {
+  return uploadToBucket(ANNOUNCEMENT_IMAGES_BUCKET, buffer, filename, contentType);
+}
+
+export function deleteAnnouncementImage(fileId: mongoose.Types.ObjectId): Promise<void> {
+  return deleteFromBucket(ANNOUNCEMENT_IMAGES_BUCKET, fileId);
+}
+
+export async function openAnnouncementImageStream(
+  fileId: mongoose.Types.ObjectId
+): Promise<mongoose.mongo.GridFSBucketReadStream> {
+  const bucket = await getBucket(ANNOUNCEMENT_IMAGES_BUCKET);
+  return bucket.openDownloadStream(fileId);
 }

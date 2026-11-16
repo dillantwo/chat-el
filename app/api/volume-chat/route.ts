@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { getSession } from "@/lib/session";
 import { requireMathToolApi } from "@/lib/toolbox-access";
 import { recordTokenUsage } from "@/lib/token-usage";
+import { withReplyLanguage } from "@/lib/i18n/ai";
 
 interface SceneCube { x: number; y: number; z: number; color: string }
 interface SceneState {
@@ -164,7 +165,7 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model: azure(deploymentName),
-      system: buildSystemPrompt(sceneState ?? null),
+      system: await withReplyLanguage(buildSystemPrompt(sceneState ?? null), "chat"),
       messages: uiMessagesToModelMessages(messages),
     });
 

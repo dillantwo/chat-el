@@ -26,6 +26,8 @@ import rehypeKatex from "rehype-katex";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 import { basePath } from "@/lib/utils";
 import { useStreamingChat } from "@/lib/use-streaming-chat";
 import { useChatAttachments } from "@/lib/use-chat-attachments";
@@ -99,7 +101,13 @@ function inferStudentRole(
 const vocabUrlTransform = (url: string) =>
   url.startsWith("vocab:") ? url : defaultUrlTransform(url);
 
+const VOCAB_CHIP_COPY = defineCopy({
+  "zh-Hant": { addToWordBank: "Tap to add to your Word Bank (or drag on desktop) / 點一下加入生詞庫" },
+  en: { addToWordBank: "Tap to add to your Word Bank (or drag on desktop)" },
+});
+
 function VocabChip({ word, children }: { word: string; children: ReactNode }) {
+  const copy = useCopy(VOCAB_CHIP_COPY);
   const [added, setAdded] = useState(false);
 
   // Desktop uses drag-and-drop; tap/click adds the word too, which is the only
@@ -132,7 +140,7 @@ function VocabChip({ word, children }: { word: string; children: ReactNode }) {
           ? "border-[#16a34a]/50 bg-[#16a34a]/10 text-[#16a34a]"
           : "border-[#146ef5]/40 bg-[#146ef5]/10 text-[#146ef5]"
       }`}
-      title="Tap to add to your Word Bank (or drag on desktop) / 點一下加入生詞庫"
+      title={copy.addToWordBank}
     >
       {added ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
       {children}

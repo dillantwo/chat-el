@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
 
 /**
  * 整數與分數互換 (Integer / fraction / mixed-number conversion).
@@ -106,19 +108,58 @@ const STYLES = `
 .fa66-root.embedded .app-container{ box-shadow:none; border-radius:0; padding:1rem; }
 `;
 
-const BODY_HTML = `
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "整數與分數互換",
+    whole: "整數",
+    fraction: "分數",
+    mixed: "帶分數",
+    proper: "真分數",
+    improper: "假分數",
+    enterValue: "請輸入數值",
+    confirm: "確定",
+    barHeight: "長條圖高度：",
+    unitWidth: "單位闊度：",
+    toFraction: "轉換為分數：",
+    toMixed: "轉換為帶分數：",
+    toWhole: "轉換為整數：",
+    analysisTitle: "數值轉換與解析",
+    typeLabel: "類型：",
+  },
+  en: {
+    title: "Conversion between Whole Numbers and Fractions",
+    whole: "Whole number",
+    fraction: "Fraction",
+    mixed: "Mixed number",
+    proper: "Proper fraction",
+    improper: "Improper fraction",
+    enterValue: "Enter a number",
+    confirm: "OK",
+    barHeight: "Bar height: ",
+    unitWidth: "Unit width: ",
+    toFraction: "As a fraction: ",
+    toMixed: "As a mixed number: ",
+    toWhole: "As a whole number: ",
+    analysisTitle: "Conversion and Analysis",
+    typeLabel: "Type: ",
+  },
+});
+
+type Copy = (typeof COPY)["zh-Hant"];
+
+const buildBody = (copy: Copy) => `
 <div class="app-container">
   <div class="header">
     <div class="header-left">
-      <div class="title-badge">整數與分數互換</div>
+      <div class="title-badge">${copy.title}</div>
     </div>
     <div class="header-right">
       <div class="controls-pill">
-        <button class="lang-btn" id="btn-mode-whole" onclick="window.__FA66.setMode('whole')">整數</button>
+        <button class="lang-btn" id="btn-mode-whole" onclick="window.__FA66.setMode('whole')">${copy.whole}</button>
         <span class="divider"></span>
-        <button class="lang-btn" id="btn-mode-fraction" onclick="window.__FA66.setMode('fraction')">分數</button>
+        <button class="lang-btn" id="btn-mode-fraction" onclick="window.__FA66.setMode('fraction')">${copy.fraction}</button>
         <span class="divider"></span>
-        <button class="lang-btn" id="btn-mode-mixed" onclick="window.__FA66.setMode('mixed')" style="border-color:#34495e; color:#34495e; box-shadow:0 3px 0 #34495e;">帶分數</button>
+        <button class="lang-btn" id="btn-mode-mixed" onclick="window.__FA66.setMode('mixed')" style="border-color:#34495e; color:#34495e; box-shadow:0 3px 0 #34495e;">${copy.mixed}</button>
         <span class="divider"></span>
       </div>
     </div>
@@ -128,7 +169,7 @@ const BODY_HTML = `
 
   <div class="dashboard">
     <div class="input-section">
-      <div class="info-title">請輸入數值</div>
+      <div class="info-title">${copy.enterValue}</div>
       <div class="fraction-ui" id="inputArea">
         <input type="number" id="inputWhole" value="1" min="0" max="100">
         <div class="fraction-input-stack" id="fractionPart" style="display:inline-flex; flex-direction: column; align-items: center;">
@@ -136,16 +177,16 @@ const BODY_HTML = `
           <div class="f-line"></div>
           <input type="number" id="inputDen" value="3" min="1" max="100">
         </div>
-        <button class="btn-confirm" onclick="window.__FA66.updateUI()">確定</button>
+        <button class="btn-confirm" onclick="window.__FA66.updateUI()">${copy.confirm}</button>
       </div>
 
       <div class="settings" style="margin-top: 20px;">
         <div>
-          <label>長條圖高度：</label>
+          <label>${copy.barHeight}</label>
           <input type="range" id="heightSlider" min="0" max="100" value="45" oninput="window.__FA66.updateUI()">
         </div>
         <div style="margin-top: 10px;">
-          <label>單位闊度：</label>
+          <label>${copy.unitWidth}</label>
           <input type="range" id="widthSlider" min="50" max="300" value="150" oninput="window.__FA66.updateUI()">
         </div>
       </div>
@@ -156,9 +197,9 @@ const BODY_HTML = `
 </div>
 
 <div id="customContextMenu">
-  <div onclick="window.__FA66.setMode('whole')">整數</div>
-  <div onclick="window.__FA66.setMode('fraction')">分數</div>
-  <div onclick="window.__FA66.setMode('mixed')">帶分數</div>
+  <div onclick="window.__FA66.setMode('whole')">${copy.whole}</div>
+  <div onclick="window.__FA66.setMode('fraction')">${copy.fraction}</div>
+  <div onclick="window.__FA66.setMode('mixed')">${copy.mixed}</div>
 </div>
 `;
 
@@ -174,6 +215,7 @@ declare global {
 }
 
 export default function FractionConvertingPage() {
+  const copy = useCopy(COPY);
   const rootRef = useRef<HTMLDivElement>(null);
   const [embedded, setEmbedded] = useState(false);
 
@@ -504,13 +546,13 @@ export default function FractionConvertingPage() {
       const actualW = Math.floor(totalNum / d);
       const actualN = totalNum % d;
 
-      let type = "分數";
+      let type = copy.fraction;
       if (w > 0 && n > 0) {
-        type = "帶分數";
+        type = copy.mixed;
       } else if (n === 0) {
-        type = "整數";
+        type = copy.whole;
       } else if (w === 0 && n > 0) {
-        type = n < d ? "真分數" : "假分數";
+        type = n < d ? copy.proper : copy.improper;
       }
 
       let convertHtml = "";
@@ -520,13 +562,13 @@ export default function FractionConvertingPage() {
         `<span style="display:inline-flex; align-items:center; gap:4px;"><span style="font-weight:bold; font-size:1.1em; color:var(--integer-green, #009900);">${wh}</span>${fFrac(nu, de)}</span>`;
 
       if (totalNum > 0 && !(w === 0 && n === totalNum)) {
-        convertHtml += `<div style="display:flex; align-items:center; margin-bottom:8px;">轉換為分數：<div style="margin-left:10px;">${fFrac(totalNum, d)}</div></div>`;
+        convertHtml += `<div style="display:flex; align-items:center; margin-bottom:8px;">${copy.toFraction}<div style="margin-left:10px;">${fFrac(totalNum, d)}</div></div>`;
       }
       if (actualW > 0 && actualN > 0 && !(w === actualW && n === actualN)) {
-        convertHtml += `<div style="display:flex; align-items:center; margin-bottom:8px;">轉換為帶分數：<div style="margin-left:10px;">${fMix(actualW, actualN, d)}</div></div>`;
+        convertHtml += `<div style="display:flex; align-items:center; margin-bottom:8px;">${copy.toMixed}<div style="margin-left:10px;">${fMix(actualW, actualN, d)}</div></div>`;
       }
       if (actualN === 0 && !(w === actualW && n === 0)) {
-        convertHtml += `<div style="margin-bottom:8px;">轉換為整數：<strong style="color:var(--integer-green, #009900); margin-left:10px; font-size:1.1em;">${actualW}</strong></div>`;
+        convertHtml += `<div style="margin-bottom:8px;">${copy.toWhole}<strong style="color:var(--integer-green, #009900); margin-left:10px; font-size:1.1em;">${actualW}</strong></div>`;
       }
 
       let currentValHtml = "";
@@ -539,10 +581,10 @@ export default function FractionConvertingPage() {
       }
 
       div.innerHTML = `
-        <div class="info-title">數值轉換與解析</div>
+        <div class="info-title">${copy.analysisTitle}</div>
         <div style="margin-top: 10px; margin-bottom: 15px; font-size: 1.05em;">
             <div style="display:flex; align-items:center; min-height:30px; margin-bottom: 8px;">${currentValHtml}</div>
-            <div>類型：<strong>${type}</strong></div>
+            <div>${copy.typeLabel}<strong>${type}</strong></div>
         </div>
         <div style="margin-bottom:15px;">${convertHtml}</div>
       `;
@@ -552,7 +594,7 @@ export default function FractionConvertingPage() {
     const api: FA66Api = { setMode, updateUI };
     window.__FA66 = api;
 
-    root.innerHTML = BODY_HTML;
+    root.innerHTML = buildBody(copy);
 
     const inputArea = $e("inputArea")!;
     const onCtxMenu = (e: MouseEvent) => {
@@ -602,7 +644,10 @@ export default function FractionConvertingPage() {
       document.removeEventListener("click", onDocClick);
       if (window.__FA66 === api) delete window.__FA66;
     };
-  }, []);
+    // `copy` is a stable per-locale object, so this re-runs only on a language
+    // switch: the old instance is torn down and the tool re-initialised in the
+    // new language (the in-progress value restarts from the URL params).
+  }, [copy]);
 
   return (
     <>

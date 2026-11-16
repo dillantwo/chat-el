@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import Header from "@/components/Header";
 import { useAuth } from "@/components/AuthProvider";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 import { topicKey } from "@/lib/topics";
 import type { SubjectValue } from "@/lib/subjects";
 
@@ -91,6 +93,38 @@ const TILTS = ["-rotate-6", "rotate-3", "-rotate-2", "rotate-6", "-rotate-3"];
 const isResourceCard = (topic: TopicCard) => topic.group === "resource";
 
 /**
+ * Pages pass `label` / `subjectLabel` in the current locale and `labelEn` /
+ * `subjectLabelEn` as the English secondary line. In English mode the two are
+ * often the same words, so the secondary line is dropped rather than repeated.
+ */
+function sameText(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    intro: "選一個課題，就可以開始練習。",
+    defaultCta: "開始這個課題",
+    emptyTitle: "還沒有開放任何課題",
+    emptyBody: "這一科現在沒有可以進入的課題。請告訴老師或管理員，幫你開通。",
+    comingSoonLabel: "準備中",
+    backLabel: "選科目",
+    topicsSectionLabel: "課題",
+    resourcesSectionLabel: "資源",
+  },
+  en: {
+    intro: "Pick a topic to start practising.",
+    defaultCta: "Start this topic",
+    emptyTitle: "No topics open yet",
+    emptyBody: "There are no topics you can open in this subject yet. Ask your teacher or the admin to open one for you.",
+    comingSoonLabel: "Coming soon",
+    backLabel: "Subjects",
+    topicsSectionLabel: "Topics",
+    resourcesSectionLabel: "Resources",
+  },
+});
+
+/**
  * Divider between the two bands. A real `<h2>` so the split is in the document
  * outline too, not just a visual grouping: a screen-reader user hears which
  * band a card belongs to.
@@ -118,16 +152,26 @@ export default function TopicPicker({
   subjectIcon: SubjectIcon,
   subjectAccent,
   topics,
-  intro = "選一個課題，就可以開始練習。",
-  defaultCta = "開始這個課題",
-  emptyTitle = "還沒有開放任何課題",
-  emptyBody = "這一科現在沒有可以進入的課題。請告訴老師或管理員，幫你開通。",
-  comingSoonLabel = "準備中",
-  backLabel = "選科目",
-  topicsSectionLabel = "課題",
-  resourcesSectionLabel = "資源",
+  intro: introProp,
+  defaultCta: defaultCtaProp,
+  emptyTitle: emptyTitleProp,
+  emptyBody: emptyBodyProp,
+  comingSoonLabel: comingSoonLabelProp,
+  backLabel: backLabelProp,
+  topicsSectionLabel: topicsSectionLabelProp,
+  resourcesSectionLabel: resourcesSectionLabelProp,
 }: TopicPickerProps) {
   const { user, loading } = useAuth();
+  const copy = useCopy(COPY);
+  // A prop a page passes wins; otherwise the current locale's default.
+  const intro = introProp ?? copy.intro;
+  const defaultCta = defaultCtaProp ?? copy.defaultCta;
+  const emptyTitle = emptyTitleProp ?? copy.emptyTitle;
+  const emptyBody = emptyBodyProp ?? copy.emptyBody;
+  const comingSoonLabel = comingSoonLabelProp ?? copy.comingSoonLabel;
+  const backLabel = backLabelProp ?? copy.backLabel;
+  const topicsSectionLabel = topicsSectionLabelProp ?? copy.topicsSectionLabel;
+  const resourcesSectionLabel = resourcesSectionLabelProp ?? copy.resourcesSectionLabel;
 
   // `hidden` is a code-level switch that applies to every school; 學校管理
   // closes topics per school. `topics` comes from /api/auth/me, resolved from the
@@ -197,7 +241,9 @@ export default function TopicPicker({
           >
             {label}
           </span>
-          <span className="mt-1 block text-[14px] font-medium text-[#767676]">{labelEn}</span>
+          {!sameText(label, labelEn) && (
+            <span className="mt-1 block text-[14px] font-medium text-[#767676]">{labelEn}</span>
+          )}
         </span>
 
         {/* The row that absorbs the spare height, so the button lines up
@@ -292,7 +338,9 @@ export default function TopicPicker({
                 className="mt-2 block h-[6px] w-20 rounded-full"
                 style={{ backgroundColor: subjectAccent }}
               />
-              <p className="mt-3 text-[15px] font-medium text-[#767676]">{subjectLabelEn}</p>
+              {!sameText(subjectLabel, subjectLabelEn) && (
+                <p className="mt-3 text-[15px] font-medium text-[#767676]">{subjectLabelEn}</p>
+              )}
             </div>
           </section>
 

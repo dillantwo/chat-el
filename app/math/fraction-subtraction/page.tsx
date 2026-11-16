@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { renderWordProblemHtml } from "@/lib/math-word-problem";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
 
 /**
  * 異分母分數減法 (Subtraction of fractions with unlike denominators).
@@ -176,30 +178,125 @@ const STYLES = `
 .fa48-root .scale-viewport > .container{ transform-origin:top center; flex:none; }
 `;
 
-const BODY_HTML = `
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "分數相減",
+    restartTitle: "回到這一題的初始狀態，重新開始操作",
+    restart: "↺ 重新開始",
+    showMixed: "顯示帶分數",
+    showNumberLine: "顯示數線",
+    speedTitle: "調整擴分/約分的動畫速度",
+    speed: "動畫速度: ",
+    random: "🎲 隨機出題",
+    frac1Title: "點擊重置並顯示被減數圖形",
+    frac2Title: "點擊重置並顯示減數圖形",
+    preparing: "💡 準備中...",
+    clickFraction: "💡 點擊上方分數，顯示圖形！",
+    keepTrashing: "💡 很好！繼續把被減數的色塊一份一份丟進垃圾桶（減數會同時扣掉一份）。",
+    sameDenom:
+      "💡 分母相同了！一次拖一份被減數的色塊丟進垃圾桶（減數會跟著一起扣掉一份），或點擊色塊讓它自己慢慢飛過去。",
+    restored: "💡 已從垃圾桶還原一份。可以繼續丟，也可以再從垃圾桶拉回來。",
+    notSameDenom: "💡 分母不同，還不能相減喔！請先點擊右邊的「擴分/約分」讓兩個分母相同。",
+    done: "💡 減去完畢！請填寫下方最終答案！",
+    commonUnit: "💡 公共分數單位為： ",
+    expand: "➕ 擴分",
+    simplify: "➖ 約分",
+    trash: "垃圾桶",
+    hideContent: "隱藏內容",
+    showContent: "顯示內容",
+    trashEmpty: "目前垃圾桶是空的",
+    wholes: (w: number) => `<b>${w}</b> 個整數`,
+    wholesAnd: (w: number, frac: string) => `<b>${w}</b> 個整數 和 ${frac}`,
+    trashedRed: (frac: string) => `被減數 (紅) 已丟棄: ${frac}`,
+    trashedBlue: (frac: string) => `減數 (藍) 已對消: ${frac}`,
+    trashHint: "💡 想改答案？把垃圾桶裡的色塊拖回上面的長條圖，或直接點它，就能還原一份。",
+    perfect: "🎉 完全正確！而且已經是最簡化的答案了！",
+    rightValue: "🌟 答對了數值！但試試看，這個答案可以再「約分」或「轉成帶分數」喔！",
+    lcmHint: "（提示：你通分時使用的分母不是最小公倍數喔！雖然算得對，但數字會比較大。）",
+    wrong: "👀 答案不對喔，再檢查一下整數和分子相減的結果！",
+    wordProblems: [
+      "小明原本有 [FRAC1] 塊披薩，吃掉了 [FRAC2] 塊。請問還剩下多少塊披薩？",
+      "第一塊農田面積為 [FRAC1] 公頃，第二塊面積比第一塊少 [FRAC2] 公頃。請問第二塊農田的面積是多少公頃？",
+      "媽媽買了 [FRAC1] 公斤的蘋果，送給鄰居 [FRAC2] 公斤。請問還剩下多少公斤？",
+      "水桶裡原有 [FRAC1] 公升的水，倒出了 [FRAC2] 公升。請問現在水桶裡還剩下多少公升的水？",
+      "紅彩帶長 [FRAC1] 公尺，藍彩帶長 [FRAC2] 公尺。請問紅彩帶比藍彩帶長多少公尺？",
+    ],
+  },
+  en: {
+    title: "Subtraction of Fractions",
+    restartTitle: "Go back to the start of this question and try again",
+    restart: "↺ Restart",
+    showMixed: "Show mixed numbers",
+    showNumberLine: "Show number line",
+    speedTitle: "Change the speed of the expand / reduce animation",
+    speed: "Animation speed: ",
+    random: "🎲 Random question",
+    frac1Title: "Click to reset and show the bar for the first number",
+    frac2Title: "Click to reset and show the bar for the number taken away",
+    preparing: "💡 Getting ready...",
+    clickFraction: "💡 Click the fractions above to show the bars!",
+    keepTrashing:
+      "💡 Good! Keep throwing the red parts into the bin, one at a time (a blue part is taken away each time too).",
+    sameDenom:
+      "💡 The denominators are the same now! Drag one red part at a time into the bin (a blue part goes with it), or click a part to send it there.",
+    restored: "💡 One part has been taken back out of the bin. You can keep throwing parts away, or pull more back out.",
+    notSameDenom:
+      "💡 The denominators are different, so you can't subtract yet! First click Expand / Reduce on the right to make them the same.",
+    done: "💡 Subtraction done! Now write the final answer below!",
+    commonUnit: "💡 Common fraction unit: ",
+    expand: "➕ Expand",
+    simplify: "➖ Reduce",
+    trash: "Bin",
+    hideContent: "Hide",
+    showContent: "Show",
+    trashEmpty: "The bin is empty",
+    wholes: (w: number) => `<b>${w}</b> ${w === 1 ? "whole" : "wholes"}`,
+    wholesAnd: (w: number, frac: string) => `<b>${w}</b> ${w === 1 ? "whole" : "wholes"} and ${frac}`,
+    trashedRed: (frac: string) => `Red (first number) thrown away: ${frac}`,
+    trashedBlue: (frac: string) => `Blue (number taken away) cancelled: ${frac}`,
+    trashHint:
+      "💡 Want to change your answer? Drag a part from the bin back to the bars above, or just click it, to bring it back.",
+    perfect: "🎉 Completely correct! And it is already in its simplest form!",
+    rightValue: "🌟 The value is correct! But can you reduce it or change it into a mixed number?",
+    lcmHint:
+      "(Hint: the common denominator you used is not the least common multiple. Your answer is right, but the numbers are bigger.)",
+    wrong: "👀 Not quite. Check how you subtracted the whole numbers and numerators!",
+    wordProblems: [
+      "Siu Ming had [FRAC1] pizzas and ate [FRAC2] pizzas. How many pizzas are left?",
+      "The first field has an area of [FRAC1] hectares. The second field is [FRAC2] hectares smaller. What is the area of the second field in hectares?",
+      "Mum bought [FRAC1] kg of apples and gave [FRAC2] kg to a neighbour. How many kilograms are left?",
+      "A bucket had [FRAC1] litres of water. Then [FRAC2] litres were poured out. How many litres of water are left in the bucket?",
+      "A red ribbon is [FRAC1] m long and a blue ribbon is [FRAC2] m long. How much longer is the red ribbon than the blue ribbon?",
+    ],
+  },
+});
+
+type Copy = (typeof COPY)["zh-Hant"];
+
+const buildBody = (copy: Copy) => `
 <div class="scale-viewport">
 <div class="container">
   <div class="header">
     <div class="header-left">
-      <div class="title-badge">分數相減</div>
-      <button class="lang-btn btn-restart" onclick="window.__FA48.restart()" title="回到這一題的初始狀態，重新開始操作">↺ 重新開始</button>
+      <div class="title-badge">${copy.title}</div>
+      <button class="lang-btn btn-restart" onclick="window.__FA48.restart()" title="${copy.restartTitle}">${copy.restart}</button>
     </div>
     <div class="header-right">
       <div class="controls-pill">
         <label class="checkbox-label">
-          <input type="checkbox" id="show-whole-cb" onchange="window.__FA48.toggleWholeNumber()"> 顯示帶分數
+          <input type="checkbox" id="show-whole-cb" onchange="window.__FA48.toggleWholeNumber()"> ${copy.showMixed}
         </label>
         <span class="divider"></span>
         <label class="checkbox-label">
-          <input type="checkbox" id="show-nl-cb" onchange="window.__FA48.toggleNumberLine()" checked> 顯示數線
+          <input type="checkbox" id="show-nl-cb" onchange="window.__FA48.toggleNumberLine()" checked> ${copy.showNumberLine}
         </label>
         <span class="divider"></span>
         <div class="speed-ctrl">
-          <label for="speed-slider" title="調整擴分/約分的動畫速度">動畫速度: <span id="speed-val" style="color: var(--blue);">1.0</span>x</label>
+          <label for="speed-slider" title="${copy.speedTitle}">${copy.speed}<span id="speed-val" style="color: var(--blue);">1.0</span>x</label>
           <input type="range" id="speed-slider" min="0.5" max="3" step="0.1" value="1.0" oninput="window.__FA48.updateSpeed()">
         </div>
       </div>
-      <button class="lang-btn btn-random" onclick="window.__FA48.randomChallenge()">🎲 隨機出題</button>
+      <button class="lang-btn btn-random" onclick="window.__FA48.randomChallenge()">${copy.random}</button>
     </div>
   </div>
 
@@ -207,7 +304,7 @@ const BODY_HTML = `
 
   <div class="answer-zone">
     <div class="formula">
-      <div class="mixed-frac" id="frac1-group" onclick="window.__FA48.onFrac1Click()" title="點擊重置並顯示被減數圖形">
+      <div class="mixed-frac" id="frac1-group" onclick="window.__FA48.onFrac1Click()" title="${copy.frac1Title}">
         <input type="number" class="whole-input" id="w1" placeholder=" " min="0" max="10" oninput="window.__FA48.updateUI()" onchange="window.__FA48.updateUI()">
         <div class="frac">
           <input type="number" class="frac-input" id="n1" value="1" min="1" max="100" oninput="window.__FA48.updateUI()" onchange="window.__FA48.updateUI()">
@@ -216,7 +313,7 @@ const BODY_HTML = `
         </div>
       </div>
       <span>-</span>
-      <div class="mixed-frac" id="frac2-group" onclick="window.__FA48.onFrac2Click()" title="點擊重置並顯示減數圖形">
+      <div class="mixed-frac" id="frac2-group" onclick="window.__FA48.onFrac2Click()" title="${copy.frac2Title}">
         <input type="number" class="whole-input" id="w2" placeholder=" " min="0" max="10" oninput="window.__FA48.updateUI()" onchange="window.__FA48.updateUI()">
         <div class="frac">
           <input type="number" class="frac-input" id="n2" value="1" min="1" max="100" oninput="window.__FA48.updateUI()" onchange="window.__FA48.updateUI()">
@@ -228,7 +325,7 @@ const BODY_HTML = `
   </div>
 
   <div class="animation-zone" id="anim-zone">
-    <div id="drag-instruction" class="instruction-text">💡 準備中...</div>
+    <div id="drag-instruction" class="instruction-text">${copy.preparing}</div>
     <div id="anim-area"></div>
 
     <div id="bottom-answer-zone">
@@ -275,6 +372,7 @@ declare global {
 }
 
 export default function FractionSubtractionPage() {
+  const copy = useCopy(COPY);
   const rootRef = useRef<HTMLDivElement>(null);
   const [embedded, setEmbedded] = useState(false);
 
@@ -326,7 +424,9 @@ export default function FractionSubtractionPage() {
       window.clearInterval(poll);
       window.clearTimeout(stopPoll);
     };
-  }, []);
+    // Re-run on a language switch too: the main effect re-injects the markup,
+    // and the new container needs the poll to pick up its scale.
+  }, [copy]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -387,13 +487,7 @@ export default function FractionSubtractionPage() {
     const maxWholes = () =>
       parseInt(getComputedStyle(de).getPropertyValue("--max-wholes")) || 1;
 
-    const wordProblemTemplates = [
-      "小明原本有 [FRAC1] 塊披薩，吃掉了 [FRAC2] 塊。請問還剩下多少塊披薩？",
-      "第一塊農田面積為 [FRAC1] 公頃，第二塊面積比第一塊少 [FRAC2] 公頃。請問第二塊農田的面積是多少公頃？",
-      "媽媽買了 [FRAC1] 公斤的蘋果，送給鄰居 [FRAC2] 公斤。請問還剩下多少公斤？",
-      "水桶裡原有 [FRAC1] 公升的水，倒出了 [FRAC2] 公升。請問現在水桶裡還剩下多少公升的水？",
-      "紅彩帶長 [FRAC1] 公尺，藍彩帶長 [FRAC2] 公尺。請問紅彩帶比藍彩帶長多少公尺？",
-    ];
+    const wordProblemTemplates = copy.wordProblems;
 
     /**
      * 「重新開始」要回到的狀態。載入時（套用完 dashboard 傳進來的題目參數之後）拍一次快照，
@@ -494,10 +588,10 @@ export default function FractionSubtractionPage() {
       if (!tc || !btn) return;
       if (tc.style.display === "none") {
         tc.style.display = "flex";
-        btn.innerText = "隱藏內容";
+        btn.innerText = copy.hideContent;
       } else {
         tc.style.display = "none";
-        btn.innerText = "顯示內容";
+        btn.innerText = copy.showContent;
       }
     }
 
@@ -1022,7 +1116,7 @@ export default function FractionSubtractionPage() {
           showAnswerZone();
         }, durationMs + 50);
       } else {
-        $e("drag-instruction")!.innerHTML = `💡 很好！繼續把被減數的色塊一份一份丟進垃圾桶（減數會同時扣掉一份）。`;
+        $e("drag-instruction")!.innerHTML = copy.keepTrashing;
       }
     }
 
@@ -1152,8 +1246,8 @@ export default function FractionSubtractionPage() {
       }, collapseAfterMs);
       $e("drag-instruction")!.innerHTML =
         trashedCount === 0
-          ? `💡 分母相同了！一次拖一份被減數的色塊丟進垃圾桶（減數會跟著一起扣掉一份），或點擊色塊讓它自己慢慢飛過去。`
-          : `💡 已從垃圾桶還原一份。可以繼續丟，也可以再從垃圾桶拉回來。`;
+          ? copy.sameDenom
+          : copy.restored;
     }
 
     function isOverTrash(x: number, y: number) {
@@ -1395,14 +1489,14 @@ export default function FractionSubtractionPage() {
       const tooltip = $e("trash-content");
       if (!tooltip) return;
       if (trashedCount === 0 || !isCommonDenomReady) {
-        tooltip.innerHTML = "<div style='text-align:center; color:#7f8c8d; padding:10px; font-weight:normal;'>目前垃圾桶是空的</div>";
+        tooltip.innerHTML = `<div style='text-align:center; color:#7f8c8d; padding:10px; font-weight:normal;'>${copy.trashEmpty}</div>`;
         return;
       }
       const w = Math.floor(trashedCount / cd);
       const n = trashedCount % cd;
       let fracHtml = "";
-      if (w > 0 && n === 0) fracHtml = `<b>${w}</b> 個整數`;
-      else if (w > 0) fracHtml = `<b>${w}</b> 個整數 和 <div class="inline-frac"><span>${n}</span><div class="line"></div><span>${cd}</span></div>`;
+      if (w > 0 && n === 0) fracHtml = copy.wholes(w);
+      else if (w > 0) fracHtml = copy.wholesAnd(w, `<div class="inline-frac"><span>${n}</span><div class="line"></div><span>${cd}</span></div>`);
       else fracHtml = `<div class="inline-frac"><span>${n}</span><div class="line"></div><span>${cd}</span></div>`;
 
       // 迷你長條圖切成一份一份，才能被拉回／點回原來的長條圖還原。
@@ -1427,8 +1521,8 @@ export default function FractionSubtractionPage() {
         }
         return html + "</div>";
       };
-      const hint = `<div style="padding: 4px 15px 0; color:#7f8c8d; font-size:0.85rem;">💡 想改答案？把垃圾桶裡的色塊拖回上面的長條圖，或直接點它，就能還原一份。</div>`;
-      tooltip.innerHTML = `<div style="margin-bottom: 15px;"><div style="padding: 0 15px;"><span style="color:var(--red); font-weight:bold;">被減數 (紅) 已丟棄: ${fracHtml}</span></div>${genMini(trashedCount, 1)}</div><div><div style="padding: 0 15px;"><span style="color:var(--blue); font-weight:bold;">減數 (藍) 已對消: ${fracHtml}</span></div>${genMini(trashedCount, 2)}</div>${hint}`;
+      const hint = `<div style="padding: 4px 15px 0; color:#7f8c8d; font-size:0.85rem;">${copy.trashHint}</div>`;
+      tooltip.innerHTML = `<div style="margin-bottom: 15px;"><div style="padding: 0 15px;"><span style="color:var(--red); font-weight:bold;">${copy.trashedRed(fracHtml)}</span></div>${genMini(trashedCount, 1)}</div><div><div style="padding: 0 15px;"><span style="color:var(--blue); font-weight:bold;">${copy.trashedBlue(fracHtml)}</span></div>${genMini(trashedCount, 2)}</div>${hint}`;
 
       tooltip.querySelectorAll(".trash-piece").forEach((el) => {
         const miniPiece = el as HTMLElement;
@@ -1452,8 +1546,8 @@ export default function FractionSubtractionPage() {
         $e("ans-w")!.style.display = "none";
         $i("ans-w")!.value = "";
       }
-      $e("bot-public-unit")!.innerHTML = `💡 公共分數單位為： <b style="display:inline-flex; align-items:center; vertical-align:middle;">${getFracHtml(1, cd1, "var(--dark)")}</b>`;
-      $e("drag-instruction")!.innerHTML = `💡 減去完畢！請填寫下方最終答案！`;
+      $e("bot-public-unit")!.innerHTML = `${copy.commonUnit}<b style="display:inline-flex; align-items:center; vertical-align:middle;">${getFracHtml(1, cd1, "var(--dark)")}</b>`;
+      $e("drag-instruction")!.innerHTML = copy.done;
     }
 
     function setupSubtraction(cd1: number, cd2: number) {
@@ -1502,12 +1596,12 @@ export default function FractionSubtractionPage() {
       T(() => ($e("bottom-answer-zone")!.style.display = "none"), 300);
 
       if (isCommonDenomReady) {
-        $e("drag-instruction")!.innerHTML = `💡 分母相同了！一次拖一份被減數的色塊丟進垃圾桶（減數會跟著一起扣掉一份），或點擊色塊讓它自己慢慢飛過去。`;
+        $e("drag-instruction")!.innerHTML = copy.sameDenom;
         // 通分後長條圖仍保留原本長度（丟掉的部分只是變虛線），旁邊的分數標註要跟著留著對照。
         $e("label1")!.style.opacity = "1";
         $e("label2")!.style.opacity = "1";
       } else {
-        $e("drag-instruction")!.innerHTML = `💡 分母不同，還不能相減喔！請先點擊右邊的「擴分/約分」讓兩個分母相同。`;
+        $e("drag-instruction")!.innerHTML = copy.notSameDenom;
         $e("label1")!.style.opacity = "1";
         $e("label2")!.style.opacity = "1";
       }
@@ -1560,25 +1654,25 @@ export default function FractionSubtractionPage() {
             <div id="label1" style="width:15%; text-align:center; transition: opacity 0.5s; opacity: 1;"></div>
             <div class="bars-column"><div id="bar1-wrap" class="bar-wrap-container"></div><div id="bar1-nl" class="nl-wrap-container" style="display:none;"></div></div>
             <div id="tools1" style="width:15%; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; visibility:visible;">
-                <button class="tool-btn" onclick="window.__FA48.applyTool(1, 'expand')">➕ 擴分</button><button class="tool-btn" onclick="window.__FA48.applyTool(1, 'simplify')">➖ 約分</button>
+                <button class="tool-btn" onclick="window.__FA48.applyTool(1, 'expand')">${copy.expand}</button><button class="tool-btn" onclick="window.__FA48.applyTool(1, 'simplify')">${copy.simplify}</button>
             </div>
         </div>
         <div id="bar2-row" style="display:none; position:relative; width:100%; min-height:50px; align-items:center; justify-content:space-between;">
             <div id="label2" style="width:15%; text-align:center; transition: opacity 0.5s; opacity: 1;"></div>
             <div class="bars-column"><div id="bar2-wrap" class="bar-wrap-container"></div><div id="bar2-nl" class="nl-wrap-container" style="display:none;"></div></div>
             <div id="tools2" style="width:15%; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; visibility:visible;">
-                <button class="tool-btn" onclick="window.__FA48.applyTool(2, 'expand')">➕ 擴分</button><button class="tool-btn" onclick="window.__FA48.applyTool(2, 'simplify')">➖ 約分</button>
+                <button class="tool-btn" onclick="window.__FA48.applyTool(2, 'expand')">${copy.expand}</button><button class="tool-btn" onclick="window.__FA48.applyTool(2, 'simplify')">${copy.simplify}</button>
             </div>
         </div>
         <div id="trash-area" style="display:none; position:relative; width:100%; min-height:50px; align-items:flex-start; justify-content:space-between; border-top: 2px dashed #ccc; padding-top: 5px;">
-            <div style="width:15%; display: flex; flex-direction: column; align-items: center; gap: 5px;"><div id="trash-can" style="font-size: 3rem;">🗑️</div><div style="font-weight:bold; color:var(--dark); font-size:1rem;">垃圾桶</div><button id="toggle-trash-btn" class="tool-btn" style="font-size: 0.85rem; padding: 4px 8px; width: auto;" onclick="window.__FA48.toggleTrashContent()">隱藏內容</button></div>
-            <div id="trash-content" class="bars-column" style="background: white; padding: 15px 0; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border: 1px solid #eee;"><div style='text-align:center; color:#7f8c8d; padding:10px; font-weight:normal;'>目前垃圾桶是空的</div></div>
+            <div style="width:15%; display: flex; flex-direction: column; align-items: center; gap: 5px;"><div id="trash-can" style="font-size: 3rem;">🗑️</div><div style="font-weight:bold; color:var(--dark); font-size:1rem;">${copy.trash}</div><button id="toggle-trash-btn" class="tool-btn" style="font-size: 0.85rem; padding: 4px 8px; width: auto;" onclick="window.__FA48.toggleTrashContent()">${copy.hideContent}</button></div>
+            <div id="trash-content" class="bars-column" style="background: white; padding: 15px 0; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border: 1px solid #eee;"><div style='text-align:center; color:#7f8c8d; padding:10px; font-weight:normal;'>${copy.trashEmpty}</div></div>
             <div style="width:15%;"></div>
         </div>
       `;
       renderBar(1, "none");
       renderBar(2, "none");
-      $e("drag-instruction")!.innerHTML = `💡 點擊上方分數，顯示圖形！`;
+      $e("drag-instruction")!.innerHTML = copy.clickFraction;
     }
 
     function randomChallenge() {
@@ -1650,18 +1744,17 @@ export default function FractionSubtractionPage() {
           else if (ansN === 0 && ansW === simpleW && simpleMixedN === 0) isSimplest = true;
 
           let msg = isSimplest
-            ? "🎉 完全正確！而且已經是最簡化的答案了！"
-            : '🌟 答對了數值！但試試看，這個答案可以再「約分」或「轉成帶分數」喔！';
+            ? copy.perfect
+            : copy.rightValue;
           if (vals.d1 * s1 !== lcm(vals.d1, vals.d2) && exactN !== 0)
-            msg +=
-              '<br><span style="color:var(--orange); font-size:1rem; font-weight:normal;">（提示：你通分時使用的分母不是最小公倍數喔！雖然算得對，但數字會比較大。）</span>';
+            msg += `<br><span style="color:var(--orange); font-size:1rem; font-weight:normal;">${copy.lcmHint}</span>`;
           fb.style.opacity = "1";
           fb.style.color = "var(--success)";
           fb.innerHTML = msg;
         } else {
           fb.style.opacity = "1";
           fb.style.color = "var(--red)";
-          fb.innerText = "👀 答案不對喔，再檢查一下整數和分子相減的結果！";
+          fb.innerText = copy.wrong;
         }
       } else {
         fb.style.opacity = "0";
@@ -1816,7 +1909,7 @@ export default function FractionSubtractionPage() {
     de.style.setProperty("--max-wholes", "1");
     de.style.setProperty("--unit-min-w", "120px");
     de.style.setProperty("--anim-time", "0.6s");
-    root.innerHTML = BODY_HTML;
+    root.innerHTML = buildBody(copy);
 
     const onMouseMove = (e: MouseEvent) => {
       if (isHintPlaying) interruptHint();
@@ -1904,7 +1997,10 @@ export default function FractionSubtractionPage() {
       de.style.removeProperty("--unit-min-w");
       de.style.removeProperty("--anim-time");
     };
-  }, []);
+    // `copy` is a stable per-locale object, so this re-runs only on a language
+    // switch: the old instance is torn down and the tool re-initialised in the
+    // new language (the in-progress exercise restarts from the URL params).
+  }, [copy]);
 
   return (
     <>

@@ -23,9 +23,70 @@ import {
   MAX_TOTAL_SCORE,
   type ProgressSnapshot,
 } from "@/lib/wenyan-progress";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+import { BADGE_COPY, WENYAN_COPY } from "./wenyan-copy";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    heading: "文言文小遊戲",
+    intro:
+      "一邊玩一邊學文言文！「學習模式」帶你慢慢讀懂經典故事，「挑戰模式」有四種玩法：考考你常用詞的意思、把常用詞拼回原文、讀懂文章的主旨道理，或者把道理應用到生活上，賺取分數和獎章。",
+    sourceNote: "篇章選自教育局《建議篇章》第二學習階段（小三至小六）",
+    statCompleted: "已完成篇章",
+    statTotalScore: "挑戰總分",
+    statBadges: "已得獎章",
+    learnDescription:
+      "跟着任務一步步讀通文言文：讀原文、拆解字詞、練習翻譯。完成後解鎖「勤學書生」獎章。",
+    learnProgress: "學習進度",
+    enterLearn: "進入學習模式",
+    translateDescription:
+      "從文言文片段抽出常用詞，用選擇題猜猜它的意思。答得越準、越快，分數越高，還能贏取獎章！",
+    puzzleDescription:
+      "文言文段落抽走了常用詞，每個詞語都附有意思，把正確的拖放回空格，小心混在其中的干擾項，全對得 100 分！",
+    themeDescription:
+      "讀一篇文言文的原文和翻譯，從五個選項中選出文章隱含的主旨道理。讀得明白，就能得分和贏取獎章！",
+    applicationDescription:
+      "讀懂文章主旨後，想想生活中類似道理的例子，寫出你的生活隱喻。AI 老師會從「主旨理解」和「應用場景」兩方面評分並給建議！",
+    bestPrefix: "最高分　",
+    playedPrefix: "已挑戰　",
+    playedSuffix: (_n: number) => " 次",
+    startPuzzle: "開始拼圖",
+    myBadges: "我的獎章",
+  },
+  en: {
+    heading: "Classical Chinese Games",
+    intro:
+      "Learn Classical Chinese (文言文) while you play! Learn mode helps you read classic stories step by step. Challenge mode has four games: guess what common words mean, put common words back into the text, find the main idea of a text, or apply that idea to everyday life. Earn points and badges as you go.",
+    sourceNote: "Texts are from the EDB Recommended Passages for Key Stage 2 (P3 to P6)",
+    statCompleted: "Texts finished",
+    statTotalScore: "Challenge total",
+    statBadges: "Badges earned",
+    learnDescription:
+      "Work through tasks to understand a Classical Chinese text: read the original, break down the words and practise translating. Finish to unlock the Keen Scholar badge.",
+    learnProgress: "Progress",
+    enterLearn: "Go to Learn mode",
+    translateDescription:
+      "Common words are picked from Classical Chinese extracts. Choose what each one means. The more accurate and faster you are, the higher your score, and you can win badges!",
+    puzzleDescription:
+      "Common words are missing from a Classical Chinese passage. Each word comes with its meaning. Drag the right ones back into the gaps, and watch out for the extra words that don't belong. Get them all right for 100 points!",
+    themeDescription:
+      "Read a Classical Chinese text and its translation, then pick the main idea from five choices. Understand it well to score points and win badges!",
+    applicationDescription:
+      "Once you understand the main idea, think of an example from everyday life that teaches the same lesson and write it down. The AI teacher scores your understanding and your example, and gives you tips!",
+    bestPrefix: "Best: ",
+    playedPrefix: "Played: ",
+    playedSuffix: (n: number) => (n === 1 ? " time" : " times"),
+    startPuzzle: "Start puzzle",
+    myBadges: "My badges",
+  },
+});
 
 export default function WenyanDashboard() {
   const router = useRouter();
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
+  const badgeCopy = useCopy(BADGE_COPY);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(null);
 
   // Progress lives in the database now; fetch it after mount.
@@ -56,11 +117,11 @@ export default function WenyanDashboard() {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ChevronLeft className="size-4" />
-          返回中文科
+          {shared.backToChinese}
         </Link>
         <div className="flex items-center gap-2">
           <ScrollText className="size-4 text-[#7a3dff]" />
-          <span className="text-sm font-semibold text-[#080808]">學習文言文</span>
+          <span className="text-sm font-semibold text-[#080808]">{shared.topicTitle}</span>
         </div>
         <div className="w-[96px]" />
       </div>
@@ -71,10 +132,10 @@ export default function WenyanDashboard() {
           {/* Hero */}
           <div className="text-center space-y-3">
             <h1 className="font-serif text-[36px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-              文言文小遊戲
+              {copy.heading}
             </h1>
             <p className="mx-auto max-w-xl text-sm leading-7 text-[#6b6385]">
-              一邊玩一邊學文言文！「學習模式」帶你慢慢讀懂經典故事，「挑戰模式」有四種玩法：考考你常用詞的意思、把常用詞拼回原文、讀懂文章的主旨道理，或者把道理應用到生活上，賺取分數和獎章。
+              {copy.intro}
             </p>
             <a
               href="https://www.edb.gov.hk/tc/curriculum-development/kla/chi-edu/key-stage2.html"
@@ -82,7 +143,7 @@ export default function WenyanDashboard() {
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#e6e1f3] bg-white/80 px-3 py-1 text-[11px] font-medium text-[#7a6f95] transition hover:border-[#c4b8ec] hover:text-[#5a25d6]"
             >
-              篇章選自教育局《建議篇章》第二學習階段（小三至小六）
+              {copy.sourceNote}
             </a>
           </div>
 
@@ -90,19 +151,19 @@ export default function WenyanDashboard() {
           <div className="grid grid-cols-3 gap-3">
             <StatCard
               icon={BookOpen}
-              label="已完成篇章"
+              label={copy.statCompleted}
               value={`${completed}/${totalTexts}`}
               accent="#7a3dff"
             />
             <StatCard
               icon={Trophy}
-              label="挑戰總分"
+              label={copy.statTotalScore}
               value={`${totalScore}/${MAX_TOTAL_SCORE}`}
               accent="#f59e0b"
             />
             <StatCard
               icon={Star}
-              label="已得獎章"
+              label={copy.statBadges}
               value={`${ownedBadges.size}/${BADGES.length}`}
               accent="#16a34a"
             />
@@ -120,17 +181,17 @@ export default function WenyanDashboard() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="font-serif text-[26px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-                  學習模式
+                  {shared.learnMode}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[#6b6385]">
-                  跟着任務一步步讀通文言文：讀原文、拆解字詞、練習翻譯。完成後解鎖「勤學書生」獎章。
+                  {copy.learnDescription}
                 </p>
               </div>
 
               <div className="w-full shrink-0 space-y-3 sm:w-60">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs text-[#9a8fb5]">
-                    <span>學習進度</span>
+                    <span>{copy.learnProgress}</span>
                     <span className="font-semibold text-[#7a3dff]">{learnPct}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-[#efeafb]">
@@ -141,7 +202,7 @@ export default function WenyanDashboard() {
                   </div>
                 </div>
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#7a3dff] transition-transform duration-200 group-hover:translate-x-1">
-                  進入學習模式
+                  {copy.enterLearn}
                   <ArrowRight className="size-4" />
                 </span>
               </div>
@@ -158,24 +219,24 @@ export default function WenyanDashboard() {
                   <Swords className="size-6" />
                 </div>
                 <h2 className="mt-5 font-serif font-semibold tracking-[-0.02em] text-[#1a1330]">
-                  <span className="block text-[24px]">挑戰模式</span>
-                  <span className="block text-[24px]">常用詞翻譯</span>
+                  <span className="block text-[24px]">{shared.challengeMode}</span>
+                  <span className="block text-[24px]">{shared.modeTranslate}</span>
                 </h2>
                 <p className="mt-2 flex-1 text-sm leading-6 text-[#6b6385]">
-                  從文言文片段抽出常用詞，用選擇題猜猜它的意思。答得越準、越快，分數越高，還能贏取獎章！
+                  {copy.translateDescription}
                 </p>
 
                 <div className="mt-5 flex items-center gap-4 text-xs text-[#9a8fb5]">
                   <span>
-                    最高分　<span className="font-semibold text-[#f59e0b]">{bestTranslate}</span>
+                    {copy.bestPrefix}<span className="font-semibold text-[#f59e0b]">{bestTranslate}</span>
                   </span>
                   <span>
-                    已挑戰　<span className="font-semibold text-[#f59e0b]">{playsTranslate}</span> 次
+                    {copy.playedPrefix}<span className="font-semibold text-[#f59e0b]">{playsTranslate}</span>{copy.playedSuffix(playsTranslate)}
                   </span>
                 </div>
 
                 <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#f59e0b] transition-transform duration-200 group-hover:translate-x-1">
-                  開始挑戰
+                  {shared.startChallenge}
                   <ArrowRight className="size-4" />
                 </span>
               </button>
@@ -189,24 +250,24 @@ export default function WenyanDashboard() {
                   <PuzzleIcon className="size-6" />
                 </div>
                 <h2 className="mt-5 font-serif font-semibold tracking-[-0.02em] text-[#1a1330]">
-                  <span className="block text-[24px]">挑戰模式</span>
-                  <span className="block text-[24px]">常用詞拼圖</span>
+                  <span className="block text-[24px]">{shared.challengeMode}</span>
+                  <span className="block text-[24px]">{shared.modePuzzle}</span>
                 </h2>
                 <p className="mt-2 flex-1 text-sm leading-6 text-[#6b6385]">
-                  文言文段落抽走了常用詞，每個詞語都附有意思，把正確的拖放回空格，小心混在其中的干擾項，全對得 100 分！
+                  {copy.puzzleDescription}
                 </p>
 
                 <div className="mt-5 flex items-center gap-4 text-xs text-[#9a8fb5]">
                   <span>
-                    最高分　<span className="font-semibold text-[#0d9488]">{bestPuzzle}</span>
+                    {copy.bestPrefix}<span className="font-semibold text-[#0d9488]">{bestPuzzle}</span>
                   </span>
                   <span>
-                    已挑戰　<span className="font-semibold text-[#0d9488]">{playsPuzzle}</span> 次
+                    {copy.playedPrefix}<span className="font-semibold text-[#0d9488]">{playsPuzzle}</span>{copy.playedSuffix(playsPuzzle)}
                   </span>
                 </div>
 
                 <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#0d9488] transition-transform duration-200 group-hover:translate-x-1">
-                  開始拼圖
+                  {copy.startPuzzle}
                   <ArrowRight className="size-4" />
                 </span>
               </button>
@@ -220,24 +281,24 @@ export default function WenyanDashboard() {
                   <Lightbulb className="size-6" />
                 </div>
                 <h2 className="mt-5 font-serif font-semibold tracking-[-0.02em] text-[#1a1330]">
-                  <span className="block text-[24px]">挑戰模式</span>
-                  <span className="block text-[24px]">主旨理解</span>
+                  <span className="block text-[24px]">{shared.challengeMode}</span>
+                  <span className="block text-[24px]">{shared.modeTheme}</span>
                 </h2>
                 <p className="mt-2 flex-1 text-sm leading-6 text-[#6b6385]">
-                  讀一篇文言文的原文和翻譯，從五個選項中選出文章隱含的主旨道理。讀得明白，就能得分和贏取獎章！
+                  {copy.themeDescription}
                 </p>
 
                 <div className="mt-5 flex items-center gap-4 text-xs text-[#9a8fb5]">
                   <span>
-                    最高分　<span className="font-semibold text-[#6366f1]">{bestTheme}</span>
+                    {copy.bestPrefix}<span className="font-semibold text-[#6366f1]">{bestTheme}</span>
                   </span>
                   <span>
-                    已挑戰　<span className="font-semibold text-[#6366f1]">{playsTheme}</span> 次
+                    {copy.playedPrefix}<span className="font-semibold text-[#6366f1]">{playsTheme}</span>{copy.playedSuffix(playsTheme)}
                   </span>
                 </div>
 
                 <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#6366f1] transition-transform duration-200 group-hover:translate-x-1">
-                  開始挑戰
+                  {shared.startChallenge}
                   <ArrowRight className="size-4" />
                 </span>
               </button>
@@ -251,24 +312,24 @@ export default function WenyanDashboard() {
                   <Rocket className="size-6" />
                 </div>
                 <h2 className="mt-5 font-serif font-semibold tracking-[-0.02em] text-[#1a1330]">
-                  <span className="block text-[24px]">挑戰模式</span>
-                  <span className="block text-[24px]">主旨應用</span>
+                  <span className="block text-[24px]">{shared.challengeMode}</span>
+                  <span className="block text-[24px]">{shared.modeApplication}</span>
                 </h2>
                 <p className="mt-2 flex-1 text-sm leading-6 text-[#6b6385]">
-                  讀懂文章主旨後，想想生活中類似道理的例子，寫出你的生活隱喻。AI 老師會從「主旨理解」和「應用場景」兩方面評分並給建議！
+                  {copy.applicationDescription}
                 </p>
 
                 <div className="mt-5 flex items-center gap-4 text-xs text-[#9a8fb5]">
                   <span>
-                    最高分　<span className="font-semibold text-[#e11d48]">{bestApplication}</span>
+                    {copy.bestPrefix}<span className="font-semibold text-[#e11d48]">{bestApplication}</span>
                   </span>
                   <span>
-                    已挑戰　<span className="font-semibold text-[#e11d48]">{playsApplication}</span> 次
+                    {copy.playedPrefix}<span className="font-semibold text-[#e11d48]">{playsApplication}</span>{copy.playedSuffix(playsApplication)}
                   </span>
                 </div>
 
                 <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#e11d48] transition-transform duration-200 group-hover:translate-x-1">
-                  開始挑戰
+                  {shared.startChallenge}
                   <ArrowRight className="size-4" />
                 </span>
               </button>
@@ -279,11 +340,12 @@ export default function WenyanDashboard() {
           <div className="rounded-[20px] border border-[#e6e1f3] bg-white/80 p-6">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-[#1a1330]">
               <Trophy className="size-4 text-[#f59e0b]" />
-              我的獎章
+              {copy.myBadges}
             </h3>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {BADGES.map((b) => {
                 const owned = ownedBadges.has(b.id);
+                const text = badgeCopy[b.id] ?? b;
                 return (
                   <div
                     key={b.id}
@@ -309,9 +371,9 @@ export default function WenyanDashboard() {
                           owned ? "text-[#1a1330]" : "text-[#9a9a9a]",
                         ].join(" ")}
                       >
-                        {b.label}
+                        {text.label}
                       </p>
-                      <p className="truncate text-xs text-[#9a8fb5]">{b.description}</p>
+                      <p className="truncate text-xs text-[#9a8fb5]">{text.description}</p>
                     </div>
                   </div>
                 );
@@ -350,4 +412,3 @@ function StatCard({
     </div>
   );
 }
-

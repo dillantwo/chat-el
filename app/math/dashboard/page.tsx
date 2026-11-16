@@ -32,7 +32,11 @@ import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useToolbox, type ToolFromDB } from "@/contexts/ToolboxContext";
 import { buildStepToolPath, uniqueToolSteps, type MathToolStep } from "@/lib/math-tool-steps";
+import { toolGroupDisplayName } from "@/lib/math-tool-labels";
 import { basePath, stripTextModeLatex } from "@/lib/utils";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { COMMON_COPY } from "@/lib/i18n/common";
+import { defineCopy } from "@/lib/i18n/config";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import { DefaultChatTransport } from "ai";
@@ -184,6 +188,54 @@ function clearDashboardSession() {
   } catch {}
 }
 
+const COPY = defineCopy({
+  "zh-Hant": {
+    // Stored as the history title of a chat with no question and no text yet.
+    defaultChatTitle: "數學對話",
+    showAssistant: "顯示 AI 助手",
+    hideAssistant: "隱藏 AI 助手",
+    generatingPractice: "正在根據題目生成練習...",
+    questionImageAlt: "題目圖片",
+    editQuestion: "修改題目",
+    pickTool: "請從左側工具箱選擇合適的工具開始練習",
+    emptyTitle: "輸入題目讓 AI 為您解答，或直接從左側工具箱選擇工具開始練習",
+    emptyBody: "部分工具可直接使用，無需輸入題目",
+    reclassifyHint: "輸入新題目可重新分類",
+    cancel: "取消",
+    questionPlaceholder: "輸入數學題目，例如：3/4 + 1/2 = ?（可直接粘貼圖片）",
+    stopVoice: "停止語音輸入",
+    voice: "語音輸入",
+    listening: "聆聽中…",
+    newChatTitle: "新建聊天",
+    resuming: "正在還原上次的對話…",
+    thinking: "思考中...",
+    chatPlaceholder: "繼續提問...（可直接粘貼圖片）",
+    uploadImage: "上傳圖片",
+  },
+  en: {
+    defaultChatTitle: "Maths chat",
+    showAssistant: "Show AI helper",
+    hideAssistant: "Hide AI helper",
+    generatingPractice: "Making practice from your question...",
+    questionImageAlt: "Question image",
+    editQuestion: "Edit question",
+    pickTool: "Choose a suitable tool from the toolbox on the left to start practising",
+    emptyTitle: "Type a question for the AI to help you solve, or pick a tool from the toolbox on the left to start practising",
+    emptyBody: "Some tools can be used straight away without a question",
+    reclassifyHint: "Type a new question to sort it again",
+    cancel: "Cancel",
+    questionPlaceholder: "Type a maths question, e.g. 3/4 + 1/2 = ? (you can paste an image)",
+    stopVoice: "Stop voice input",
+    voice: "Voice input",
+    listening: "Listening…",
+    newChatTitle: "New chat",
+    resuming: "Restoring your last chat…",
+    thinking: "Thinking...",
+    chatPlaceholder: "Ask another question... (you can paste an image)",
+    uploadImage: "Upload image",
+  },
+});
+
 export default function MathDashboardPage() {
   return (
     <Suspense>
@@ -193,6 +245,9 @@ export default function MathDashboardPage() {
 }
 
 function MathDashboardContent() {
+  const copy = useCopy(COPY);
+  const common = useCopy(COMMON_COPY);
+  const { locale } = useLocale();
   const searchParams = useSearchParams();
   const urlType = searchParams.get("type") || "other";
   const toolbox = useToolbox();
@@ -288,7 +343,7 @@ function MathDashboardContent() {
   const selectedTool = toolbox?.selectedTool ?? null;
   const hideChatForTool = selectedTool === "journey-graph";
   const tools = toolboxConfig?.tools ?? [];
-  const typeLabel = toolboxConfig?.label ?? type;
+  const typeLabel = toolGroupDisplayName(type, toolboxConfig?.label, locale);
 
   // Both mics are declared up here because the reset/load handlers below have to
   // stop dictation before they clear the boxes.
@@ -300,6 +355,7 @@ function MathDashboardContent() {
     rebase: rebaseDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     // Chinese doesn't separate words with spaces.
     separator: "",
     getBaseText: () => input,
@@ -324,6 +380,7 @@ function MathDashboardContent() {
     rebase: rebaseQuestionDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     separator: "",
     getBaseText: () => questionInput,
     onTranscript: setQuestionInput,
@@ -498,7 +555,7 @@ function MathDashboardContent() {
       );
       register({
         tools: toolboxConfig.tools,
-        allToolGroups: mathConfigs.map((c) => ({ label: c.label, tools: c.tools })),
+        allToolGroups: mathConfigs.map((c) => ({ type: c.type, label: c.label, tools: c.tools })),
         typeLabel: toolboxConfig.label,
         question,
         questionImage,
@@ -1063,7 +1120,7 @@ function MathDashboardContent() {
     void upsertMathChatHistory({
       id: currentChatId,
       kind: "general",
-      title: question || (firstUserText?.type === "text" ? firstUserText.text.slice(0, 40) : "數學對話"),
+      title: question || (firstUserText?.type === "text" ? firstUserText.text.slice(0, 40) : copy.defaultChatTitle),
       hasUserQuestion,
       question: hasUserQuestion ? question : undefined,
       type: hasUserQuestion ? type : undefined,
@@ -1072,6 +1129,8 @@ function MathDashboardContent() {
       messages: serializeUiMessages(messages),
       updatedAt: new Date().toISOString(),
     });
+    // `copy` is left out on purpose: switching language must not re-save the chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChatId, hasUserQuestion, messages, previewUrl, question, selectedTool, status, type]);
 
   function fileToDataURL(file: File): Promise<string> {
@@ -1292,7 +1351,7 @@ function MathDashboardContent() {
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <ChevronLeft className="size-4" />
-              數學科
+              {common.subjects.math}
             </Link>
           </div>
           {!chatVisible && !hideChatForTool && (
@@ -1301,7 +1360,7 @@ function MathDashboardContent() {
               size="icon-sm"
               onClick={() => setChatVisible(true)}
               className="rounded-[4px] border border-[#d8d8d8] bg-white/90 shadow-sm backdrop-blur"
-              title="顯示 AI 助手"
+              title={copy.showAssistant}
             >
               <PanelRight className="size-4" />
             </Button>
@@ -1332,7 +1391,7 @@ function MathDashboardContent() {
                 {isExtractingParams || !previewUrl ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 text-[#5a5a5a]">
                     <Loader2 className="size-8 animate-spin text-[#146ef5]" />
-                    <span className="text-sm font-medium">正在根據題目生成練習...</span>
+                    <span className="text-sm font-medium">{copy.generatingPractice}</span>
                   </div>
                 ) : (
                   <iframe
@@ -1361,7 +1420,7 @@ function MathDashboardContent() {
                     {questionImage && (
                       <img
                         src={questionImage}
-                        alt="題目圖片"
+                        alt={copy.questionImageAlt}
                         className="mt-3 max-h-32 rounded-[8px] border border-[#d8d8d8] object-contain"
                       />
                     )}
@@ -1381,7 +1440,7 @@ function MathDashboardContent() {
                       setQuestionInput(question);
                       setTimeout(() => questionTextareaRef.current?.focus(), 0);
                     }}
-                    title="修改題目"
+                    title={copy.editQuestion}
                     className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-[4px] border border-transparent text-[#ababab] transition-colors hover:border-[#d8d8d8] hover:bg-[#f7f7f7] hover:text-[#080808]"
                   >
                     <Pencil className="size-4" />
@@ -1389,7 +1448,7 @@ function MathDashboardContent() {
                 </div>
                 <div className="mt-4 flex items-center gap-2 rounded-[6px] border border-[#146ef5]/20 bg-[#146ef5]/5 px-3 py-2 text-sm text-[#146ef5]">
                   <ArrowLeft className="size-4 shrink-0" />
-                  <span>請從左側工具箱選擇合適的工具開始練習</span>
+                  <span>{copy.pickTool}</span>
                 </div>
               </div>
             )}
@@ -1401,16 +1460,16 @@ function MathDashboardContent() {
                     <Sparkles className="size-7" />
                   </div>
                   <p className="text-lg font-semibold text-[#080808]">
-                    輸入題目讓 AI 為您解答，或直接從左側工具箱選擇工具開始練習
+                    {copy.emptyTitle}
                   </p>
                   <p className="mt-1.5 mb-7 text-sm text-[#5a5a5a]">
-                    部分工具可直接使用，無需輸入題目
+                    {copy.emptyBody}
                   </p>
                 </>
               )}
               {(question || questionImage) && isEditingQuestion && (
                 <div className="mb-4 flex items-center justify-between w-full max-w-3xl">
-                  <p className="text-sm text-[#5a5a5a]">輸入新題目可重新分類</p>
+                  <p className="text-sm text-[#5a5a5a]">{copy.reclassifyHint}</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -1421,7 +1480,7 @@ function MathDashboardContent() {
                     }}
                     className="text-xs text-[#5a5a5a] underline-offset-2 hover:text-[#080808] hover:underline"
                   >
-                    取消
+                    {copy.cancel}
                   </button>
                 </div>
               )}
@@ -1440,7 +1499,7 @@ function MathDashboardContent() {
 
                   <Textarea
                     ref={questionTextareaRef}
-                    placeholder="輸入數學題目，例如：3/4 + 1/2 = ?（可直接粘貼圖片）"
+                    placeholder={copy.questionPlaceholder}
                     value={questionInput}
                     onChange={(e) => handleQuestionInputChange(e.target.value)}
                     onKeyDown={handleQuestionKeyDown}
@@ -1481,8 +1540,8 @@ function MathDashboardContent() {
                             ? 'border-red-400 text-red-500 hover:border-red-500 hover:text-red-600'
                             : 'border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]'
                         }`}
-                        title={isQuestionListening ? '停止語音輸入' : '語音輸入'}
-                        aria-label={isQuestionListening ? '停止語音輸入' : '語音輸入'}
+                        title={isQuestionListening ? copy.stopVoice : copy.voice}
+                        aria-label={isQuestionListening ? copy.stopVoice : copy.voice}
                       >
                         {isQuestionListening ? (
                           <MicOff className="size-4" />
@@ -1492,7 +1551,7 @@ function MathDashboardContent() {
                       </Button>
                       {isQuestionListening && (
                         <span aria-live="polite" className="text-[12px] font-medium text-red-500 animate-pulse">
-                          聆聽中…
+                          {copy.listening}
                         </span>
                       )}
                       {!isQuestionListening && questionVoiceError && (
@@ -1568,7 +1627,7 @@ function MathDashboardContent() {
                 size="sm"
                 onClick={handleNewChat}
                 className="rounded-[4px] border border-transparent bg-[#146ef5] px-2.5 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(20,110,245,0.28)] transition-all hover:bg-[#0055d4] hover:shadow-[0_8px_20px_rgba(0,85,212,0.34)]"
-                title="新建聊天"
+                title={copy.newChatTitle}
               >
                 New Chat
               </Button>
@@ -1578,7 +1637,7 @@ function MathDashboardContent() {
                 size="icon-sm"
                 onClick={() => setChatVisible(false)}
                 className="rounded-[4px]"
-                title="隱藏 AI 助手"
+                title={copy.hideAssistant}
               >
                 <PanelRight className="size-4" />
               </Button>
@@ -1591,7 +1650,7 @@ function MathDashboardContent() {
           {isResumingSession && messages.length === 0 && (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#5a5a5a]">
               <Loader2 className="size-4 animate-spin text-[#146ef5]" />
-              正在還原上次的對話…
+              {copy.resuming}
             </div>
           )}
           {messages.map((message) => (
@@ -1674,7 +1733,7 @@ function MathDashboardContent() {
                 className="h-8 w-8 rounded-[4px] shadow-[2px_2px_0px_#080808]"
               />
               <div className="rounded-[8px] border border-[#d8d8d8] bg-white px-3 py-2 text-sm text-[#5a5a5a]">
-                <span className="animate-pulse">思考中...</span>
+                <span className="animate-pulse">{copy.thinking}</span>
               </div>
             </div>
           )}
@@ -1691,7 +1750,7 @@ function MathDashboardContent() {
 
               <Textarea
                 ref={textareaRef}
-                placeholder="繼續提問...（可直接粘貼圖片）"
+                placeholder={copy.chatPlaceholder}
                 value={input}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -1716,7 +1775,7 @@ function MathDashboardContent() {
                     variant="ghost"
                     onClick={() => fileInputRef.current?.click()}
                     className="rounded-[4px] border border-[#d8d8d8] bg-white text-[#080808] transition-all hover:border-[#898989] hover:bg-white"
-                    title="上傳圖片"
+                    title={copy.uploadImage}
                   >
                     <ImagePlus className="size-3.5 text-[#5a5a5a]" />
                   </Button>
@@ -1730,13 +1789,13 @@ function MathDashboardContent() {
                         ? 'border-red-400 text-red-500 hover:border-red-500 hover:text-red-600'
                         : 'border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]'
                     }`}
-                    title={isListening ? '停止語音輸入' : '語音輸入'}
-                    aria-label={isListening ? '停止語音輸入' : '語音輸入'}
+                    title={isListening ? copy.stopVoice : copy.voice}
+                    aria-label={isListening ? copy.stopVoice : copy.voice}
                   >
                     {isListening ? <MicOff className="size-3.5" /> : <Mic className="size-3.5 text-[#5a5a5a]" />}
                   </Button>
                   {isListening && (
-                    <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">聆聽中…</span>
+                    <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">{copy.listening}</span>
                   )}
                   {!isListening && voiceError && (
                     <span role="alert" className="text-[11px] font-medium text-red-500">{voiceError.message}</span>

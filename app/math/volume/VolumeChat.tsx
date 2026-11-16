@@ -17,6 +17,8 @@ import {
   useCubeStore,
 } from "./store";
 import { basePath } from "@/lib/utils";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 
 /** Snapshot the current scene from the zustand store (no subscription needed). */
 function getSceneState() {
@@ -37,14 +39,51 @@ function getSceneState() {
   };
 }
 
-const SUGGESTIONS = [
-  "可以引導我數一數這個立體的體積嗎？",
-  "可以提示我怎樣計算表面積嗎？",
-  "把它當作水池時，我應該先觀察哪裡？",
-  "可以引導我比較三視圖嗎？",
-];
+const COPY = defineCopy({
+  "zh-Hant": {
+    // Suggestion chips are sent to the AI exactly as shown.
+    suggestions: [
+      "可以引導我數一數這個立體的體積嗎？",
+      "可以提示我怎樣計算表面積嗎？",
+      "把它當作水池時，我應該先觀察哪裡？",
+      "可以引導我比較三視圖嗎？",
+    ],
+    openButton: "AI 助教",
+    title: "立體積木 AI 助教",
+    cubeCount: (n: number) => `場景中有 ${n} 個方塊`,
+    clearTitle: "清除對話",
+    clear: "清除",
+    close: "關閉",
+    emptyTitle: "問我關於這個立體的問題",
+    emptyBody: "我會根據你目前放置的方塊，引導你思考體積、表面積或圍起來的空間。",
+    placeholder: "例如：怎樣數表面積？",
+    stop: "停止",
+    send: "送出",
+  },
+  en: {
+    suggestions: [
+      "Can you help me count the volume of this shape?",
+      "Can you give me a hint on how to work out the surface area?",
+      "If it were a pool, what should I look at first?",
+      "Can you help me compare the three views?",
+    ],
+    openButton: "AI Tutor",
+    title: "3D Blocks AI Tutor",
+    cubeCount: (n: number) => `${n} ${n === 1 ? "cube" : "cubes"} in the scene`,
+    clearTitle: "Clear chat",
+    clear: "Clear",
+    close: "Close",
+    emptyTitle: "Ask me about this 3D shape",
+    emptyBody:
+      "I'll look at the cubes you have placed and help you think about volume, surface area or the space they enclose.",
+    placeholder: "e.g. How do I count the surface area?",
+    stop: "Stop",
+    send: "Send",
+  },
+});
 
 export function VolumeChat() {
+  const copy = useCopy(COPY);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -99,7 +138,7 @@ export function VolumeChat() {
         className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-full bg-[#146ef5] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#146ef5]/30 transition-transform hover:scale-[1.03]"
       >
         <Sparkles size={16} />
-        AI 助教
+        {copy.openButton}
       </button>
     );
   }
@@ -111,8 +150,8 @@ export function VolumeChat() {
         <div className="flex items-center gap-2">
           <ChatAvatar role="assistant" className="h-7 w-7 rounded-full" />
           <div>
-            <div className="text-sm font-bold text-[#080808]">立體積木 AI 助教</div>
-            <div className="text-[10px] text-[#6b7280]">場景中有 {cubeCount} 個方塊</div>
+            <div className="text-sm font-bold text-[#080808]">{copy.title}</div>
+            <div className="text-[10px] text-[#6b7280]">{copy.cubeCount(cubeCount)}</div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -121,16 +160,16 @@ export function VolumeChat() {
               type="button"
               onClick={() => setMessages([])}
               className="rounded-md px-2 py-1 text-[11px] text-[#6b7280] hover:bg-[#eef2f7]"
-              title="清除對話"
+              title={copy.clearTitle}
             >
-              清除
+              {copy.clear}
             </button>
           )}
           <button
             type="button"
             onClick={() => setOpen(false)}
             className="grid h-7 w-7 place-items-center rounded-md text-[#6b7280] hover:bg-[#eef2f7]"
-            aria-label="關閉"
+            aria-label={copy.close}
           >
             <X size={16} />
           </button>
@@ -144,12 +183,12 @@ export function VolumeChat() {
             <div className="grid h-12 w-12 place-items-center rounded-full bg-[#146ef5]/10 text-[#146ef5]">
               <MessageSquare size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#080808]">問我關於這個立體的問題</p>
+            <p className="text-sm font-semibold text-[#080808]">{copy.emptyTitle}</p>
             <p className="text-[11px] text-[#6b7280]">
-              我會根據你目前放置的方塊，引導你思考體積、表面積或圍起來的空間。
+              {copy.emptyBody}
             </p>
             <div className="mt-2 flex w-full flex-col gap-1.5">
-              {SUGGESTIONS.map((s) => (
+              {copy.suggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -193,7 +232,7 @@ export function VolumeChat() {
                 handleSend();
               }
             }}
-            placeholder="例如：怎樣數表面積？"
+            placeholder={copy.placeholder}
             rows={1}
             className="max-h-28 flex-1 resize-none rounded-md border border-[#d8d8d8] bg-white px-2.5 py-2 text-xs text-[#080808] outline-none focus:border-[#146ef5]"
           />
@@ -202,7 +241,7 @@ export function VolumeChat() {
               type="button"
               onClick={() => stop()}
               className="grid h-9 w-9 place-items-center rounded-md bg-[#ef4444] text-white hover:bg-[#dc2626]"
-              aria-label="停止"
+              aria-label={copy.stop}
             >
               <Square size={14} />
             </button>
@@ -212,7 +251,7 @@ export function VolumeChat() {
               onClick={() => handleSend()}
               disabled={!input.trim()}
               className="grid h-9 w-9 place-items-center rounded-md bg-[#146ef5] text-white transition-colors hover:bg-[#0f5bd6] disabled:bg-[#cbd5e1] disabled:text-white/70"
-              aria-label="送出"
+              aria-label={copy.send}
             >
               <ArrowUp size={16} />
             </button>

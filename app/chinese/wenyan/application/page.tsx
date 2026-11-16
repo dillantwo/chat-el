@@ -26,8 +26,78 @@ import {
   type ApplicationQuestion,
 } from "@/lib/wenyan-theme";
 import { basePath } from "@/lib/utils";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+import { BADGE_COPY, WENYAN_COPY } from "../wenyan-copy";
 
 const ACCENT = "#e11d48";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    enterExample: "請先寫出你的生活例子",
+    scoreFailed: "評分失敗，請再試一次",
+    scoreError: "評分時發生錯誤",
+    heading: "學以致用",
+    introPart1: "每題會給你一篇文言文的原文、翻譯，以及它隱含的 ",
+    introMainIdea: "主旨道理",
+    introPart2: "。請你想想：生活中有沒有類似道理的例子？用一兩句寫出一個 ",
+    introMetaphor: "生活隱喻",
+    introPart3: (count: number) =>
+      `，AI 老師會從「主旨理解」和「應用場景」兩方面評分並給建議。共 ${count} 題，平均分滿分 100 分。`,
+    understanding: "主旨理解",
+    application: "應用場景",
+    chipUnderstanding: "主旨理解 50 分",
+    chipApplication: "應用場景 50 分",
+    goodStreak: (n: number) => `連續答得好 ${n}`,
+    mainIdeaLabel: "本文主旨（道理）：",
+    inputPrompt: "生活中有沒有類似道理的例子？寫一個生活隱喻 / 情境：",
+    inputPlaceholder: "在這裏寫出你想到的生活例子……",
+    scoring: "AI 評分中…",
+    submit: "送出評分",
+    questionScore: "本題得分",
+    suggestion: "💬 建議：",
+    exemplar: "🌰 參考例子：",
+    averageScore: "本場平均得分",
+    goodAnswers: "答得好題數",
+    longestRun: "最長連續",
+    msg90: "太棒了，真正做到學以致用！👑",
+    msg75: "很好，你能把道理用在生活上！🏅",
+    msg50: "不錯的嘗試，再想得貼切一點！⭐",
+    msgLow: "別灰心，多想想生活中的例子！🌱",
+  },
+  en: {
+    enterExample: "Please write your everyday example first.",
+    scoreFailed: "Scoring failed. Please try again.",
+    scoreError: "Something went wrong while scoring.",
+    heading: "Put It into Practice",
+    introPart1: "Each question gives you a Classical Chinese text, its translation and the ",
+    introMainIdea: "main idea (lesson)",
+    introPart2: " it teaches. Think: is there an example from everyday life with the same lesson? Write one or two sentences as an ",
+    introMetaphor: "everyday example",
+    introPart3: (count: number) =>
+      `. The AI teacher scores your understanding of the main idea and how well you apply it, and gives you tips. There are ${count} questions, and your average score is out of 100.`,
+    understanding: "Understanding",
+    application: "Application",
+    chipUnderstanding: "Understanding: 50 points",
+    chipApplication: "Application: 50 points",
+    goodStreak: (n: number) => `${n} good answers in a row`,
+    mainIdeaLabel: "Main idea (lesson) of this text: ",
+    inputPrompt: "Is there an everyday example with the same lesson? Write an everyday example or situation:",
+    inputPlaceholder: "Write the everyday example you thought of here…",
+    scoring: "AI is scoring…",
+    submit: "Submit for scoring",
+    questionScore: "Score for this question",
+    suggestion: "💬 Tip: ",
+    exemplar: "🌰 Example answer: ",
+    averageScore: "Your average score",
+    goodAnswers: "Good answers",
+    longestRun: "Longest streak",
+    msg90: "Brilliant, you really put what you learnt into practice! 👑",
+    msg75: "Great, you can apply the lessons to everyday life! 🏅",
+    msg50: "Nice try. Think of an example that fits even better! ⭐",
+    msgLow: "Don't give up. Think about examples from your own life! 🌱",
+  },
+});
 
 type Phase = "intro" | "playing" | "result";
 
@@ -42,6 +112,8 @@ interface Feedback {
 }
 
 export default function WenyanApplicationPage() {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   const [phase, setPhase] = useState<Phase>("intro");
   const [quiz, setQuiz] = useState<ApplicationQuestion[]>([]);
   const [current, setCurrent] = useState(0);
@@ -83,7 +155,7 @@ export default function WenyanApplicationPage() {
   async function submit() {
     if (loading || feedback) return;
     if (!input.trim()) {
-      setError("請先寫出你的生活例子");
+      setError(copy.enterExample);
       return;
     }
     setLoading(true);
@@ -105,7 +177,7 @@ export default function WenyanApplicationPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "評分失敗，請再試一次");
+        throw new Error(data?.error ?? copy.scoreFailed);
       }
 
       const data = (await res.json()) as Feedback;
@@ -122,7 +194,7 @@ export default function WenyanApplicationPage() {
         setStreak(0);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "評分時發生錯誤");
+      setError(err instanceof Error ? err.message : copy.scoreError);
     } finally {
       setLoading(false);
     }
@@ -157,12 +229,12 @@ export default function WenyanApplicationPage() {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ChevronLeft className="size-4" />
-          返回遊戲首頁
+          {shared.backToGame}
         </Link>
         <div className="flex items-center gap-2">
           <Rocket className="size-4" style={{ color: ACCENT }} />
           <span className="text-sm font-semibold text-[#080808]">
-            挑戰模式 - 主旨應用
+            {shared.challengeTitle(shared.modeApplication)}
           </span>
         </div>
         <div className="w-[112px]" />
@@ -218,6 +290,8 @@ function Intro({
   bestScore: number;
   onStart: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   return (
     <div className="space-y-6 text-center wyt-fade-in-up">
       <div
@@ -228,28 +302,27 @@ function Intro({
       </div>
       <div className="space-y-2">
         <h1 className="font-serif text-[34px] font-semibold tracking-[-0.02em] text-[#1a1330]">
-          學以致用
+          {copy.heading}
         </h1>
         <p className="mx-auto max-w-md text-sm leading-7 text-[#6b6385]">
-          每題會給你一篇文言文的原文、翻譯，以及它隱含的{" "}
+          {copy.introPart1}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            主旨道理
+            {copy.introMainIdea}
           </span>
-          。請你想想：生活中有沒有類似道理的例子？用一兩句寫出一個{" "}
+          {copy.introPart2}
           <span className="font-semibold" style={{ color: ACCENT }}>
-            生活隱喻
+            {copy.introMetaphor}
           </span>
-          ，AI 老師會從「主旨理解」和「應用場景」兩方面評分並給建議。共{" "}
-          {APPLICATION_QUESTION_COUNT} 題，平均分滿分 100 分。
+          {copy.introPart3(APPLICATION_QUESTION_COUNT)}
         </p>
       </div>
 
       <div className="mx-auto flex max-w-sm flex-wrap items-center justify-center gap-2 text-xs text-[#6b6385]">
         <span className="inline-flex items-center gap-1 rounded-full border border-[#fbcfe8] bg-[#fff1f5] px-3 py-1.5 text-[#be123c]">
-          <Brain className="size-3.5" /> 主旨理解 50 分
+          <Brain className="size-3.5" /> {copy.chipUnderstanding}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-[#fbcfe8] bg-[#fff1f5] px-3 py-1.5 text-[#be123c]">
-          <MapPin className="size-3.5" /> 應用場景 50 分
+          <MapPin className="size-3.5" /> {copy.chipApplication}
         </span>
       </div>
 
@@ -262,7 +335,7 @@ function Intro({
         }}
       >
         <Trophy className="size-4" />
-        目前最高分：<span className="font-semibold">{bestScore}</span>
+        {shared.bestScoreLabel}<span className="font-semibold">{bestScore}</span>
       </div>
 
       <Button
@@ -271,7 +344,7 @@ function Intro({
         style={{ backgroundColor: ACCENT }}
       >
         <Sparkles className="size-5" />
-        開始挑戰
+        {shared.startChallenge}
       </Button>
     </div>
   );
@@ -344,6 +417,8 @@ function Playing({
   onSubmit: () => void;
   onNext: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
   const progressPct = Math.round(
     ((index + (feedback ? 1 : 0)) / total) * 100
   );
@@ -353,7 +428,7 @@ function Playing({
       {/* HUD */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[#6b6385]">
-          第 {index + 1} / {total} 題
+          {shared.questionOf(index + 1, total)}
         </span>
         {streak >= 2 && (
           <span
@@ -361,7 +436,7 @@ function Playing({
             style={{ backgroundColor: "#fff1f5", color: "#be123c" }}
           >
             <Sparkles className="size-3.5" />
-            連續答得好 {streak}
+            {copy.goodStreak(streak)}
           </span>
         )}
       </div>
@@ -389,7 +464,7 @@ function Playing({
               style={{ color: ACCENT }}
             >
               <ScrollText className="size-3.5" />
-              原文
+              {shared.original}
             </p>
             <p className="font-serif text-[20px] leading-[1.9] tracking-[0.02em] text-[#1a1330] md:text-[22px]">
               {q.original}
@@ -398,7 +473,7 @@ function Playing({
           <div className="border-t border-dashed border-[#fbe4ec] pt-4">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[1px] text-[#a8849a]">
               <Languages className="size-3.5" />
-              翻譯
+              {shared.translation}
             </p>
             <p className="text-[15px] leading-[1.9] text-[#4b4660]">
               {q.translation}
@@ -411,7 +486,7 @@ function Playing({
       <div className="flex items-start gap-2 rounded-[14px] border border-[#fde68a] bg-[#fffbeb] p-4">
         <Lightbulb className="mt-0.5 size-4 shrink-0 text-[#d97706]" />
         <p className="text-sm leading-7 text-[#92400e]">
-          <span className="font-semibold">本文主旨（道理）：</span>
+          <span className="font-semibold">{copy.mainIdeaLabel}</span>
           {q.mainIdea}
         </p>
       </div>
@@ -420,13 +495,13 @@ function Playing({
       <div className="space-y-2">
         <p className="flex items-center gap-1.5 px-1 text-sm font-medium text-[#1a1330]">
           <Pencil className="size-4" style={{ color: ACCENT }} />
-          生活中有沒有類似道理的例子？寫一個生活隱喻 / 情境：
+          {copy.inputPrompt}
         </p>
         <Textarea
           value={input}
           onChange={(e) => onInput(e.target.value)}
           disabled={loading || !!feedback}
-          placeholder="在這裏寫出你想到的生活例子……"
+          placeholder={copy.inputPlaceholder}
           className="min-h-[110px] resize-y rounded-[12px] border-[#f1d6e0] bg-[#fffafb] text-[15px] leading-[1.7] text-[#1a1330] focus-visible:ring-[#e11d48]"
         />
         {error && <p className="px-1 text-sm text-[#dc2626]">{error}</p>}
@@ -444,12 +519,12 @@ function Playing({
             {loading ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                AI 評分中…
+                {copy.scoring}
               </>
             ) : (
               <>
                 <Sparkles className="size-4" />
-                送出評分
+                {copy.submit}
               </>
             )}
           </Button>
@@ -461,7 +536,7 @@ function Playing({
         <div className="space-y-4 wyt-fade-in-up">
           <div className="flex items-center justify-center gap-2 rounded-[14px] border border-[#f1d6e0] bg-[#fff5f8] px-4 py-3">
             <Trophy className="size-4" style={{ color: ACCENT }} />
-            <span className="text-sm text-[#6b6385]">本題得分</span>
+            <span className="text-sm text-[#6b6385]">{copy.questionScore}</span>
             <span
               className="text-2xl font-semibold"
               style={{ color: ACCENT }}
@@ -473,14 +548,14 @@ function Playing({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <ScoreBar
-              label="主旨理解"
+              label={copy.understanding}
               icon={Brain}
               score={feedback.understandingScore}
               max={50}
               comment={feedback.understandingComment}
             />
             <ScoreBar
-              label="應用場景"
+              label={copy.application}
               icon={MapPin}
               score={feedback.applicationScore}
               max={50}
@@ -490,14 +565,14 @@ function Playing({
 
           {feedback.suggestion && (
             <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] p-4 text-sm leading-7 text-[#1d4ed8]">
-              <span className="font-semibold">💬 建議：</span>
+              <span className="font-semibold">{copy.suggestion}</span>
               {feedback.suggestion}
             </div>
           )}
 
           {feedback.exemplar && (
             <div className="rounded-[14px] border border-[#bbf7d0] bg-[#f0fdf4] p-4 text-sm leading-7 text-[#15803d]">
-              <span className="font-semibold">🌰 參考例子：</span>
+              <span className="font-semibold">{copy.exemplar}</span>
               {feedback.exemplar}
             </div>
           )}
@@ -508,7 +583,7 @@ function Playing({
               className="gap-2 rounded-full text-white shadow-[0_4px_14px_rgba(225,29,72,0.3)] transition hover:-translate-y-0.5"
               style={{ backgroundColor: ACCENT }}
             >
-              {index + 1 < total ? "下一題" : "看成績"}
+              {index + 1 < total ? shared.nextQuestion : shared.seeResults}
               <ArrowRight className="size-4" />
             </Button>
           </div>
@@ -601,15 +676,18 @@ function Result({
   newBadges: string[];
   onReplay: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const shared = useCopy(WENYAN_COPY);
+  const badgeCopy = useCopy(BADGE_COPY);
   const displayScore = useCountUp(score);
   const celebrate = score >= 75;
 
   const message = useMemo(() => {
-    if (score >= 90) return "太棒了，真正做到學以致用！👑";
-    if (score >= 75) return "很好，你能把道理用在生活上！🏅";
-    if (score >= 50) return "不錯的嘗試，再想得貼切一點！⭐";
-    return "別灰心，多想想生活中的例子！🌱";
-  }, [score]);
+    if (score >= 90) return copy.msg90;
+    if (score >= 75) return copy.msg75;
+    if (score >= 50) return copy.msg50;
+    return copy.msgLow;
+  }, [score, copy]);
 
   return (
     <div className="relative space-y-6 text-center">
@@ -623,7 +701,7 @@ function Result({
       </div>
 
       <div className="space-y-1">
-        <p className="text-sm text-[#6b6385]">本場平均得分</p>
+        <p className="text-sm text-[#6b6385]">{copy.averageScore}</p>
         <p className="font-serif text-[56px] font-semibold leading-none text-[#1a1330]">
           {displayScore}
         </p>
@@ -631,14 +709,14 @@ function Result({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <ResultStat label="答得好題數" value={`${passCount}/${total}`} />
-        <ResultStat label="最長連續" value={`${maxStreak}`} />
-        <ResultStat label="歷來最高" value={`${bestScore}`} />
+        <ResultStat label={copy.goodAnswers} value={`${passCount}/${total}`} />
+        <ResultStat label={copy.longestRun} value={`${maxStreak}`} />
+        <ResultStat label={shared.allTimeBest} value={`${bestScore}`} />
       </div>
 
       {newBadges.length > 0 && (
         <div className="wyt-pop-in rounded-[16px] border border-[#fbcfe8] bg-[#fff1f5] p-5">
-          <p className="text-sm font-semibold text-[#be123c]">🎉 解鎖新獎章！</p>
+          <p className="text-sm font-semibold text-[#be123c]">{shared.newBadges}</p>
           <div className="mt-3 flex flex-wrap justify-center gap-3">
             {newBadges.map((id, i) => {
               const b = getBadge(id);
@@ -650,7 +728,7 @@ function Result({
                   className="wyt-pop-in flex items-center gap-2 rounded-full border border-[#fbcfe8] bg-white px-3 py-1.5 text-sm font-medium text-[#1a1330]"
                 >
                   <span className="text-lg">{b.emoji}</span>
-                  {b.label}
+                  {badgeCopy[b.id]?.label ?? b.label}
                 </div>
               );
             })}
@@ -665,7 +743,7 @@ function Result({
           style={{ backgroundColor: ACCENT }}
         >
           <RotateCcw className="size-4" />
-          再玩一次
+          {shared.playAgain}
         </Button>
         <Link href="/chinese/wenyan">
           <Button
@@ -673,7 +751,7 @@ function Result({
             className="gap-2 rounded-full border-[#e0dbf0] bg-white text-[#5b4f7a] transition hover:border-[#c4b8ec] hover:bg-[#f7f4ff]"
           >
             <ChevronLeft className="size-4" />
-            回到首頁
+            {shared.backHome}
           </Button>
         </Link>
       </div>

@@ -2,6 +2,35 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { defineCopy } from "@/lib/i18n/config";
+import { useCopy } from "@/components/LocaleProvider";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    title: "分數比較",
+    compare2: "比較 2 個分數",
+    compare3: "比較 3 個分數",
+    fixedLength: "固定長度",
+    freeLength: "自由長度",
+    randomLength: "隨機長度",
+    sameLength: "設定同一長度",
+    showNumberLine: "顯示數線",
+    formats: { integer: "整數", fraction: "分數", mixed: "帶分數" } as Record<FractionFormat, string>,
+    mismatch: "⚠️ 長條圖整體長度不一致！請拖拉邊框至相同長度，才能比較大小。",
+  },
+  en: {
+    title: "Compare Magnitude of Fractions",
+    compare2: "Compare 2 fractions",
+    compare3: "Compare 3 fractions",
+    fixedLength: "Fixed length",
+    freeLength: "Free length",
+    randomLength: "Random lengths",
+    sameLength: "Make same length",
+    showNumberLine: "Show number line",
+    formats: { integer: "Whole number", fraction: "Fraction", mixed: "Mixed number" },
+    mismatch: "⚠️ The bars are not the same length! Drag the edges to make them the same length before comparing.",
+  },
+});
 
 type FractionFormat = "integer" | "fraction" | "mixed";
 type FractionState = { format: FractionFormat; w: number; n: number; d: number };
@@ -197,6 +226,7 @@ const DEFAULT_STATE: FractionState[] = [
 
 function FractionComparisonInner() {
   const searchParams = useSearchParams();
+  const copy = useCopy(COPY);
 
   const [fractions, setFractions] = useState<FractionState[]>(DEFAULT_STATE);
   const [activeCount, setActiveCount] = useState(2);
@@ -527,7 +557,7 @@ function FractionComparisonInner() {
         {/* header */}
         <div className="header">
           <div className="header-left">
-            <div className="title-badge">分數比較</div>
+            <div className="title-badge">{copy.title}</div>
           </div>
           <div className="header-right">
             <select
@@ -535,15 +565,15 @@ function FractionComparisonInner() {
               value={String(activeCount)}
               onChange={(e) => changeCount(parseInt(e.target.value, 10))}
             >
-              <option value="2">比較 2 個分數</option>
-              <option value="3">比較 3 個分數</option>
+              <option value="2">{copy.compare2}</option>
+              <option value="3">{copy.compare3}</option>
             </select>
             <button
               type="button"
               className={`lang-btn${isSyncMode ? " btn-active-mode" : ""}`}
               onClick={toggleSyncMode}
             >
-              {isSyncMode ? "固定長度" : "自由長度"}
+              {isSyncMode ? copy.fixedLength : copy.freeLength}
             </button>
             {!isSyncMode ? (
               <div style={{ display: "flex", gap: 10 }}>
@@ -553,7 +583,7 @@ function FractionComparisonInner() {
                   onClick={randomizeBars}
                   style={{ boxShadow: "0 2px 0 var(--gray)", fontSize: "0.9rem", padding: "4px 10px" }}
                 >
-                  隨機長度
+                  {copy.randomLength}
                 </button>
                 <button
                   type="button"
@@ -561,7 +591,7 @@ function FractionComparisonInner() {
                   onClick={matchBars}
                   style={{ boxShadow: "0 2px 0 var(--gray)", fontSize: "0.9rem", padding: "4px 10px" }}
                 >
-                  設定同一長度
+                  {copy.sameLength}
                 </button>
               </div>
             ) : null}
@@ -572,7 +602,7 @@ function FractionComparisonInner() {
                   checked={showNL}
                   onChange={(e) => setShowNL(e.target.checked)}
                 />{" "}
-                顯示數線
+                {copy.showNumberLine}
               </label>
               <span className="divider-v" />
               {(["integer", "fraction", "mixed"] as FractionFormat[]).map((fmt) => (
@@ -583,7 +613,7 @@ function FractionComparisonInner() {
                   onClick={() => setFormatGlobal(fmt)}
                   style={{ padding: "4px 10px", fontSize: "0.85rem" }}
                 >
-                  {fmt === "integer" ? "整數" : fmt === "fraction" ? "分數" : "帶分數"}
+                  {copy.formats[fmt]}
                 </button>
               ))}
             </div>
@@ -629,7 +659,7 @@ function FractionComparisonInner() {
                     style={fmtActiveStyle(data, fmt)}
                     onClick={() => setFormatFor([i], fmt)}
                   >
-                    {fmt === "integer" ? "整數" : fmt === "fraction" ? "分數" : "帶分數"}
+                    {copy.formats[fmt]}
                   </button>
                 ))}
               </div>
@@ -731,7 +761,7 @@ function FractionComparisonInner() {
           })}
           {showMismatch ? (
             <div style={{ color: "var(--red)", fontWeight: "bold", textAlign: "center", marginTop: 10 }}>
-              ⚠️ 長條圖整體長度不一致！請拖拉邊框至相同長度，才能比較大小。
+              {copy.mismatch}
             </div>
           ) : null}
         </div>
@@ -749,7 +779,7 @@ function FractionComparisonInner() {
                 setMenu(null);
               }}
             >
-              {fmt === "integer" ? "整數" : fmt === "fraction" ? "分數" : "帶分數"}
+              {copy.formats[fmt]}
             </div>
           ))}
         </div>

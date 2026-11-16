@@ -53,6 +53,105 @@ import {
   sanitizeAiToolHtml,
   type InspectorPathStep,
 } from "@/app/math/_components/diagram-runtime";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { COMMON_COPY } from "@/lib/i18n/common";
+import { defineCopy, intlLocale } from "@/lib/i18n/config";
+
+const COPY = defineCopy({
+  "zh-Hant": {
+    saveFailed: "保存失敗，請稍後再試。",
+    shareFailed: "更新分享狀態失敗，請稍後再試。",
+    defaultTitle: "AI 生成圖解",
+    generatingTitle: "正在生成圖解",
+    showAssistant: "顯示 AI 助手",
+    hideAssistant: "隱藏 AI 助手",
+    selectEditTitle: "選取圖解中的某個部分，再用右邊的對話框描述要怎麼修改",
+    selecting: "點選元素中…",
+    selectEdit: "選取修改",
+    saved: "已保存",
+    save: "保存",
+    sharedTitle: "已分享給學生，點擊取消分享",
+    shareTitle: "分享給學生",
+    shared: "已分享",
+    share: "分享",
+    generating: "AI 正在根據你的要求生成圖解...",
+    generatedChars: (n: string) => `已生成 ${n} 字元`,
+    editing: "AI 正在修改圖解中…",
+    editingHint: "完成後會自動替換，原本的圖解會先保留",
+    promptTitle: "輸入要求讓 AI 為你生成圖解",
+    promptIntro: "描述你想要的圖解內容、呈現方式或學習目標；生成後可以在右邊繼續對話修改",
+    promptPlaceholder: "輸入要求讓 AI 為你生成圖解，例如：用棒形圖呈現 135 張椅子平均分成 9 排（可直接粘貼圖片）",
+    stopVoice: "停止語音輸入",
+    voice: "語音輸入",
+    listening: "聆聽中…",
+    studentTitle: "選擇老師分享的圖解",
+    studentIntro: "左邊的「圖解記錄」列出老師分享給你的圖解。打開一個，就可以一邊看圖解，一邊向右邊的 AI 助手提問。",
+    newChatTitle: "新建聊天",
+    emptyTeacherWithDiagram: "描述想改哪裏，AI 就會即時修改上面的圖解。",
+    emptyTeacher: "先在左邊輸入要求生成圖解，之後可以在這裏繼續修改。",
+    emptyStudent: "有不明白的地方，可以在這裏問 AI 助手。",
+    thinking: "思考中...",
+    willEdit: "將修改：",
+    dynamicNote: "（由程式生成，會改生成邏輯）",
+    cancelSelection: "取消選取",
+    placeholderSelection: "描述要怎麼修改選取的部分...（可直接粘貼圖片）",
+    placeholderTeacher: "針對這個圖解繼續提問或要求修改...（可直接粘貼圖片）",
+    placeholderStudent: "針對這個圖解提問...（可直接粘貼圖片）",
+    uploadImage: "上傳圖片",
+    saveDialogTitle: "保存圖解",
+    saveDialogBody: "請為這個 AI 生成的圖解命名，方便日後在「圖解記錄」中尋找。",
+    saveNamePlaceholder: "請輸入圖解名稱",
+    cancel: "取消",
+  },
+  en: {
+    saveFailed: "Could not save. Please try again later.",
+    shareFailed: "Could not update sharing. Please try again later.",
+    defaultTitle: "AI diagram",
+    generatingTitle: "Making diagram",
+    showAssistant: "Show AI helper",
+    hideAssistant: "Hide AI helper",
+    selectEditTitle: "Select part of the diagram, then describe the change in the chat on the right",
+    selecting: "Click an element…",
+    selectEdit: "Select to edit",
+    saved: "Saved",
+    save: "Save",
+    sharedTitle: "Shared with pupils. Click to stop sharing",
+    shareTitle: "Share with pupils",
+    shared: "Shared",
+    share: "Share",
+    generating: "The AI is making the diagram you asked for...",
+    generatedChars: (n: string) => `${n} characters written`,
+    editing: "The AI is changing the diagram…",
+    editingHint: "It will be replaced when it's ready. The current diagram stays until then.",
+    promptTitle: "Tell the AI what diagram to make",
+    promptIntro:
+      "Describe the content, layout or learning goal you want. After it's made, you can keep changing it in the chat on the right.",
+    promptPlaceholder:
+      "Tell the AI what diagram to make, e.g. a bar chart showing 135 chairs shared equally into 9 rows (you can paste an image)",
+    stopVoice: "Stop voice input",
+    voice: "Voice input",
+    listening: "Listening…",
+    studentTitle: "Choose a diagram your teacher shared",
+    studentIntro:
+      "The diagram list on the left shows the diagrams your teacher has shared with you. Open one to look at it and ask the AI helper on the right.",
+    newChatTitle: "New chat",
+    emptyTeacherWithDiagram: "Describe what to change, and the AI will update the diagram above.",
+    emptyTeacher: "First type a request on the left to make a diagram. You can keep changing it here afterwards.",
+    emptyStudent: "If anything is unclear, ask the AI helper here.",
+    thinking: "Thinking...",
+    willEdit: "Will change: ",
+    dynamicNote: " (made by code, so the code that makes it will change)",
+    cancelSelection: "Cancel selection",
+    placeholderSelection: "Describe how to change the selected part... (you can paste an image)",
+    placeholderTeacher: "Ask about this diagram or ask for changes... (you can paste an image)",
+    placeholderStudent: "Ask about this diagram... (you can paste an image)",
+    uploadImage: "Upload image",
+    saveDialogTitle: "Save diagram",
+    saveDialogBody: "Give this AI diagram a name so you can find it later in the diagram list.",
+    saveNamePlaceholder: "Enter a diagram name",
+    cancel: "Cancel",
+  },
+});
 
 /**
  * AI 生成圖解 (math topic `ai-diagram`).
@@ -147,6 +246,9 @@ async function fetchSavedDiagramHtml(toolKey: string): Promise<string | null> {
 }
 
 export default function MathDiagramPage() {
+  const copy = useCopy(COPY);
+  const common = useCopy(COMMON_COPY);
+  const { locale } = useLocale();
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
   /**
@@ -235,6 +337,7 @@ export default function MathDiagramPage() {
     rebase: rebaseDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     // Chinese doesn't separate words with spaces.
     separator: "",
     getBaseText: () => input,
@@ -249,6 +352,7 @@ export default function MathDiagramPage() {
     rebase: rebasePromptDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     separator: "",
     getBaseText: () => promptInput,
     onTranscript: setPromptInput,
@@ -719,7 +823,7 @@ export default function MathDiagramPage() {
       setSaveDialogOpen(false);
       window.dispatchEvent(new CustomEvent("diagram:saved"));
     } catch {
-      alert("保存失敗，請稍後再試。");
+      alert(copy.saveFailed);
     } finally {
       setIsSaving(false);
     }
@@ -739,7 +843,7 @@ export default function MathDiagramPage() {
       setIsShared(next);
       window.dispatchEvent(new CustomEvent("diagram:saved"));
     } catch {
-      alert("更新分享狀態失敗，請稍後再試。");
+      alert(copy.shareFailed);
     }
   }
 
@@ -827,7 +931,7 @@ export default function MathDiagramPage() {
 
   // A restored-but-unnamed diagram still has something on screen, so it must not
   // be labelled as still generating.
-  const headerTitle = title ?? genTitle ?? (html ? "AI 生成圖解" : "正在生成圖解");
+  const headerTitle = title ?? genTitle ?? (html ? copy.defaultTitle : copy.generatingTitle);
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-white text-[#080808]">
@@ -844,7 +948,7 @@ export default function MathDiagramPage() {
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <ChevronLeft className="size-4" />
-              數學科
+              {common.subjects.math}
             </Link>
           </div>
           {!chatVisible && (
@@ -853,7 +957,7 @@ export default function MathDiagramPage() {
               size="icon-sm"
               onClick={() => setChatVisible(true)}
               className="rounded-[4px] border border-[#d8d8d8] bg-white/90 shadow-sm backdrop-blur"
-              title="顯示 AI 助手"
+              title={copy.showAssistant}
             >
               <PanelRight className="size-4" />
             </Button>
@@ -878,7 +982,7 @@ export default function MathDiagramPage() {
                       variant={selectMode ? "default" : "outline"}
                       onClick={toggleSelectMode}
                       disabled={!html || isGenerating}
-                      title="選取圖解中的某個部分，再用右邊的對話框描述要怎麼修改"
+                      title={copy.selectEditTitle}
                       className={
                         selectMode
                           ? "rounded-[4px] bg-[#146ef5] text-white hover:bg-[#0055d4]"
@@ -886,7 +990,7 @@ export default function MathDiagramPage() {
                       }
                     >
                       <MousePointerClick className="size-4" />
-                      {selectMode ? "點選元素中…" : "選取修改"}
+                      {selectMode ? copy.selecting : copy.selectEdit}
                     </Button>
                     <Button
                       type="button"
@@ -905,7 +1009,7 @@ export default function MathDiagramPage() {
                       ) : (
                         <Save className="size-4" />
                       )}
-                      {hasSaved ? "已保存" : "保存"}
+                      {hasSaved ? copy.saved : copy.save}
                     </Button>
                     {hasSaved && toolKey && (
                       <Button
@@ -913,7 +1017,7 @@ export default function MathDiagramPage() {
                         size="sm"
                         variant={isShared ? "default" : "outline"}
                         onClick={() => void toggleShare()}
-                        title={isShared ? "已分享給學生，點擊取消分享" : "分享給學生"}
+                        title={isShared ? copy.sharedTitle : copy.shareTitle}
                         className={
                           isShared
                             ? "rounded-[4px] bg-[#16a34a] text-white hover:bg-[#15803d]"
@@ -921,7 +1025,7 @@ export default function MathDiagramPage() {
                         }
                       >
                         <Share2 className="size-4" />
-                        {isShared ? "已分享" : "分享"}
+                        {isShared ? copy.shared : copy.share}
                       </Button>
                     )}
                   </div>
@@ -934,10 +1038,10 @@ export default function MathDiagramPage() {
                 <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
                   <div className="flex items-center gap-2 text-[#5a5a5a]">
                     <Loader2 className="size-4 animate-spin text-[#146ef5]" />
-                    <span className="text-sm font-medium">AI 正在根據你的要求生成圖解...</span>
+                    <span className="text-sm font-medium">{copy.generating}</span>
                     {genCode.length > 0 && (
                       <span className="ml-auto text-xs tabular-nums text-[#ababab]">
-                        已生成 {genCode.length.toLocaleString()} 字元
+                        {copy.generatedChars(genCode.length.toLocaleString(intlLocale(locale)))}
                       </span>
                     )}
                   </div>
@@ -959,7 +1063,7 @@ export default function MathDiagramPage() {
                         ? "fixed inset-0 z-[2147483647] h-screen w-screen border-0 bg-white"
                         : "h-full min-h-0 w-full rounded-b-[8px]"
                     }
-                    title={title ?? "AI 生成圖解"}
+                    title={title ?? copy.defaultTitle}
                   />
                   {isGenerating && (
                     <>
@@ -970,9 +1074,9 @@ export default function MathDiagramPage() {
                         <div className="pointer-events-auto flex w-full max-w-[560px] flex-col items-center gap-3 rounded-[12px] border border-[#146ef5]/30 bg-white px-7 py-5 text-center shadow-[0_8px_30px_rgba(20,110,245,0.18)]">
                           <Loader2 className="size-9 animate-spin text-[#146ef5]" />
                           <div className="space-y-0.5">
-                            <p className="text-sm font-semibold text-[#080808]">AI 正在修改圖解中…</p>
+                            <p className="text-sm font-semibold text-[#080808]">{copy.editing}</p>
                             <p className="text-xs text-[#5a5a5a]">
-                              完成後會自動替換，原本的圖解會先保留
+                              {copy.editingHint}
                             </p>
                           </div>
                           <GeneratingCodeFeed code={genCode} className="max-h-40 w-full" />
@@ -991,9 +1095,9 @@ export default function MathDiagramPage() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[8px] bg-[#16a34a]/10 text-[#16a34a]">
                 <Sparkles className="size-7" />
               </div>
-              <p className="text-lg font-semibold text-[#080808]">輸入要求讓 AI 為你生成圖解</p>
+              <p className="text-lg font-semibold text-[#080808]">{copy.promptTitle}</p>
               <p className="mt-1.5 mb-7 text-sm text-[#5a5a5a]">
-                描述你想要的圖解內容、呈現方式或學習目標；生成後可以在右邊繼續對話修改
+                {copy.promptIntro}
               </p>
 
               <form
@@ -1017,7 +1121,7 @@ export default function MathDiagramPage() {
 
                   <Textarea
                     ref={promptTextareaRef}
-                    placeholder="輸入要求讓 AI 為你生成圖解，例如：用棒形圖呈現 135 張椅子平均分成 9 排（可直接粘貼圖片）"
+                    placeholder={copy.promptPlaceholder}
                     value={promptInput}
                     onChange={(e) => handlePromptInputChange(e.target.value)}
                     onKeyDown={(e) => {
@@ -1071,8 +1175,8 @@ export default function MathDiagramPage() {
                             ? "border-red-400 text-red-500 hover:border-red-500 hover:text-red-600"
                             : "border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]"
                         }`}
-                        title={isPromptListening ? "停止語音輸入" : "語音輸入"}
-                        aria-label={isPromptListening ? "停止語音輸入" : "語音輸入"}
+                        title={isPromptListening ? copy.stopVoice : copy.voice}
+                        aria-label={isPromptListening ? copy.stopVoice : copy.voice}
                       >
                         {isPromptListening ? (
                           <MicOff className="size-4" />
@@ -1082,7 +1186,7 @@ export default function MathDiagramPage() {
                       </Button>
                       {isPromptListening && (
                         <span aria-live="polite" className="text-[12px] font-medium text-red-500 animate-pulse">
-                          聆聽中…
+                          {copy.listening}
                         </span>
                       )}
                       {!isPromptListening && promptVoiceError && (
@@ -1136,10 +1240,9 @@ export default function MathDiagramPage() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[8px] bg-[#16a34a]/10 text-[#16a34a]">
                 <Sparkles className="size-7" />
               </div>
-              <p className="text-lg font-semibold text-[#080808]">選擇老師分享的圖解</p>
+              <p className="text-lg font-semibold text-[#080808]">{copy.studentTitle}</p>
               <p className="mt-1.5 text-sm text-[#5a5a5a]">
-                左邊的「圖解記錄」列出老師分享給你的圖解。打開一個，就可以一邊看圖解，一邊向右邊的 AI
-                助手提問。
+                {copy.studentIntro}
               </p>
             </div>
           </div>
@@ -1169,7 +1272,7 @@ export default function MathDiagramPage() {
                   size="sm"
                   onClick={handleNewChat}
                   className="rounded-[4px] border border-transparent bg-[#146ef5] px-2.5 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(20,110,245,0.28)] transition-all hover:bg-[#0055d4] hover:shadow-[0_8px_20px_rgba(0,85,212,0.34)]"
-                  title="新建聊天"
+                  title={copy.newChatTitle}
                 >
                   New Chat
                 </Button>
@@ -1179,7 +1282,7 @@ export default function MathDiagramPage() {
                   size="icon-sm"
                   onClick={() => setChatVisible(false)}
                   className="rounded-[4px]"
-                  title="隱藏 AI 助手"
+                  title={copy.hideAssistant}
                 >
                   <PanelRight className="size-4" />
                 </Button>
@@ -1196,9 +1299,9 @@ export default function MathDiagramPage() {
               <p className="px-1 py-6 text-center text-sm text-[#5a5a5a]">
                 {isTeacher
                   ? html
-                    ? "描述想改哪裏，AI 就會即時修改上面的圖解。"
-                    : "先在左邊輸入要求生成圖解，之後可以在這裏繼續修改。"
-                  : "有不明白的地方，可以在這裏問 AI 助手。"}
+                    ? copy.emptyTeacherWithDiagram
+                    : copy.emptyTeacher
+                  : copy.emptyStudent}
               </p>
             )}
             {messages.map((message) => (
@@ -1290,7 +1393,7 @@ export default function MathDiagramPage() {
                   className="h-8 w-8 rounded-[4px] shadow-[2px_2px_0px_#080808]"
                 />
                 <div className="rounded-[8px] border border-[#d8d8d8] bg-white px-3 py-2 text-sm text-[#5a5a5a]">
-                  <span className="animate-pulse">思考中...</span>
+                  <span className="animate-pulse">{copy.thinking}</span>
                 </div>
               </div>
             )}
@@ -1309,10 +1412,10 @@ export default function MathDiagramPage() {
                 <div className="mb-2 flex items-center gap-2 rounded-[6px] border border-[#146ef5]/30 bg-[#146ef5]/5 px-2.5 py-1.5 text-xs text-[#146ef5]">
                   <MousePointerClick className="size-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate font-medium" title={pendingSelection.label}>
-                    將修改：{pendingSelection.label}
+                    {copy.willEdit}{pendingSelection.label}
                     {pendingSelection.dynamic && (
                       <span className="ml-1 font-normal text-[#146ef5]/70">
-                        （由程式生成，會改生成邏輯）
+                        {copy.dynamicNote}
                       </span>
                     )}
                   </span>
@@ -1320,7 +1423,7 @@ export default function MathDiagramPage() {
                     type="button"
                     onClick={() => setPendingSelection(null)}
                     className="flex size-4 shrink-0 items-center justify-center rounded-full text-[#146ef5] hover:bg-[#146ef5]/15"
-                    title="取消選取"
+                    title={copy.cancelSelection}
                   >
                     <X className="size-3" />
                   </button>
@@ -1336,10 +1439,10 @@ export default function MathDiagramPage() {
                 <Textarea
                   placeholder={
                     pendingSelection
-                      ? "描述要怎麼修改選取的部分...（可直接粘貼圖片）"
+                      ? copy.placeholderSelection
                       : isTeacher
-                        ? "針對這個圖解繼續提問或要求修改...（可直接粘貼圖片）"
-                        : "針對這個圖解提問...（可直接粘貼圖片）"
+                        ? copy.placeholderTeacher
+                        : copy.placeholderStudent
                   }
                   value={input}
                   onChange={(e) => handleInputChange(e.target.value)}
@@ -1375,7 +1478,7 @@ export default function MathDiagramPage() {
                       variant="ghost"
                       onClick={() => fileInputRef.current?.click()}
                       className="rounded-[4px] border border-[#d8d8d8] bg-white text-[#080808] transition-all hover:border-[#898989] hover:bg-white"
-                      title="上傳圖片"
+                      title={copy.uploadImage}
                     >
                       <ImagePlus className="size-3.5 text-[#5a5a5a]" />
                     </Button>
@@ -1389,8 +1492,8 @@ export default function MathDiagramPage() {
                           ? "border-red-400 text-red-500 hover:border-red-500 hover:text-red-600"
                           : "border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]"
                       }`}
-                      title={isListening ? "停止語音輸入" : "語音輸入"}
-                      aria-label={isListening ? "停止語音輸入" : "語音輸入"}
+                      title={isListening ? copy.stopVoice : copy.voice}
+                      aria-label={isListening ? copy.stopVoice : copy.voice}
                     >
                       {isListening ? (
                         <MicOff className="size-3.5" />
@@ -1400,7 +1503,7 @@ export default function MathDiagramPage() {
                     </Button>
                     {isListening && (
                       <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">
-                        聆聽中…
+                        {copy.listening}
                       </span>
                     )}
                     {!isListening && voiceError && (
@@ -1440,16 +1543,16 @@ export default function MathDiagramPage() {
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>保存圖解</DialogTitle>
+            <DialogTitle>{copy.saveDialogTitle}</DialogTitle>
             <DialogDescription>
-              請為這個 AI 生成的圖解命名，方便日後在「圖解記錄」中尋找。
+              {copy.saveDialogBody}
             </DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
             value={saveNameDraft}
             onChange={(e) => setSaveNameDraft(e.target.value)}
-            placeholder="請輸入圖解名稱"
+            placeholder={copy.saveNamePlaceholder}
             maxLength={80}
             onKeyDown={(e) => {
               if (e.key === "Enter" && saveNameDraft.trim() && !isSaving) {
@@ -1466,7 +1569,7 @@ export default function MathDiagramPage() {
               disabled={isSaving}
               className="rounded-[4px] border-[#d8d8d8] bg-white text-[#080808] hover:bg-[#f7f7f7]"
             >
-              取消
+              {copy.cancel}
             </Button>
             <Button
               type="button"
@@ -1475,7 +1578,7 @@ export default function MathDiagramPage() {
               className="rounded-[4px] bg-[#146ef5] text-white hover:bg-[#0055d4]"
             >
               {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              保存
+              {copy.save}
             </Button>
           </DialogFooter>
         </DialogContent>

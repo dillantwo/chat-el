@@ -2,6 +2,8 @@
 
 import { ClipboardList, Compass, FolderDown, Globe, Landmark, Route } from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
+import { useCopy } from "@/components/LocaleProvider";
+import { COMMON_COPY } from "@/lib/i18n/common";
 
 /** Keys and routes must match lib/topics.ts, which is what 學校管理 switches. */
 const topics: TopicCard[] = [
@@ -63,10 +65,11 @@ const topics: TopicCard[] = [
 
 /** English copy throughout, as the topics themselves are taught in English. */
 export default function EnglishPage() {
+  const common = useCopy(COMMON_COPY);
   return (
     <TopicPicker
       subject="english"
-      subjectLabel="英國語文科"
+      subjectLabel={common.subjects.english}
       subjectLabelEn="English Language"
       subjectIcon={Globe}
       subjectAccent="#00a81b"

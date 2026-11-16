@@ -2,6 +2,13 @@
 
 import { useMemo } from "react";
 import { X } from "lucide-react";
+import { useCopy } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
+
+const COPY = defineCopy({
+  "zh-Hant": { removeImage: "移除圖片" },
+  en: { removeImage: "Remove image" },
+});
 
 /**
  * Thumbnail strip for the images a user has attached but not yet sent.
@@ -55,9 +62,11 @@ export function ChatAttachmentPreview({
   onPreview,
   variant = "soft",
   thumbnailSize = "md",
-  removeLabel = "移除圖片",
+  removeLabel: removeLabelProp,
   className = "px-3 pt-2.5",
 }: ChatAttachmentPreviewProps) {
+  const copy = useCopy(COPY);
+  const removeLabel = removeLabelProp ?? copy.removeImage;
   // Object URLs are keyed to the file identities, not to the render, so typing
   // in the composer no longer mints a fresh blob URL per keystroke. They are
   // deliberately not revoked: React Strict Mode replays effects, and revoking

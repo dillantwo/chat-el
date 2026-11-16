@@ -1,7 +1,10 @@
 import { azure } from "@ai-sdk/azure";
 import { generateObject, type ModelMessage } from "ai";
+import { after } from "next/server";
 import { resolveExtractor } from "./extractors";
+import { getSession } from "@/lib/session";
 import { requireMathToolApi } from "@/lib/toolbox-access";
+import { recordTokenUsage } from "@/lib/token-usage";
 
 export async function POST(req: Request) {
   let body: { question?: string; toolKey?: string; imageData?: string };
@@ -52,12 +55,26 @@ export async function POST(req: Request) {
       ]
     : [{ role: "user", content: textContent }];
 
+  const session = await getSession().catch(() => null);
+  const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o";
+
   try {
     const result = await generateObject({
-      model: azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o"),
+      model: azure(deploymentName),
       system: extractor.system,
       schema: extractor.schema,
       messages,
+    });
+
+    after(async () => {
+      await recordTokenUsage({
+        session,
+        subject: "math",
+        topic: "tool-params",
+        modelName: deploymentName,
+        endpoint: "/api/extract-params",
+        usage: result.usage,
+      });
     });
 
     const validated = extractor.validate

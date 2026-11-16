@@ -15,6 +15,8 @@ import { basePath } from "@/lib/utils";
 import { filterUploadsWithinLimit } from "@/lib/upload-limits";
 import { useVoiceInput } from "@/lib/use-voice-input";
 import { getMathChatHistoryItem, restoreUiMessages, serializeUiMessages, upsertMathChatHistory } from "@/lib/math-chat-history";
+import { useCopy, useLocale } from "@/components/LocaleProvider";
+import { defineCopy } from "@/lib/i18n/config";
 
 interface SceneCube { x: number; y: number; z: number; color: string }
 interface VolumeSceneStateMessage {
@@ -30,12 +32,56 @@ interface VolumeSceneStateMessage {
   tool_active: string;
 }
 
-const SUGGESTIONS = [
-  "現在這個立體有幾個方塊？體積是多少？",
-  "怎樣計算它的表面積？",
-  "把它當作水池，可以裝多少水？",
-  "三視圖看到的形狀有什麼不同？",
-];
+const COPY = defineCopy({
+  "zh-Hant": {
+    // Suggestion chips are sent to the AI exactly as shown.
+    suggestions: [
+      "現在這個立體有幾個方塊？體積是多少？",
+      "怎樣計算它的表面積？",
+      "把它當作水池，可以裝多少水？",
+      "三視圖看到的形狀有什麼不同？",
+    ],
+    historyPrefix: "體積工具",
+    historyTitle: "體積工具對話",
+    title: "立體積木 AI 助教",
+    newChatTitle: "新建聊天",
+    hideAssistant: "隱藏 AI 助手",
+    cubeCount: (n: number) => `場景中有 ${n} 個方塊`,
+    emptyTitle: "問我關於這個立體的問題",
+    emptyBody: "我會根據你目前放置的方塊，引導你思考體積、表面積或圍起來的空間。",
+    placeholder: "繼續提問...（可直接粘貼圖片）",
+    uploadImage: "上傳圖片",
+    stopVoice: "停止語音輸入",
+    voice: "語音輸入",
+    listening: "聆聽中…",
+    clearTitle: "清除對話",
+    clear: "清除",
+  },
+  en: {
+    suggestions: [
+      "How many cubes are in this shape now? What is its volume?",
+      "How do I work out its surface area?",
+      "If it were a pool, how much water could it hold?",
+      "How are the shapes in the three views different?",
+    ],
+    historyPrefix: "Volume tool",
+    historyTitle: "Volume tool chat",
+    title: "3D Blocks AI Tutor",
+    newChatTitle: "New chat",
+    hideAssistant: "Hide AI helper",
+    cubeCount: (n: number) => `${n} ${n === 1 ? "cube" : "cubes"} in the scene`,
+    emptyTitle: "Ask me about this 3D shape",
+    emptyBody:
+      "I'll look at the cubes you have placed and help you think about volume, surface area or the space they enclose.",
+    placeholder: "Ask another question... (you can paste an image)",
+    uploadImage: "Upload image",
+    stopVoice: "Stop voice input",
+    voice: "Voice input",
+    listening: "Listening…",
+    clearTitle: "Clear chat",
+    clear: "Clear",
+  },
+});
 
 function deriveBBox(cubes: SceneCube[]) {
   if (cubes.length === 0) {
@@ -88,6 +134,8 @@ export function VolumeChatPanel({
   onNewChat: () => void;
   onHide?: () => void;
 }) {
+  const copy = useCopy(COPY);
+  const { locale } = useLocale();
   const [input, setInput] = useState("");
   const [chatFiles, setChatFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -111,6 +159,7 @@ export function VolumeChatPanel({
     rebase: rebaseDictation,
   } = useVoiceInput({
     lang: "zh-HK",
+    messageLang: locale === "en" ? "en" : "zh",
     // Chinese doesn't separate words with spaces.
     separator: "",
     getBaseText: () => input,
@@ -221,7 +270,7 @@ export function VolumeChatPanel({
     void upsertMathChatHistory({
       id: chatId,
       kind: "volume-cubes",
-      title: firstUserText?.type === "text" ? `體積工具: ${firstUserText.text.slice(0, 30)}` : "體積工具對話",
+      title: firstUserText?.type === "text" ? `${copy.historyPrefix}: ${firstUserText.text.slice(0, 30)}` : copy.historyTitle,
       hasUserQuestion,
       question: hasUserQuestion ? question : undefined,
       type: hasUserQuestion ? type : undefined,
@@ -231,6 +280,8 @@ export function VolumeChatPanel({
       messages: serializeUiMessages(messages),
       updatedAt: new Date().toISOString(),
     });
+    // `copy` is left out on purpose: switching language must not re-save the chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasUserQuestion, messages, question, chatId, status, toolUrl, type]);
 
 
@@ -296,7 +347,7 @@ export function VolumeChatPanel({
               <p className="text-[10px] font-semibold uppercase tracking-[1px] text-[#ababab]">
                 Volume tutor
               </p>
-              <p className="text-sm font-semibold text-[#080808]">立體積木 AI 助教</p>
+              <p className="text-sm font-semibold text-[#080808]">{copy.title}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -306,7 +357,7 @@ export function VolumeChatPanel({
               size="sm"
               onClick={onNewChat}
               className="rounded-[4px] border border-transparent bg-[#146ef5] px-2.5 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(20,110,245,0.28)] transition-all hover:bg-[#0055d4] hover:shadow-[0_8px_20px_rgba(0,85,212,0.34)]"
-              title="新建聊天"
+              title={copy.newChatTitle}
             >
               New Chat
             </Button>
@@ -317,14 +368,14 @@ export function VolumeChatPanel({
                 size="icon-sm"
                 onClick={onHide}
                 className="rounded-[4px]"
-                title="隱藏 AI 助手"
+                title={copy.hideAssistant}
               >
                 <PanelRight className="size-4" />
               </Button>
             )}
           </div>
         </div>
-        <p className="mt-1.5 text-[11px] text-[#6b7280]">場景中有 {cubeCount} 個方塊</p>
+        <p className="mt-1.5 text-[11px] text-[#6b7280]">{copy.cubeCount(cubeCount)}</p>
       </div>
 
       {/* Messages */}
@@ -334,12 +385,12 @@ export function VolumeChatPanel({
             <div className="grid h-12 w-12 place-items-center rounded-full bg-[#146ef5]/10 text-[#146ef5]">
               <MessageSquare size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#080808]">問我關於這個立體的問題</p>
+            <p className="text-sm font-semibold text-[#080808]">{copy.emptyTitle}</p>
             <p className="text-[11px] text-[#6b7280]">
-              我會根據你目前放置的方塊，引導你思考體積、表面積或圍起來的空間。
+              {copy.emptyBody}
             </p>
             <div className="mt-2 flex w-full flex-col gap-1.5">
-              {SUGGESTIONS.map((s) => (
+              {copy.suggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -392,7 +443,7 @@ export function VolumeChatPanel({
                 }
               }}
               onPaste={handlePaste}
-              placeholder="繼續提問...（可直接粘貼圖片）"
+              placeholder={copy.placeholder}
               className="min-h-[58px] max-h-[160px] w-full resize-none overflow-y-auto rounded-[8px] border-0 bg-transparent px-3 pt-3 pb-10 text-sm outline-none focus-visible:ring-0"
             />
 
@@ -413,7 +464,7 @@ export function VolumeChatPanel({
                   variant="ghost"
                   onClick={() => fileInputRef.current?.click()}
                   className="rounded-[4px] border border-[#d8d8d8] bg-white text-[#080808] transition-all hover:border-[#898989] hover:bg-white"
-                  title="上傳圖片"
+                  title={copy.uploadImage}
                 >
                   <ImagePlus className="size-3.5 text-[#5a5a5a]" />
                 </Button>
@@ -427,8 +478,8 @@ export function VolumeChatPanel({
                       ? "border-red-400 text-red-500 hover:border-red-500 hover:text-red-600"
                       : "border-[#d8d8d8] text-[#080808] hover:border-[#898989] hover:text-[#080808]"
                   }`}
-                  title={isListening ? "停止語音輸入" : "語音輸入"}
-                  aria-label={isListening ? "停止語音輸入" : "語音輸入"}
+                  title={isListening ? copy.stopVoice : copy.voice}
+                  aria-label={isListening ? copy.stopVoice : copy.voice}
                 >
                   {isListening ? (
                     <MicOff className="size-3.5" />
@@ -438,7 +489,7 @@ export function VolumeChatPanel({
                 </Button>
                 {isListening && (
                   <span aria-live="polite" className="text-[11px] font-medium text-red-500 animate-pulse">
-                    聆聽中…
+                    {copy.listening}
                   </span>
                 )}
                 {!isListening && voiceError && (
@@ -453,9 +504,9 @@ export function VolumeChatPanel({
                     type="button"
                     onClick={() => setMessages([])}
                     className="rounded-md px-2 py-1 text-[11px] text-[#6b7280] hover:bg-[#eef2f7]"
-                    title="清除對話"
+                    title={copy.clearTitle}
                   >
-                    清除
+                    {copy.clear}
                   </button>
                 )}
                 {isLoading ? (

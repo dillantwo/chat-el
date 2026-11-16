@@ -1,7 +1,27 @@
 import { azure } from "@ai-sdk/azure";
 import { generateObject } from "ai";
+import { after } from "next/server";
 import { z } from "zod";
+import { getSession } from "@/lib/session";
 import { requireMathToolApi } from "@/lib/toolbox-access";
+import { recordTokenUsage } from "@/lib/token-usage";
+import { applyReplyLanguage } from "@/lib/i18n/ai";
+import { defineCopy } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+
+/** Feedback the route writes itself, without the model. */
+const COPY = defineCopy({
+  "zh-Hant": {
+    nothing: "沒有可檢查的答案。",
+    segmentMissing: "這一段暫時未能取得 AI 回饋，請再檢查描述是否完整。",
+    failed: "暫時未能連接 AI 檢查，請稍後再試。",
+  },
+  en: {
+    nothing: "There are no answers to check.",
+    segmentMissing: "No AI feedback for this part yet. Please check that your description is complete.",
+    failed: "The AI checker is not available right now. Please try again later.",
+  },
+});
 
 const reviewSchema = z.object({
   overallScore: z.number().min(0).max(100).describe("整體百分比分數"),
@@ -29,6 +49,9 @@ const reviewSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const locale = await getLocale();
+  const copy = COPY[locale];
+
   try {
     const denied = await requireMathToolApi("journey-graph");
     if (denied) return denied;
@@ -49,13 +72,16 @@ export async function POST(req: Request) {
 
     const segments = body.segments ?? [];
     if (segments.length === 0) {
-      return Response.json({ overallScore: 0, summary: "沒有可檢查的答案。", segments: [] });
+      return Response.json({ overallScore: 0, summary: copy.nothing, segments: [] });
     }
 
+    const session = await getSession().catch(() => null);
+    const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o";
+
     const result = await generateObject({
-      model: azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o"),
+      model: azure(deploymentName),
       schema: reviewSchema,
-      system: `你是一位小學數學老師，正在批改學生對「距離-時間行程圖」全部段落的描述。
+      system: applyReplyLanguage(`你是一位小學數學老師，正在批改學生對「距離-時間行程圖」全部段落的描述。
 
 判斷規則：
 - 逐段評核，不要求逐字相同，只要數學意思正確即可。
@@ -74,7 +100,7 @@ export async function POST(req: Request) {
 - 如果學生寫停留/靜止/不動，motion="stationary"。
 - 如果學生寫遠離/出發/增加，motion="away"；寫返回/回去/接近/減少，motion="toward"。
 - 沒有明確數值就填 null；不要猜。
-- 所有回饋必須使用繁體中文，語氣鼓勵，適合小學生。`,
+- 所有回饋必須使用繁體中文，語氣鼓勵，適合小學生。`, locale, "structured"),
       prompt: `關卡：${body.levelTitle ?? "行程圖"}
 圖表：${body.chartTitle ?? "距離-時間圖"}
 
@@ -93,6 +119,17 @@ ${index + 1}. segmentId=${segment.id}
   .join("\n")}`,
     });
 
+    after(async () => {
+      await recordTokenUsage({
+        session,
+        subject: "math",
+        topic: "journey-graph",
+        modelName: deploymentName,
+        endpoint: "/api/journey-review",
+        usage: result.usage,
+      });
+    });
+
     const seen = new Set(result.object.segments.map((segment) => segment.segmentId));
     const filledSegments = [
       ...result.object.segments,
@@ -102,7 +139,7 @@ ${index + 1}. segmentId=${segment.id}
           segmentId: segment.id,
           isCorrect: false,
           score: 0,
-          feedback: "這一段暫時未能取得 AI 回饋，請再檢查描述是否完整。",
+          feedback: copy.segmentMissing,
           correctDescription: segment.expectedDescription,
           extractedJourney: emptyExtractedJourney(),
         })),
@@ -112,7 +149,7 @@ ${index + 1}. segmentId=${segment.id}
   } catch (error) {
     console.error("[journey-review] Error:", error);
     return Response.json(
-      { overallScore: 0, summary: "暫時未能連接 AI 檢查，請稍後再試。", segments: [] },
+      { overallScore: 0, summary: copy.failed, segments: [] },
       { status: 500 }
     );
   }
