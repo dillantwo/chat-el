@@ -106,7 +106,7 @@ const ENGLISH_TOPICS = ["Location and Direction", "Thank-you Letter", "Reading C
 
 const COPY = defineCopy({
   "zh-Hant": {
-    heading: "今天想學哪一科？",
+    heading: "今天想一起學甚麼呢？",
     intro: "按下面的卡片，就可以進入那一科的練習和學習材料。",
     teacherArea: "教師專區",
     viewStudentData: "查看學生數據",
@@ -125,7 +125,7 @@ const COPY = defineCopy({
     } as Record<Subject, string[]>,
   },
   en: {
-    heading: "Which subject today?",
+    heading: "What shall we learn today?",
     intro: "Tap a card below to open that subject's practice and learning materials.",
     teacherArea: "Teacher area",
     viewStudentData: "View student data",
