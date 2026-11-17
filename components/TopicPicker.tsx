@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, type LucideIcon } from "lucide-react";
+import { ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
 import Header from "@/components/Header";
 import { useAuth } from "@/components/AuthProvider";
 import { useCopy } from "@/components/LocaleProvider";
@@ -56,6 +56,11 @@ export type TopicCard = {
    * and only download-style cards have to say so.
    */
   group?: "topic" | "resource";
+  /**
+   * Opens the topic in its own tab, for pages a pupil keeps beside the work
+   * they are doing — e.g. 提示詞, copied from into a chat in the first tab.
+   */
+  newWindow?: boolean;
 };
 
 type TopicPickerProps = {
@@ -111,6 +116,7 @@ const COPY = defineCopy({
     backLabel: "選科目",
     topicsSectionLabel: "課題",
     resourcesSectionLabel: "資源",
+    newWindow: "（在新視窗開啟）",
   },
   en: {
     intro: "Pick a topic to start practising.",
@@ -121,6 +127,7 @@ const COPY = defineCopy({
     backLabel: "Subjects",
     topicsSectionLabel: "Topics",
     resourcesSectionLabel: "Resources",
+    newWindow: "(opens in a new window)",
   },
 });
 
@@ -262,13 +269,21 @@ export default function TopicPicker({
           style={available ? { backgroundColor: accent } : undefined}
         >
           <span className="truncate">{available ? (cta ?? defaultCta) : comingSoonLabel}</span>
-          {available && (
-            <ArrowRight
-              aria-hidden
-              className="size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1"
-              strokeWidth={2.75}
-            />
-          )}
+          {available &&
+            (topic.newWindow ? (
+              <ExternalLink
+                aria-hidden
+                className="size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                strokeWidth={2.75}
+              />
+            ) : (
+              <ArrowRight
+                aria-hidden
+                className="size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1"
+                strokeWidth={2.75}
+              />
+            ))}
+          {available && topic.newWindow && <span className="sr-only">{copy.newWindow}</span>}
         </span>
       </>
     );
@@ -278,6 +293,7 @@ export default function TopicPicker({
         {available ? (
           <Link
             href={href}
+            {...(topic.newWindow ? { target: "_blank", rel: "noopener" } : {})}
             className={`${CARD_BASE} border-[#080808] bg-white shadow-[6px_6px_0px_#080808] transition-all duration-200 hover:-translate-y-[3px] hover:shadow-[9px_9px_0px_#080808] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[3px_3px_0px_#080808] focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#146ef5]`}
           >
             {inner}

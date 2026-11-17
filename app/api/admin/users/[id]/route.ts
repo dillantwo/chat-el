@@ -11,6 +11,8 @@ import {
 import { School } from "@/models/School";
 import { requireAdmin } from "@/lib/admin-auth";
 import { resolveClassesForSchool } from "@/lib/class-assignment";
+import { deleteTeacherPrompts } from "@/lib/teacher-prompts";
+import type mongoose from "mongoose";
 
 function sanitizeSubjects(input: unknown): Subject[] {
   if (!Array.isArray(input)) return [];
@@ -153,6 +155,18 @@ export async function DELETE(
     const deleted = await User.findByIdAndDelete(id);
     if (!deleted) {
       return NextResponse.json({ error: "使用者不存在" }, { status: 404 });
+    }
+    // A teacher's 提示詞 and their pictures have no other owner. Students
+    // could no longer see them anyway (the author check fails), so this only
+    // frees the storage.
+    // The account is already gone, so a cleanup failure is logged rather than
+    // reported as a failed delete.
+    if (deleted.role === "teacher") {
+      try {
+        await deleteTeacherPrompts(deleted._id as mongoose.Types.ObjectId);
+      } catch (cleanupErr) {
+        console.error("[admin/users/[id]:DELETE] prompt cleanup failed", cleanupErr);
+      }
     }
     return NextResponse.json({ success: true });
   } catch (err) {

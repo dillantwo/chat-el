@@ -1,6 +1,14 @@
 "use client";
 
-import { ClipboardList, Compass, FolderDown, Globe, Landmark, Route } from "lucide-react";
+import {
+  ClipboardList,
+  Compass,
+  FolderDown,
+  Globe,
+  Landmark,
+  MessageSquareText,
+  Route,
+} from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 import { useCopy } from "@/components/LocaleProvider";
 import { COMMON_COPY } from "@/lib/i18n/common";
@@ -59,6 +67,20 @@ const topics: TopicCard[] = [
     icon: FolderDown,
     accent: "#7a3dff",
     cta: "Open resources",
+    group: "resource",
+  },
+  {
+    id: "prompts",
+    label: "Prompts",
+    labelEn: "Prompts",
+    description: "Write prompts and add pictures to share with the classes you teach.",
+    studentDescription: "See the prompts and pictures your teacher shared, and copy them in one tap.",
+    href: "/english/prompts",
+    icon: MessageSquareText,
+    accent: "#db2777",
+    newWindow: true,
+    cta: "Write prompts",
+    studentCta: "Open prompts",
     group: "resource",
   },
 ];

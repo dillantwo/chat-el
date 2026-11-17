@@ -136,6 +136,27 @@ async function loadTeacher(): Promise<
 }
 
 /**
+ * Names of the given classes, limited to the school, newest academic year first.
+ */
+export async function listTeacherClasses(
+  schoolId: mongoose.Types.ObjectId,
+  classIds: mongoose.Types.ObjectId[],
+): Promise<TeacherClassSummary[]> {
+  if (classIds.length === 0) return [];
+
+  const classes = await Class.find({ _id: { $in: classIds }, school: schoolId })
+    .select({ name: 1, academicYear: 1 })
+    .sort({ academicYear: -1, name: 1 })
+    .lean<{ _id: mongoose.Types.ObjectId; name: string; academicYear: string }[]>();
+
+  return classes.map((c) => ({
+    id: String(c._id),
+    name: String(c.name),
+    academicYear: String(c.academicYear),
+  }));
+}
+
+/**
  * What the signed-in teacher may review: the permitted subjects and the classes
  * whose students they can see. Both are empty for anyone who is not an
  * authorized teacher.
@@ -147,21 +168,54 @@ export async function getTeacherDataAccess(): Promise<{
   const loaded = await loadTeacher();
   if (!loaded.ok || !loaded.teacher.school) return { subjects: [], classes: [] };
 
-  const classIds = loaded.teacher.classes ?? [];
-  const classes = classIds.length
-    ? await Class.find({ _id: { $in: classIds }, school: loaded.teacher.school })
-        .select({ name: 1, academicYear: 1 })
-        .sort({ academicYear: -1, name: 1 })
-        .lean<{ _id: mongoose.Types.ObjectId; name: string; academicYear: string }[]>()
-    : [];
-
   return {
     subjects: loaded.dataSubjects,
-    classes: classes.map((c) => ({
-      id: String(c._id),
-      name: String(c.name),
-      academicYear: String(c.academicYear),
-    })),
+    classes: await listTeacherClasses(loaded.teacher.school, loaded.teacher.classes ?? []),
+  };
+}
+
+/** A teacher who passed rule 1 for a subject, with everything rules 2–3 need. */
+export interface AuthorizedTeacher {
+  teacherId: mongoose.Types.ObjectId;
+  schoolId: mongoose.Types.ObjectId;
+  dataSubjects: Subject[];
+  /** Every class the teacher belongs to. */
+  classIds: mongoose.Types.ObjectId[];
+}
+
+/**
+ * Rule 1 on its own: the signed-in user is a teacher at an active school who
+ * holds `subject` and has not had student-data access switched off.
+ *
+ * Shared with 提示詞 (lib/teacher-prompts.ts), which reaches the same students
+ * the other way round, so the two features can never disagree about which
+ * teachers are in scope. `deniedMessage` is what a teacher without the subject
+ * is told, since the wording depends on the feature.
+ */
+export async function requireTeacherSubject(
+  subject: Subject,
+  deniedMessage = "沒有查看此科目學生數據的權限",
+): Promise<{ ok: true; teacher: AuthorizedTeacher } | { ok: false; status: number; message: string }> {
+  const loaded = await loadTeacher();
+  if (!loaded.ok) return loaded;
+
+  const { teacher, dataSubjects } = loaded;
+  if (!teacher.school) {
+    return { ok: false, status: 403, message: "帳戶未綁定學校，請聯絡管理員" };
+  }
+
+  if (!dataSubjects.includes(subject)) {
+    return { ok: false, status: 403, message: deniedMessage };
+  }
+
+  return {
+    ok: true,
+    teacher: {
+      teacherId: teacher._id,
+      schoolId: teacher.school,
+      dataSubjects,
+      classIds: teacher.classes ?? [],
+    },
   };
 }
 
@@ -176,19 +230,11 @@ export async function requireTeacherDataScope(
   subject: Subject,
   req: Request,
 ): Promise<TeacherDataScopeResult> {
-  const loaded = await loadTeacher();
-  if (!loaded.ok) return loaded;
+  const authorized = await requireTeacherSubject(subject);
+  if (!authorized.ok) return authorized;
 
-  const { teacher, dataSubjects } = loaded;
-  if (!teacher.school) {
-    return { ok: false, status: 403, message: "帳戶未綁定學校，請聯絡管理員" };
-  }
-
-  if (!dataSubjects.includes(subject)) {
-    return { ok: false, status: 403, message: "沒有查看此科目學生數據的權限" };
-  }
-
-  const ownClassIds = teacher.classes ?? [];
+  const { teacher } = authorized;
+  const ownClassIds = teacher.classIds;
   const requestedClassId = new URL(req.url).searchParams.get("classId")?.trim();
   let classIds = ownClassIds;
 
@@ -202,9 +248,9 @@ export async function requireTeacherDataScope(
   return {
     ok: true,
     scope: {
-      teacherId: String(teacher._id),
-      schoolId: teacher.school,
-      dataSubjects,
+      teacherId: String(teacher.teacherId),
+      schoolId: teacher.schoolId,
+      dataSubjects: teacher.dataSubjects,
       classIds,
     },
   };

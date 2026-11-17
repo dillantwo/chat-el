@@ -51,6 +51,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       labelEn: "Learning Materials",
       route: "/math/materials",
     },
+    {
+      key: "prompts",
+      label: "提示詞",
+      labelEn: "Prompts",
+      route: "/math/prompts",
+    },
   ],
   chinese: [
     {
@@ -89,6 +95,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       labelEn: "Learning Materials",
       route: "/chinese/materials",
     },
+    {
+      key: "prompts",
+      label: "提示詞",
+      labelEn: "Prompts",
+      route: "/chinese/prompts",
+    },
   ],
   english: [
     {
@@ -121,6 +133,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       labelEn: "Resource Library",
       route: "/english/materials",
     },
+    {
+      key: "prompts",
+      label: "Prompts",
+      labelEn: "Prompts",
+      route: "/english/prompts",
+    },
   ],
   science: [
     {
@@ -147,6 +165,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       labelEn: "Learning Materials",
       route: "/science/materials",
     },
+    {
+      key: "prompts",
+      label: "提示詞",
+      labelEn: "Prompts",
+      route: "/science/prompts",
+    },
   ],
   humanities: [
     {
@@ -172,6 +196,12 @@ export const SUBJECT_TOPICS: Record<SubjectValue, TopicDef[]> = {
       label: "學習資源",
       labelEn: "Learning Materials",
       route: "/humanities/materials",
+    },
+    {
+      key: "prompts",
+      label: "提示詞",
+      labelEn: "Prompts",
+      route: "/humanities/prompts",
     },
   ],
 };

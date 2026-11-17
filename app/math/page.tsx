@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, ClipboardList, FolderDown, Sparkles } from "lucide-react";
+import { Calculator, ClipboardList, FolderDown, MessageSquareText, Sparkles } from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 import { useCopy } from "@/components/LocaleProvider";
 import { COMMON_COPY } from "@/lib/i18n/common";
@@ -32,6 +32,13 @@ const COPY = defineCopy<Record<string, TopicText>>({
       description: "下載數學科的補充教材、工作紙與參考資源。",
       cta: "打開資源",
     },
+    prompts: {
+      label: "提示詞",
+      description: "編寫提示詞和上傳圖片，分享給任教班別的學生。",
+      studentDescription: "查看老師分享的提示詞和圖片，一按就可以複製。",
+      cta: "編寫提示詞",
+      studentCta: "打開提示詞",
+    },
   },
   en: {
     "ai-problem-solving": {
@@ -55,6 +62,13 @@ const COPY = defineCopy<Record<string, TopicText>>({
       label: "Learning Materials",
       description: "Download extra maths materials, worksheets and reference resources.",
       cta: "Open materials",
+    },
+    prompts: {
+      label: "Prompts",
+      description: "Write prompts and add pictures to share with the classes you teach.",
+      studentDescription: "See the prompts and pictures your teacher shared, and copy them in one tap.",
+      cta: "Write prompts",
+      studentCta: "Open prompts",
     },
   },
 });
@@ -92,6 +106,15 @@ const topics: Omit<TopicCard, keyof TopicText>[] = [
     href: "/math/materials",
     icon: FolderDown,
     accent: "#7a3dff",
+    group: "resource",
+  },
+  {
+    id: "prompts",
+    labelEn: "Prompts",
+    href: "/math/prompts",
+    icon: MessageSquareText,
+    accent: "#db2777",
+    newWindow: true,
     group: "resource",
   },
 ];

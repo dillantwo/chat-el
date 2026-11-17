@@ -1,6 +1,14 @@
 "use client";
 
-import { BookOpen, ClipboardList, FolderDown, MessageSquare, PenTool, ScrollText } from "lucide-react";
+import {
+  BookOpen,
+  ClipboardList,
+  FolderDown,
+  MessageSquare,
+  MessageSquareText,
+  PenTool,
+  ScrollText,
+} from "lucide-react";
 import TopicPicker, { type TopicCard } from "@/components/TopicPicker";
 
 /** Keys and routes must match lib/topics.ts, which is what 學校管理 switches. */
@@ -64,6 +72,20 @@ const topics: TopicCard[] = [
     accent: "#7a3dff",
     group: "resource",
     cta: "打開資源",
+  },
+  {
+    id: "prompts",
+    label: "提示詞",
+    labelEn: "Prompts",
+    description: "編寫提示詞和上傳圖片，分享給任教班別的學生。",
+    studentDescription: "查看老師分享的提示詞和圖片，一按就可以複製。",
+    href: "/chinese/prompts",
+    icon: MessageSquareText,
+    accent: "#db2777",
+    newWindow: true,
+    group: "resource",
+    cta: "編寫提示詞",
+    studentCta: "打開提示詞",
   },
 ];
 
