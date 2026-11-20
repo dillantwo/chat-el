@@ -24,7 +24,6 @@ export default async function ScienceAerospaceNavigationSatellitePage() {
       loadingLabel={copy.loadingLabel}
       backHref="/science/aerospace"
       backLabel={copy.backLabel}
-      showOpenLink={false}
     />
   );
 }

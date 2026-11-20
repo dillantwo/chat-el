@@ -45,15 +45,18 @@ import {
  * twice with the switch flipped.
  *
  * What update mode may change is a closed list: displayName, subjects, classes,
- * and edcityLoginId for EdCity accounts. Deliberately outside it:
+ * password for password accounts, and edcityLoginId for EdCity accounts.
+ *
+ * A password is only ever reset from a non-empty cell on that account's own
+ * row. There is no batch default in update mode: an empty cell leaves the
+ * password alone like any other field, so a file has to state each new password
+ * explicitly rather than one value resetting a whole school.
+ *
+ * Deliberately outside the list:
  *
  *  - username and authProvider, i.e. identity. Every student record in the app
  *    hangs off User._id and denormalizes `username`, so rewriting either is the
  *    one edit able to detach a class's history from the person who produced it.
- *  - password. A bulk reset is a different and far more dangerous operation than
- *    correcting a roster, and it must never be something an administrator sets
- *    off by re-uploading a file that still happens to carry the column. A
- *    password column in update mode is refused outright rather than ignored.
  *  - role, in both directions. student → teacher hands out access to other
  *    pupils' data. A row stating a role the account does not have is reported,
  *    not applied.
@@ -195,18 +198,31 @@ export type ImportAction = "create" | "update" | "skip" | "error";
 export type PasswordSource = "row" | "default";
 
 /** The only fields update mode may write. */
-export type UpdatableField = "displayName" | "subjects" | "classes" | "edcityLoginId";
+export type UpdatableField =
+  | "displayName"
+  | "subjects"
+  | "classes"
+  | "password"
+  | "edcityLoginId";
 
 /**
  * The same list as columns, so a file that carries none of them can be refused
- * before it produces a page of "nothing to update" rows.
+ * before it produces a page of "nothing to update" rows. Which of these apply
+ * still depends on the account type (see ACTIVE_COLUMNS).
  */
-const UPDATABLE_COLUMNS: ColumnKey[] = ["displayName", "subjects", "classes", "edcityLoginId"];
+const UPDATABLE_COLUMNS: ColumnKey[] = [
+  "displayName",
+  "subjects",
+  "classes",
+  "password",
+  "edcityLoginId",
+];
 
 export const UPDATABLE_FIELD_LABELS: Record<UpdatableField, string> = {
   displayName: "姓名",
   subjects: "科目",
   classes: "班級",
+  password: "密碼",
   edcityLoginId: "登入名",
 };
 
@@ -443,7 +459,8 @@ export async function planUserImport(
   const isUpdate = input.mode === "update";
   // Not trimmed: leading or trailing spaces are legal in a password, and
   // trimming here would store something different from what was typed.
-  // Update mode never touches a password, so there is nothing to default to.
+  // Update mode only resets a password from the row's own cell, so there is
+  // nothing to default to.
   const defaultPassword = isLocal && !isUpdate ? input.defaultPassword : "";
   if (defaultPassword && defaultPassword.length < MIN_IMPORT_PASSWORD_LENGTH) {
     return {
@@ -490,11 +507,7 @@ export async function planUserImport(
   // else — a typo, or a column that only makes sense for the other type — is
   // reported as ignored rather than acted on.
   const header = table[0].map(normalizeHeaderCell);
-  // Update mode never writes a password, so the column is not merely unused —
-  // it is refused below, and dropping it here keeps the parser from reading it.
-  const active = ACTIVE_COLUMNS[input.accountType].filter(
-    (key) => !(isUpdate && key === "password")
-  );
+  const active = ACTIVE_COLUMNS[input.accountType];
   const columnIndex = {} as Record<ColumnKey, number>;
   const ignoredColumns: string[] = [];
 
@@ -510,19 +523,16 @@ export async function planUserImport(
     if (!matched) ignoredColumns.push(table[0][i].trim());
   });
 
-  // Checked before the columns below, because a password column says something
-  // about intent that outranks a missing column: whoever pasted this file thinks
-  // it will set passwords, and that is the misunderstanding worth answering
-  // first. Refused rather than ignored — the file an administrator re-uploads to
-  // fix classes is usually the very file they provisioned from, passwords
-  // included, and "your passwords were ignored" is not a line anyone reads on
-  // the way past. This makes the one reading that would be a disaster, a silent
-  // batch reset, impossible.
-  if (isUpdate && COLUMN_ALIASES.password.some((alias) => header.includes(alias))) {
+  // A password column while importing EdCity accounts means the wrong account
+  // type was picked. Ignoring it would create working-but-unintended SSO
+  // accounts, so refuse the whole file the way the single-user API does.
+  // Checked before the columns below, because it says something about intent
+  // that outranks a missing column.
+  if (!isLocal && COLUMN_ALIASES.password.some((alias) => header.includes(alias))) {
     return {
       ok: false,
       error:
-        "名單含有密碼欄位，但更新模式不會變更密碼。請先移除該欄位；如需重設密碼，請在使用者管理逐一設定。",
+        "名單含有密碼欄位，但目前匯入的是 EdCity 帳戶（EdCity 帳戶沒有密碼）。請改選「密碼帳戶」，或移除該欄位。",
     };
   }
 
@@ -553,18 +563,7 @@ export async function planUserImport(
       ok: false,
       error:
         "更新模式至少需要一個可修改的欄位：displayName（姓名）、subjects（科目）、classes（班級）" +
-        (isLocal ? "。" : "或 edcityLoginId（登入名）。"),
-    };
-  }
-
-  // A password column while importing EdCity accounts means the wrong account
-  // type was picked. Ignoring it would create working-but-unintended SSO
-  // accounts, so refuse the whole file the way the single-user API does.
-  if (!isLocal && COLUMN_ALIASES.password.some((alias) => header.includes(alias))) {
-    return {
-      ok: false,
-      error:
-        "名單含有密碼欄位，但目前匯入的是 EdCity 帳戶（EdCity 帳戶沒有密碼）。請改選「密碼帳戶」，或移除該欄位。",
+        (isLocal ? "或 password（密碼）。" : "或 edcityLoginId（登入名）。"),
     };
   }
 
@@ -625,7 +624,13 @@ export async function planUserImport(
    */
   const provided = new Map<
     number,
-    { displayName: boolean; subjects: boolean; classes: boolean; edcityLoginId: boolean }
+    {
+      displayName: boolean;
+      subjects: boolean;
+      classes: boolean;
+      password: boolean;
+      edcityLoginId: boolean;
+    }
   >();
   /** Roles the file states outright, as opposed to defaulted. Update mode only. */
   const explicitRoles = new Map<number, UserRole>();
@@ -660,8 +665,20 @@ export async function planUserImport(
     // The password itself is recorded outside the row, keyed by line, so it
     // cannot ride along to the browser in the preview.
     let passwordSource: PasswordSource | null = null;
-    if (isLocal && !isUpdate) {
-      const cell = columnIndex.password >= 0 ? cells[columnIndex.password] ?? "" : "";
+    const passwordCell =
+      isLocal && columnIndex.password >= 0 ? cells[columnIndex.password] ?? "" : "";
+    if (isLocal && isUpdate) {
+      // An empty cell leaves the password alone; only a filled one resets it.
+      if (passwordCell) {
+        if (passwordCell.length < MIN_IMPORT_PASSWORD_LENGTH) {
+          messages.push(`密碼至少需要 ${MIN_IMPORT_PASSWORD_LENGTH} 個字元`);
+        } else {
+          passwordSource = "row";
+          passwords.set(line, passwordCell);
+        }
+      }
+    } else if (isLocal) {
+      const cell = passwordCell;
       const password = cell || defaultPassword;
 
       if (!password) {
@@ -742,6 +759,7 @@ export async function planUserImport(
       displayName: Boolean(displayName),
       subjects: Boolean(subjectCell),
       classes: Boolean(classCell),
+      password: passwordSource === "row" && isUpdate,
       edcityLoginId: Boolean(edcityLoginId),
     });
 
@@ -924,6 +942,14 @@ export async function planUserImport(
           .filter((c): c is { id: string; name: string } => Boolean(c));
       }
 
+      // Always counted as a change when the cell is filled: the stored value is a
+      // salted hash, so telling "same password again" apart would cost a full
+      // scrypt per row for no real benefit. The hash itself is computed at
+      // commit, so it is added to the $set there rather than here.
+      if (isLocal && flags.password) {
+        changed.push("password");
+      }
+
       if (!isLocal) {
         if (flags.edcityLoginId) {
           if (row.edcityLoginId !== (found.edcityLoginId ?? null)) {
@@ -990,7 +1016,12 @@ async function hashRowPasswords(
   passwords: ImportPasswords
 ): Promise<Map<number, string>> {
   const pending = rows
-    .filter((row) => row.action === "create" && passwords.has(row.line))
+    .filter(
+      (row) =>
+        passwords.has(row.line) &&
+        (row.action === "create" ||
+          (row.action === "update" && row.updatedFields.includes("password")))
+    )
     .map((row) => row.line);
 
   const hashed = new Map<number, string>();
@@ -1037,7 +1068,7 @@ export async function commitUserImport(
 
   for (const row of plan.rows) {
     if (row.action === "update") {
-      await applyRowUpdate(row, writes.updates);
+      await applyRowUpdate(row, writes.updates, hashes.get(row.line));
       continue;
     }
 
@@ -1101,7 +1132,11 @@ export async function commitUserImport(
  * between the preview and the commit — nothing is written and the row says so,
  * rather than a rename quietly landing on a stranger.
  */
-async function applyRowUpdate(row: ImportRowResult, updates: ImportUpdates): Promise<void> {
+async function applyRowUpdate(
+  row: ImportRowResult,
+  updates: ImportUpdates,
+  hashedPassword: string | undefined
+): Promise<void> {
   const update = updates.get(row.line);
   if (!update) {
     row.action = "error";
@@ -1109,10 +1144,28 @@ async function applyRowUpdate(row: ImportRowResult, updates: ImportUpdates): Pro
     return;
   }
 
+  // The preview promised a password reset; writing the other fields without it
+  // would report success on a row that did not do what it said.
+  const wantsPassword = row.updatedFields.includes("password");
+  if (wantsPassword && !hashedPassword) {
+    row.action = "error";
+    row.messages.push("缺少密碼，未寫入");
+    return;
+  }
+
+  const set = wantsPassword ? { ...update.set, hashedPassword } : update.set;
+
   try {
     const result = await User.updateOne(
-      { _id: update.userId, username: row.username },
-      { $set: update.set }
+      // authProvider is matched too, so a password can only ever land on a
+      // password account. `$ne` mirrors resolveAuthProvider: anything not
+      // "edconnect", including an account that predates the field, is local.
+      {
+        _id: update.userId,
+        username: row.username,
+        ...(wantsPassword ? { authProvider: { $ne: "edconnect" } } : {}),
+      },
+      { $set: set }
     );
     if (result.matchedCount === 0) {
       row.action = "skip";

@@ -51,7 +51,7 @@ type AccountType = "local" | "edconnect";
 type ImportMode = "create" | "update";
 
 /** The only fields update mode writes. Mirrors UpdatableField server-side. */
-type UpdatableField = "displayName" | "subjects" | "classes" | "edcityLoginId";
+type UpdatableField = "displayName" | "subjects" | "classes" | "password" | "edcityLoginId";
 
 interface ImportRowResult {
   line: number;
@@ -103,6 +103,7 @@ const UPDATABLE_FIELD_LABELS: Record<UpdatableField, string> = {
   displayName: "姓名",
   subjects: "科目",
   classes: "班級",
+  password: "密碼",
   edcityLoginId: "登入名",
 };
 
@@ -126,14 +127,12 @@ const TEMPLATE_COLUMNS: Record<AccountType, readonly string[]> = {
 };
 
 /**
- * Update mode drops the password column, and the server refuses a file that
- * still carries one, so the template must not hand out the very column that
- * would be rejected.
+ * Both modes take the same columns. In update mode a password account's
+ * password cell is optional: filled resets that account's password, empty
+ * leaves it alone.
  */
-function templateColumns(accountType: AccountType, mode: ImportMode): readonly string[] {
-  return TEMPLATE_COLUMNS[accountType].filter(
-    (column) => !(mode === "update" && column === "password")
-  );
+function templateColumns(accountType: AccountType): readonly string[] {
+  return TEMPLATE_COLUMNS[accountType];
 }
 
 /**
@@ -162,8 +161,8 @@ const SAMPLE_ROWS: Record<AccountType, string[][]> = {
  */
 const UPDATE_SAMPLE_ROWS: Record<AccountType, string[][]> = {
   local: [
-    ["chan.siuming", "陳小明", "student", "math|chinese", "6A"],
-    ["lee.teacher", "", "", "", "6A|6B"],
+    ["chan.siuming", "陳小明", "student", "math|chinese", "6A", "NewPass123"],
+    ["lee.teacher", "", "", "", "6A|6B", ""],
   ],
   edconnect: [
     ["TYPNY8NJAOOH", "陳小明", "student", "math|chinese", "6A", "hke-stud001"],
@@ -178,7 +177,7 @@ function sampleRows(accountType: AccountType, mode: ImportMode): string[][] {
 /** Tab-separated, which is what pasting out of Excel produces. */
 function buildSample(accountType: AccountType, mode: ImportMode): string {
   return [
-    templateColumns(accountType, mode).join("\t"),
+    templateColumns(accountType).join("\t"),
     ...sampleRows(accountType, mode).map((r) => r.join("\t")),
   ].join("\n");
 }
@@ -220,7 +219,7 @@ function buildTemplateCsv(
   const twoSubjects = enabledSubjects.slice(0, 2).join("|") || "math|chinese";
 
   const rows: string[][] = [
-    [...templateColumns(accountType, mode)],
+    [...templateColumns(accountType)],
     // Columns 3 and 4 are subjects and classes. A cell the sample leaves empty
     // stays empty: that emptiness is the example.
     ...sampleRows(accountType, mode).map((cells, i) => {
@@ -392,8 +391,8 @@ export default function UserImportPage() {
     academicYears.length > 0 ? Boolean(academicYear) : isValidAcademicYear(academicYear);
   const isLocal = accountType === "local";
   const isUpdate = mode === "update";
-  // Update mode never writes a password, so the field is not shown and cannot
-  // block validation.
+  // Update mode only resets a password from the row's own cell, so there is no
+  // batch default: the field is not shown and cannot block validation.
   const wantsPassword = isLocal && !isUpdate;
   const sample = buildSample(accountType, mode);
   // An empty default is allowed: it means every row carries its own password,
@@ -420,7 +419,9 @@ export default function UserImportPage() {
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isUpdate
-            ? "以名單一次修改多個現有帳戶的姓名、科目與班級。只認得已存在的用戶名，名單上沒有的帳戶不會被建立，用戶名、角色與密碼一律不變。"
+            ? isLocal
+              ? "以名單一次修改多個現有密碼帳戶的姓名、科目、班級與密碼。只認得已存在的用戶名，名單上沒有的帳戶不會被建立，用戶名與角色一律不變。"
+              : "以名單一次修改多個現有帳戶的姓名、科目與班級。只認得已存在的用戶名，名單上沒有的帳戶不會被建立，用戶名與角色一律不變。"
             : isLocal
               ? "一次建立多個密碼帳戶。使用者以下方名單的用戶名與密碼在登入頁登入。已存在的用戶名一律略過，不會覆寫或重設任何現有帳戶的密碼。"
               : "預先建立 EdConnect 帳戶。使用者按「EdCity 登入」時，系統以 EdConnect 回傳的 profile_id 比對這裡的用戶名；比對不到就無法登入，所以名單要先匯入。"}
@@ -674,7 +675,7 @@ export default function UserImportPage() {
                   <code className="mx-1">displayName</code>
                   <code className="mx-1">subjects</code>
                   <code className="mx-1">classes</code>
-                  {!isLocal && <code className="mx-1">edcityLoginId</code>}。
+                  <code className="mx-1">{isLocal ? "password" : "edcityLoginId"}</code>。
                 </p>
                 <p>
                   <strong className="font-medium text-foreground">留空即不改動</strong>
@@ -684,13 +685,17 @@ export default function UserImportPage() {
                   表示這個帳戶之後只屬於這兩個班，原有的班級指派會被取代。要清空某個欄位，請到使用者管理逐一修改。
                 </p>
                 <p>
-                  用戶名、角色與密碼都不會被更新。
+                  用戶名與角色都不會被更新。
                   <code className="mx-1">role</code>
                   欄位只作核對用：填了而與現有帳戶不符，該列會被視為錯誤，方便及早發現貼錯名單。
-                  名單若含
-                  <code className="mx-1">password</code>
-                  欄位會整份拒絕，避免誤以為可以批量重設密碼。
                 </p>
+                {isLocal && (
+                  <p>
+                    <code className="mx-1">password</code>
+                    填了就會把該帳戶的密碼重設為該值（至少 {MIN_PASSWORD_LENGTH} 個字元），留空則不改密碼。
+                    更新模式沒有預設密碼，每個要重設的帳戶都必須在自己的資料列填上新密碼。
+                  </p>
+                )}
               </>
             ) : (
               <p>

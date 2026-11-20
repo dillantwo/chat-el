@@ -18,7 +18,9 @@ export const runtime = "nodejs";
  *   defaultRole     "student" | "teacher", applied where a row states none.
  *                   Create mode only
  *   accountType     "local" (password) | "edconnect" (EdCity), for the whole file
- *   defaultPassword password accounts only, used for rows with no password cell
+ *   defaultPassword password accounts in create mode only, used for rows with no
+ *                   password cell. Update mode resets a password only from a
+ *                   filled cell on that account's own row
  *   dryRun          true to validate only (default), false to write
  *
  * School, academic year, mode and account type are request-level rather than

@@ -1,16 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Header from "@/components/Header";
-import { useCopy } from "@/components/LocaleProvider";
-import { defineCopy } from "@/lib/i18n/config";
 import { basePath } from "@/lib/utils";
-
-const COPY = defineCopy({
-  "zh-Hant": { openInNewTab: "在新分頁開啟" },
-  en: { openInNewTab: "Open in new tab" },
-});
 
 // Full-page viewer for the self-contained interactive HTML resources that ship
 // under public/ (e.g. public/science/*.html). Same shape as the 抗日戰爭 embeds,
@@ -23,7 +16,6 @@ export default function StaticResourceFrame({
   loadingLabel,
   backHref,
   backLabel,
-  showOpenLink = true,
 }: {
   /** Path under public/, starting with a slash, e.g. "/science/foo.html". */
   file: string;
@@ -31,13 +23,7 @@ export default function StaticResourceFrame({
   loadingLabel: string;
   backHref: string;
   backLabel: string;
-  /**
-   * Show the floating "在新分頁開啟" link. Turn off when the embedded resource
-   * has its own controls in the bottom corners that the link would cover.
-   */
-  showOpenLink?: boolean;
 }) {
-  const copy = useCopy(COPY);
   const [loaded, setLoaded] = useState(false);
   const src = `${basePath}${file}`;
 
@@ -61,18 +47,6 @@ export default function StaticResourceFrame({
           allow="fullscreen"
           allowFullScreen
         />
-
-        {showOpenLink && (
-          <a
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-[#d8d8d8] bg-white/90 px-3 py-1.5 text-xs font-medium text-[#5a5a5a] shadow-sm backdrop-blur transition hover:border-[#080808] hover:text-[#080808]"
-          >
-            <ExternalLink className="size-3.5" />
-            {copy.openInNewTab}
-          </a>
-        )}
       </main>
     </>
   );
