@@ -355,7 +355,7 @@
         minZoom: 10, maxZoom: 20, maxNativeZoom: 20,
         attribution: landsdAttr(),
       }),
-      L.tileLayer(LANDSD + '/label/hk/tc/WGS84/{z}/{x}/{y}.png', {
+      L.tileLayer(LANDSD + '/label/hk/' + (T.tileLang || 'tc') + '/WGS84/{z}/{x}/{y}.png', {
         minZoom: 10, maxZoom: 20, maxNativeZoom: 20,
       }),
     ]);
@@ -484,7 +484,7 @@
       var color = (DIST[d] || { color: '#777' }).color;
       html += '<li class="site-list__group">' +
               '<span class="site-list__swatch" style="background:' + color + '"></span>' +
-              esc(T.dists[d]) + '　' + group.length + '</li>';
+              esc(T.dists[d]) + (T.listSep || '　') + group.length + '</li>';
       group.forEach(function (s) {
         html += '<li><button type="button" class="site-item' +
                 (state.activeId === s.id ? ' is-active' : '') + '" data-id="' + s.id + '">' +
@@ -525,7 +525,9 @@
     }).join('');
     el.detailCoords.textContent = site.lat.toFixed(6) + ', ' + site.lng.toFixed(6);
     el.btnDirections.href = 'https://www.google.com/maps/search/?api=1&query=' + site.lat + ',' + site.lng;
-    el.btnSource.href = 'https://hk.waranddefence.museum/tc/web/mcd/interactive-map-' + site.id + '.html';
+    // Each data file carries the museum page in its own language.
+    el.btnSource.href = site.source ||
+      'https://hk.waranddefence.museum/tc/web/mcd/interactive-map-' + site.id + '.html';
 
     el.btnSpeak.hidden = !voice.supported;
     setSpeakingUi(false);
@@ -659,7 +661,7 @@
 
     el.creditLabel.textContent = dict.creditLabel;
     el.creditLink.textContent = dict.museumName;
-    el.creditLink.href = 'https://hk.waranddefence.museum/tc/web/mcd/interactive-map.html';
+    el.creditLink.href = dict.museumUrl || 'https://hk.waranddefence.museum/tc/web/mcd/interactive-map.html';
   }
 
   /* The district palette is the map's legend, so spell it out in About too. */
@@ -779,7 +781,7 @@
       if (!el.detailImg.src) return;
       el.lightboxImg.src = el.detailImg.src;
       el.lightboxImg.alt = el.detailImg.alt;
-      el.lightboxCap.textContent = el.detailTitle.textContent + '　·　' + T.photoCredit;
+      el.lightboxCap.textContent = el.detailTitle.textContent + (T.listSep || '　·　') + T.photoCredit;
       el.lightbox.hidden = false;
       el.btnCloseLightbox.focus();
     });
@@ -825,7 +827,8 @@
   function init() {
     if (!SITES.length) {
       document.body.insertAdjacentHTML('afterbegin',
-        '<p style="padding:20px;font-family:sans-serif">資料檔案未能載入（assets/data/sites.js）。</p>');
+        '<p style="padding:20px;font-family:sans-serif">' +
+        esc((T && T.dataMissing) || '資料檔案未能載入（assets/data/sites.js）。') + '</p>');
       return;
     }
 

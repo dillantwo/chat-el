@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<!-- English edition of P4_AerospaceTimeline_20260814.html. Same layout and game logic;
+     only the text differs. Mission names follow China's official English forms
+     (Dongfanghong-1, Shenzhou-5, Tiangong-1, Chang'e-3, Yutu, Tianwen-1, Zhurong).
+     Keep the two files in step. -->
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>China Space Adventure</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background: radial-gradient(circle at center, #1b2735 0%, #090a0f 100%);
+            touch-action: manipulation;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+            50% { box-shadow: 0 0 35px rgba(245, 158, 11, 0.9); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-12px); }
+            40%, 80% { transform: translateX(12px); }
+        }
+
+        @keyframes pop-in {
+            0% { transform: scale(0.85); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .animate-float {
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .animate-glow {
+            animation: pulse-glow 2s infinite;
+        }
+
+        .animate-shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        .animate-pop {
+            animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.7);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(239, 68, 68, 0.6);
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col justify-between select-none relative p-3 sm:p-6 md:p-8 overflow-y-auto">
+
+    <!-- Background Canvas for Space Starfield -->
+    <canvas id="spaceCanvas" class="fixed inset-0 pointer-events-none z-0"></canvas>
+
+    <!-- Main Container -->
+    <div class="relative z-10 max-w-5xl mx-auto w-full h-full flex flex-col justify-between gap-4 sm:gap-6 my-auto">
+        
+        <!-- Header Section -->
+        <header class="w-full flex justify-between items-center bg-slate-900/85 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 rounded-2xl border border-red-500/40 shadow-xl">
+            <div class="flex items-center gap-3 sm:gap-4">
+                <div class="w-11 h-11 sm:w-14 sm:h-14 bg-red-600/30 rounded-xl flex items-center justify-center border border-red-400/50 text-2xl sm:text-3xl shadow-inner">
+                    🇨🇳
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-amber-300 to-yellow-200 leading-tight">
+                        China Space Adventure
+                    </h1>
+                    <p class="text-xs sm:text-sm font-semibold text-amber-200/90">Milestones of China's Space Programme</p>
+                </div>
+            </div>
+
+            <!-- Controls (Restart Button Enlarged, Sound Button Removed) -->
+            <div class="flex items-center gap-3">
+                <button onclick="resetGame()" class="py-2.5 px-4 sm:py-3 sm:px-6 bg-red-600 hover:bg-red-500 active:scale-95 transition-all rounded-xl text-sm sm:text-base md:text-lg font-bold shadow-lg shadow-red-600/40 flex items-center gap-2 text-white">
+                    <i class="fas fa-rotate-right text-base sm:text-xl"></i>
+                    <span>Restart</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Mascot Advice Banner -->
+        <div class="w-full bg-gradient-to-r from-red-950/85 via-slate-900/90 to-amber-950/85 backdrop-blur-md border border-amber-500/50 rounded-2xl p-4 sm:p-5 shadow-xl flex items-center gap-4 sm:gap-5">
+            <div class="relative flex-shrink-0">
+                <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-red-500 to-amber-400 p-0.5 shadow-lg animate-float">
+                    <div class="w-full h-full bg-slate-900 rounded-full flex items-center justify-center text-2xl sm:text-3xl">
+                        👩‍🚀
+                    </div>
+                </div>
+                <span class="absolute -bottom-0.5 -right-0.5 flex h-4 w-4">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-4 w-4 bg-amber-500"></span>
+                </span>
+            </div>
+            <div class="flex-grow">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-3 py-1 rounded-full border border-amber-400/40">
+                        Space Captain
+                    </span>
+                    <span id="progressStepText" class="text-xs sm:text-sm md:text-base font-bold text-amber-200">
+                        Progress: Step 1 / 6
+                    </span>
+                </div>
+                <p id="guideSpeech" class="text-sm sm:text-base md:text-lg text-slate-100 font-medium leading-relaxed">
+                    "Science moves forward <strong class="text-amber-300">one step at a time</strong>. Put China's space achievements in order of the year they happened!"
+                </p>
+            </div>
+        </div>
+
+        <!-- Timeline Placement Slots -->
+        <div class="w-full flex flex-col justify-center my-1 sm:my-2">
+            <div class="flex items-center justify-between mb-2.5 px-1">
+                <h2 class="text-base sm:text-lg md:text-xl font-extrabold text-amber-200 flex items-center gap-2">
+                    <i class="fas fa-timeline text-amber-400 text-lg sm:text-2xl"></i>
+                    Timeline of China's Space Development
+                </h2>
+                <span class="text-xs sm:text-sm font-semibold text-amber-300/80">Building a space power step by step!</span>
+            </div>
+
+            <!-- Timeline Slot Grid -->
+            <div class="grid grid-cols-3 sm:grid-cols-6 gap-2.5 sm:gap-3.5">
+                <!-- 6 Slots Generated via JS -->
+                <div id="slot-0" class="timeline-slot min-h-[110px] sm:min-h-[130px] bg-slate-900/40 border-2 border-dashed border-red-500/30 rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all"></div>
+                <div id="slot-1" class="timeline-slot min-h-[110px] sm:min-h-[130px] bg-slate-900/40 border-2 border-dashed border-red-500/30 rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all"></div>
+                <div id="slot-2" class="timeline-slot min-h-[110px] sm:min-h-[130px] bg-slate-900/40 border-2 border-dashed border-red-500/30 rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all"></div>
+                <div id="slot-3" class="timeline-slot min-h-[110px] sm:min-h-[130px] bg-slate-900/40 border-2 border-dashed border-red-500/30 rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all"></div>
+                <div id="slot-4" class="timeline-slot min-h-[110px] sm:min-h-[130px] bg-slate-900/40 border-2 border-dashed border-red-500/30 rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all"></div>
+                <div id="slot-5" class="timeline-slot min-h-[110px] sm:min-h-[130px] bg-slate-900/40 border-2 border-dashed border-red-500/30 rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all"></div>
+            </div>
+        </div>
+
+        <!-- Shuffled Candidate Cards -->
+        <div class="w-full flex flex-col justify-center my-1 sm:my-2">
+            <div class="flex items-center justify-between mb-2.5 px-1">
+                <h1 class="text-sm sm:text-base md:text-lg font-bold text-amber-200 flex items-center gap-2">
+                    <i class="fas fa-hand-pointer text-yellow-400 text-lg sm:text-xl"></i>
+                    Click a card below to choose China's next space achievement:
+                </h1>
+            </div>
+
+            <!-- Card Grid -->
+            <div id="cardsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                <!-- Cards will be dynamically injected here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Custom Educational Tip Modal -->
+    <div id="tipModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300">
+        <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-red-950 border-2 border-amber-500/70 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl animate-pop text-center relative overflow-hidden">
+            
+            <div class="absolute -top-12 -right-12 w-36 h-36 bg-amber-500/15 rounded-full blur-2xl"></div>
+
+            <div class="w-24 h-24 bg-amber-500/20 rounded-full mx-auto flex items-center justify-center border-2 border-amber-400/50 mb-4 animate-bounce">
+                <span class="text-5xl">💡</span>
+            </div>
+
+            <h3 class="text-2xl sm:text-3xl font-black text-amber-300 mb-3">
+                It's too early for this one!
+            </h3>
+
+            <!-- Dynamic Educational Hint Message -->
+            <div class="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 mb-4 text-left shadow-inner">
+                <p id="modalTipText" class="text-slate-100 text-base sm:text-lg leading-relaxed font-semibold">
+                    <!-- Tip content filled dynamically -->
+                </p>
+            </div>
+
+            <div class="p-4 bg-amber-500/15 border border-amber-400/40 rounded-2xl mb-6 text-xs sm:text-sm text-amber-200 font-bold flex items-center gap-3 text-left">
+                <i class="fas fa-shoe-prints text-amber-400 text-2xl flex-shrink-0"></i>
+                <span>Think about it: space engineering is very complex. It has to go "step by step". The basic technology must come first before the next step is possible!</span>
+            </div>
+
+            <button onclick="closeModal()" class="w-full py-4 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-400 hover:to-red-400 active:scale-95 transition font-black text-slate-950 rounded-2xl shadow-xl shadow-amber-500/30 text-lg sm:text-xl">
+                Got it, I'll try again!
+            </button>
+        </div>
+    </div>
+
+    <!-- Victory Celebration Modal -->
+    <div id="victoryModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-gradient-to-b from-red-950 via-slate-900 to-amber-950 border-2 border-amber-400/70 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl animate-pop text-center relative max-h-[90vh] flex flex-col justify-between">
+            
+            <div>
+                <div class="w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-tr from-amber-400 to-yellow-200 rounded-full mx-auto flex items-center justify-center border-4 border-yellow-300 shadow-2xl mb-4 animate-pulse">
+                    <span class="text-5xl sm:text-6xl">🏆</span>
+                </div>
+
+                <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-200 to-red-300 mb-2">
+                    Well done, Young Space Expert!
+                </h2>
+                <p class="text-amber-200 text-sm sm:text-base font-semibold mb-5">
+                    You have put the 6 major milestones of China's space development in the right order!
+                </p>
+
+                <!-- Final Sequence Summary List -->
+                <div id="summaryList" class="bg-slate-900/80 rounded-2xl p-3 text-left mb-5 border border-amber-500/30 text-xs sm:text-sm space-y-2 max-h-48 overflow-y-auto">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- STEP BY STEP SUMMARIZATION BOX -->
+                <div class="bg-gradient-to-r from-amber-500/20 via-red-500/20 to-amber-500/20 border-2 border-amber-400/50 rounded-2xl p-4 sm:p-5 mb-5 text-left shadow-lg">
+                    <div class="flex items-center gap-2 text-amber-300 font-extrabold text-base sm:text-lg mb-2">
+                        <i class="fas fa-lightbulb text-yellow-400 text-xl"></i>
+                        <span>The key lesson of space missions: step by step</span>
+                    </div>
+                    <p class="text-slate-100 text-xs sm:text-sm md:text-base leading-relaxed font-semibold">
+                        <strong class="text-amber-300">That's right! Every big goal is reached one step at a time!</strong><br>
+                        China's space programme started with an uncrewed satellite in 1970. It has since travelled to other worlds and even set several world records in space. Every attempt builds a solid base for the next, bigger goal! In our studies and in our lives, if we also <strong class="text-yellow-300">work step by step</strong> like space scientists, we can overcome difficulties and reach our goals!
+                    </p>
+                </div>
+            </div>
+
+            <button onclick="resetGame(); closeVictoryModal();" class="w-full py-4 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-400 hover:to-red-400 active:scale-95 transition font-black text-slate-950 rounded-2xl shadow-xl shadow-amber-500/30 text-lg sm:text-xl flex items-center justify-center gap-3">
+                <i class="fas fa-play"></i>
+                <span>Play again</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Master list of 6 China Space milestones in strict chronological order
+        const MILESTONES = [
+            {
+                id: 1,
+                title: "First Satellite (Dongfanghong-1)",
+                year: "1970",
+                icon: "📡",
+                color: "from-red-600 to-amber-700",
+                borderColor: "border-red-400",
+                description: "China successfully launched its first artificial Earth satellite, Dongfanghong-1, and China's space age officially began!",
+                prematureHint: "China first had to launch a satellite successfully and master the basic technology of rocket propulsion and orbit control!"
+            },
+            {
+                id: 2,
+                title: "First Crewed Spaceflight (Shenzhou-5)",
+                year: "2003",
+                icon: "👨‍🚀",
+                color: "from-amber-600 to-orange-600",
+                borderColor: "border-amber-400",
+                description: "Astronaut Yang Liwei flew into space on Shenzhou-5, and China became the third country in the world to send a person into space!",
+                prematureHint: "Without experience in rocket propulsion and controlling a satellite's orbit, sending a person into space would be far too dangerous! Start by launching the first artificial satellite."
+            },
+            {
+                id: 3,
+                title: "First Spacewalk (Shenzhou-7)",
+                year: "2008",
+                icon: "🌌",
+                color: "from-yellow-600 to-amber-600",
+                borderColor: "border-yellow-400",
+                description: "Astronaut Zhai Zhigang stepped out of Shenzhou-7 in space. It was the first spacewalk by a Chinese astronaut!",
+                prematureHint: "Without experience of crewed spaceflight, a spacewalk outside the spacecraft, one of the most complex tasks, is not possible yet!"
+            },
+            {
+                id: 4,
+                title: "First Space Lab (Tiangong-1)",
+                year: "2011",
+                icon: "🛰️",
+                color: "from-emerald-600 to-teal-700",
+                borderColor: "border-emerald-400",
+                description: "China launched Tiangong-1 and carried out its first rendezvous and docking test in space, laying the key technical foundation for a long-term space station!",
+                prematureHint: "Building a space lab and docking with it need well-developed technology for crewed spaceflight and spacewalks! Complete the spacewalk mission first."
+            },
+            {
+                id: 5,
+                title: "First Lunar Rover (Yutu)",
+                year: "2013",
+                icon: "🌙",
+                color: "from-cyan-600 to-blue-700",
+                borderColor: "border-cyan-400",
+                description: "Chang'e-3 carried China's first lunar rover, Yutu, to a soft landing on the Moon's surface, where it set off to explore!",
+                prematureHint: "Soft landings on other worlds and rover missions need a lot of experience in long-distance tracking and control, and in space experiments! Complete the space lab docking test first."
+            },
+            {
+                id: 6,
+                title: "First Mars Rover (Zhurong, Tianwen-1)",
+                year: "2021",
+                icon: "🔴",
+                color: "from-rose-600 to-red-800",
+                borderColor: "border-rose-400",
+                description: "The Zhurong rover landed on Utopia Planitia on Mars. In a single mission, China orbited, landed on and explored Mars with a rover, and moved on to exploring deeper into space!",
+                prematureHint: "Mars is extremely far from Earth! Before travelling to Mars, China first needed the technology and experience of a soft landing on the Moon."
+            }
+        ];
+
+        let currentStepIndex = 0; // Ranges from 0 to 5
+        let availableCards = [];
+        let placedMilestones = [];
+
+        function initStarfield() {
+            const canvas = document.getElementById("spaceCanvas");
+            const ctx = canvas.getContext("2d");
+            let stars = [];
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                stars = [];
+                const starCount = Math.floor((canvas.width * canvas.height) / 2800);
+                for (let i = 0; i < starCount; i++) {
+                    stars.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * canvas.height,
+                        radius: Math.random() * 1.8,
+                        alpha: Math.random(),
+                        speed: 0.005 + Math.random() * 0.015
+                    });
+                }
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                stars.forEach(star => {
+                    star.alpha += star.speed;
+                    if (star.alpha > 1 || star.alpha < 0) {
+                        star.speed = -star.speed;
+                    }
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, Math.min(1, star.alpha))})`;
+                    ctx.fill();
+                });
+                requestAnimationFrame(animate);
+            }
+
+            window.addEventListener("resize", resize);
+            resize();
+            animate();
+        }
+
+        function resetGame() {
+            currentStepIndex = 0;
+            placedMilestones = [];
+            
+            // Shuffle cards
+            availableCards = [...MILESTONES].sort(() => Math.random() - 0.5);
+
+            updateGuideSpeech("\"Science moves forward <strong class='text-amber-300'>one step at a time</strong>. Put them in order of the year they happened!\"");
+            updateProgressIndicator();
+            renderTimelineSlots();
+            renderCardsGrid();
+        }
+
+        function updateProgressIndicator() {
+            const text = document.getElementById("progressStepText");
+            if (currentStepIndex < 6) {
+                text.innerText = `Progress: Step ${currentStepIndex + 1} / 6`;
+            } else {
+                text.innerText = `Progress: All done! 🎉`;
+            }
+        }
+
+        function updateGuideSpeech(htmlContent) {
+            document.getElementById("guideSpeech").innerHTML = htmlContent;
+        }
+
+        function renderTimelineSlots() {
+            for (let i = 0; i < 6; i++) {
+                const slotEl = document.getElementById(`slot-${i}`);
+                const item = placedMilestones[i];
+
+                if (item) {
+                    // Filled slot
+                    slotEl.className = `timeline-slot min-h-[110px] sm:min-h-[130px] bg-gradient-to-b ${item.color} border-2 ${item.borderColor} rounded-2xl p-2 flex flex-col items-center justify-center text-center shadow-lg animate-pop relative overflow-hidden cursor-pointer hover:scale-105 transition-transform`;
+                    slotEl.onclick = () => showItemDetail(item);
+                    slotEl.innerHTML = `
+                        <span class="text-xs sm:text-sm font-black bg-slate-950/80 px-2.5 py-0.5 rounded-full text-amber-300 mb-1 border border-amber-300/40">
+                            ${item.year}
+                        </span>
+                        <div class="text-2xl sm:text-3xl my-0.5">${item.icon}</div>
+                        <span class="text-xs sm:text-sm font-black text-white leading-tight line-clamp-2">${item.title}</span>
+                    `;
+                } else {
+                    // Empty placeholder slot
+                    const isNextTarget = (i === currentStepIndex);
+                    slotEl.className = `timeline-slot min-h-[110px] sm:min-h-[130px] ${
+                        isNextTarget 
+                        ? 'bg-red-950/60 border-2 border-dashed border-amber-400 animate-glow' 
+                        : 'bg-slate-900/30 border-2 border-dashed border-slate-700/60'
+                    } rounded-2xl p-2 flex flex-col items-center justify-center text-center transition-all`;
+                    slotEl.onclick = null;
+                    slotEl.innerHTML = `
+                        <span class="w-6 h-6 sm:w-7 sm:h-7 rounded-full ${isNextTarget ? 'bg-amber-400/30 text-amber-300 border border-amber-400/50' : 'bg-slate-800 text-slate-500'} font-black text-xs sm:text-sm flex items-center justify-center mb-1.5">
+                            ${i + 1}
+                        </span>
+                        <span class="text-xs sm:text-sm font-bold ${isNextTarget ? 'text-amber-300 font-semibold' : 'text-slate-500'}">
+                            ${isNextTarget ? 'Your turn' : 'Locked'}
+                        </span>
+                    `;
+                }
+            }
+        }
+
+        function renderCardsGrid() {
+            const container = document.getElementById("cardsGrid");
+            container.innerHTML = "";
+
+            availableCards.forEach((card) => {
+                const cardEl = document.createElement("div");
+                cardEl.id = `card-${card.id}`;
+                cardEl.className = `bg-slate-900/85 hover:bg-slate-800/95 border-2 border-amber-500/40 hover:border-amber-400 rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 transform hover:-translate-y-1 hover:shadow-xl hover:shadow-red-500/25 active:scale-95 group relative overflow-hidden min-h-[110px] sm:min-h-[130px]`;
+                
+                cardEl.onclick = () => handleCardClick(card, cardEl);
+
+                cardEl.innerHTML = `
+                    <div class="text-3xl sm:text-4xl mb-1.5 group-hover:scale-110 transition-transform">
+                        ${card.icon}
+                    </div>
+                    <h3 class="text-xs sm:text-sm md:text-base font-black text-slate-100 group-hover:text-amber-300 transition-colors leading-snug">
+                        ${card.title}
+                    </h3>
+                `;
+
+                container.appendChild(cardEl);
+            });
+        }
+
+        function handleCardClick(clickedCard, cardElement) {
+            const expectedMilestone = MILESTONES[currentStepIndex];
+
+            if (clickedCard.id === expectedMilestone.id) {
+                // Correct Choice!
+                placedMilestones.push(clickedCard);
+                
+                // Remove from remaining available cards
+                availableCards = availableCards.filter(c => c.id !== clickedCard.id);
+
+                currentStepIndex++;
+
+                updateGuideSpeech(`"Brilliant, that's correct! In <strong class='text-amber-300'>${clickedCard.year}</strong>, China achieved its <strong class='text-yellow-300'>${clickedCard.title}</strong>!"`);
+                
+                updateProgressIndicator();
+                renderTimelineSlots();
+                renderCardsGrid();
+
+                // Check if Game Completed
+                if (currentStepIndex === 6) {
+                    setTimeout(triggerVictory, 600);
+                }
+
+            } else {
+                // Incorrect Choice! (Clicked an item out of sequence)
+                cardElement.classList.add("animate-shake");
+                setTimeout(() => cardElement.classList.remove("animate-shake"), 500);
+
+                // Show dynamic educational prompt modal
+                showEducationalTip(clickedCard, expectedMilestone);
+            }
+        }
+
+        function showEducationalTip(clickedCard, expectedMilestone) {
+            const modal = document.getElementById("tipModal");
+            const modalTipText = document.getElementById("modalTipText");
+
+            // Educational feedback based on the clicked item
+            let tipMessage = clickedCard.prematureHint || `Before the "${clickedCard.title}", China's astronauts and scientists first had to achieve the "${expectedMilestone.title}"!`;
+
+            modalTipText.innerHTML = `
+                <div class="text-red-400 font-bold mb-1 flex items-center gap-2 text-base sm:text-lg">
+                    <i class="fas fa-triangle-exclamation text-xl"></i>
+                    You tried: ${clickedCard.title}
+                </div>
+                <div class="text-slate-200 mt-2 text-sm sm:text-base leading-relaxed">
+                    ${tipMessage}
+                </div>
+            `;
+
+            modal.classList.remove("hidden");
+        }
+
+        function closeModal() {
+            document.getElementById("tipModal").classList.add("hidden");
+        }
+
+        function showItemDetail(item) {
+            updateGuideSpeech(`"<strong>${item.year} – ${item.title}</strong>: ${item.description}"`);
+        }
+
+        function triggerVictory() {
+            // Launch Confetti
+            try {
+                confetti({
+                    particleCount: 140,
+                    spread: 90,
+                    origin: { y: 0.6 }
+                });
+            } catch(e){}
+
+            // Populate Victory Summary
+            const summaryContainer = document.getElementById("summaryList");
+            summaryContainer.innerHTML = MILESTONES.map((m, idx) => `
+                <div class="flex items-center gap-3 p-2 bg-slate-800/90 rounded-xl border border-amber-500/30">
+                    <span class="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center flex-shrink-0">
+                        ${idx + 1}
+                    </span>
+                    <span class="font-bold text-amber-300 w-16 flex-shrink-0 text-xs sm:text-sm">${m.year}</span>
+                    <span class="text-slate-100 font-semibold flex-grow text-xs sm:text-sm">${m.title}</span>
+                </div>
+            `).join('');
+
+            document.getElementById("victoryModal").classList.remove("hidden");
+        }
+
+        function closeVictoryModal() {
+            document.getElementById("victoryModal").classList.add("hidden");
+        }
+
+        window.onload = function() {
+            initStarfield();
+            resetGame();
+        };
+    </script>
+</body>
+</html>

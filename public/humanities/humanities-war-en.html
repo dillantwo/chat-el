@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<!-- English edition of humanities-war.html. Keep the two files in step: same
+     sections, same images and links, same quiz answers. Terminology follows the
+     HKSAR Government's own English usage, mainly the Antiquities and Monuments
+     Office's "Greater Bay Area Dongjiang Column Heritage Trail" pages
+     (Hong Kong-Kowloon Brigade, War of Resistance against Japanese Aggression,
+     Japanese Occupation) and the Government Records Service's "Hong Kong under
+     Japanese Occupation" pages (Japanized road names such as Nakameiji-dori). -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Dr. Cora Ka Yuk SIU">
+    <meta name="description" content="Designed by Dr. Cora Ka Yuk SIU, Artificial Intelligence and Digital Competency Centre (AIDCEC), The Education University of Hong Kong (EdUHK). All rights reserved.">
+    <title>The Transformation of Our Nation: Understanding Hong Kong's History – The War of Resistance against Japanese Aggression</title>
+    <script>
+  
+  document.addEventListener('contextmenu', event => event.preventDefault());
+
+  
+  document.onkeydown = function(e) {
+    if (e.ctrlKey && (e.keyCode === 67 || e.keyCode === 85 || e.keyCode === 83)) {
+      return false;
+    }
+  };
+</script>
+
+<style>
+     
+    body {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+</style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&amp;display=swap" rel="stylesheet">
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #F3F4F6;
+        }
+         
+        section {
+            scroll-margin-top: 80px;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin: 1.5rem auto;
+            height: 300px;
+            background: #ffffff;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: #E5E7EB;
+            transform: translateX(-50%);
+        }
+        .bg-primary { background-color: #991B1B; }
+        .text-primary { color: #991B1B; }
+        
+        .map-card {
+            width: 100%;
+            max-width: 800px;
+            margin: 2rem auto;
+            border: 4px solid #374151;
+            border-radius: 0.5rem;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            background-color: #111827;
+            background-image: linear-gradient(rgba(17, 24, 39, 0.5), rgba(17, 24, 39, 0.5)), url('./map.png');
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+            height: 400px;
+        }
+        .map-card:hover {
+            transform: scale(1.02);
+        }
+        .map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .content-block h2 { color: #991B1B; font-weight: 900; margin-top: 2.5rem; margin-bottom: 1rem; border-left: 6px solid #991B1B; padding-left: 1rem; }
+        .content-block h3 { color: #1F2937; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; padding-left: 1.4rem; }
+        .content-block p { margin-bottom: 1rem; line-height: 1.8; color: #374151; }
+        .content-block ul { margin-bottom: 1rem; padding-left: 2.5rem; list-style-type: disc; }
+        .content-block li { margin-bottom: 0.5rem; color: #4B5563; }
+        .chart-caption { text-align: center; font-size: 0.875rem; color: #6B7280; margin-top: -0.5rem; margin-bottom: 1.5rem; }
+        
+         
+        .res-content-block { text-align: left; background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }
+        .res-content-block h2 { color: #FBBF24; font-size: 1.875rem; font-weight: 900; margin-bottom: 1.5rem; border-bottom: 2px solid #FBBF24; padding-bottom: 0.5rem; }
+        .res-content-block h3 { color: #FDE68A; font-size: 1.25rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        .res-content-block p { color: #E5E7EB; line-height: 1.8; margin-bottom: 1rem; }
+        .res-content-block ul { list-style-type: none; padding-left: 1rem; margin-bottom: 1.5rem; }
+        .res-content-block li { position: relative; padding-left: 1.5rem; margin-bottom: 0.5rem; color: #D1D5DB; }
+        .res-content-block li::before { content: "•"; color: #FBBF24; position: absolute; left: 0; font-weight: bold; }
+
+         
+        #game-container { background: #1F2937; border-radius: 1rem; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .quiz-option { cursor: pointer; transition: all 0.2s; border: 2px solid #374151; }
+        .quiz-option:hover { border-color: #FBBF24; background: rgba(251, 191, 36, 0.1); }
+        .quiz-option.correct { border-color: #10B981; background: rgba(16, 185, 129, 0.1); }
+        .quiz-option.wrong { border-color: #EF4444; background: rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body id="top" class="text-gray-800">
+
+    
+    <header class="bg-primary text-white shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="#top" class="text-base md:text-base font-black tracking-wider hover:text-amber-300 transition">Understanding Hong Kong's History – The War of Resistance</a>
+            <nav class="hidden md:flex space-x-6 text-xs font-bold">
+                <a href="#intro" class="hover:text-amber-300 transition">Introduction</a>
+                <a href="#timeline" class="hover:text-amber-300 transition">Timeline</a>
+                <a href="#history-details" class="hover:text-amber-300 transition">The Fall of Hong Kong</a>
+                <a href="#resistance" class="hover:text-amber-300 transition">Spirit of Resistance</a>
+                <a href="#map" class="hover:text-amber-300 transition">History Map</a>
+                <a href="#game" class="hover:text-amber-300 transition">Mini Challenge</a>
+                <!-- Platform's own 抗戰歷史小嚮導 instead of the Moodle LTI launch.
+                     target="_top" for the same reason as the map link below: this
+                     document runs inside an iframe. -->
+                <a href="/humanities/anti-japanese-war/chat" target="_top" class="hover:text-amber-300 transition">History Guide</a>
+            </nav>
+        </div>
+    </header>
+
+    
+    <section id="intro" class="relative bg-white overflow-hidden">
+        <div class="container mx-auto px-4 py-16 text-center">
+            <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">Hong Kong in the War of Resistance against Japanese Aggression</h2>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">From 1941 to 1945, Hong Kong lived through a dark period known as the "three years and eight months". This is more than a memory of war. It is an important part of our history, showing the strong will of the people of Hong Kong and their spirit of defending their home and country.</p>
+        </div>
+    </section>
+    
+    <section id="timeline" class="py-12 bg-gray-400">
+         <div class="container mx-auto px-4">
+            <div class="text-center mb-10">
+                <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">⏳ Key Moments in Hong Kong's History</h2>
+            </div>
+            <div class="relative max-w-4xl mx-auto">
+                <div class="timeline-line hidden md:block"></div>
+
+                  <div class="md:flex justify-between items-center mb-12 relative z-10">
+                    <div class="md:w-5/12 text-center md:text-right px-4">
+                        <h4 class="text-2xl font-black text-primary">1931</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">The start of China's 14-year War of Resistance</span>
+                    </div>
+                    <div class="w-8 h-8 bg-primary rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">1</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-red-800">
+                            <h5 class="text-lg font-bold mb-2">The September 18th Incident</h5>
+                            <p class="text-sm text-gray-600">Japanese troops blew up a section of railway at Liutiaohu near Shenyang, falsely blamed Chinese troops for it, and then occupied the three provinces of Northeast China. This set off a nationwide movement to resist Japan and save the nation, and marked the start of the 14-year War of Resistance.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="md:flex justify-between items-center mb-12 relative z-10 flex-row-reverse">
+                    <div class="md:w-5/12 text-center md:text-left px-4">
+                        <h4 class="text-2xl font-black text-gray-800">1937</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">The full-scale War of Resistance begins</span>
+                    </div>
+                    <div class="w-8 h-8 bg-gray-800 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">2</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-gray-800">
+                            <h5 class="text-lg font-bold mb-2">The July 7th Incident (Lugou Bridge Incident)</h5>
+                            <p class="text-sm text-gray-600">Japan launched a full-scale invasion of China, and the Chinese nation began eight long, hard years of resistance.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:flex justify-between items-center mb-12 relative z-10">
+                    <div class="md:w-5/12 text-center md:text-right px-4">
+                        <h4 class="text-2xl font-black text-amber-600">December 1941</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">Black Christmas</span>
+                    </div>
+                    <div class="w-8 h-8 bg-amber-500 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">3</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-amber-500">
+                            <h5 class="text-lg font-bold mb-2">The Fall of Hong Kong</h5>
+                            <p class="text-sm text-gray-600">After 18 days of determined resistance, Hong Kong was occupied by the Japanese army, and the dark "three years and eight months" began.</p>
+                        </div>
+                    </div>
+                </div>
+
+                 <div class="md:flex justify-between items-center mb-12 relative z-10 flex-row-reverse">
+                    <div class="md:w-5/12 text-center md:text-left px-4">
+                        <h4 class="text-2xl font-black text-purple-700">1942 – 1944</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">Defending home and country</span>
+                    </div>
+                    <div class="w-8 h-8 bg-purple-600 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">4</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-purple-600">
+                            <h5 class="text-lg font-bold mb-2">The Dongjiang Column fights bravely</h5>
+                            <p class="text-sm text-gray-600">Anti-Japanese guerrillas operated in the countryside of Hong Kong. They rescued cultural figures and attacked the Japanese army.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:flex justify-between items-center mb-12 relative z-10">
+                    <div class="md:w-5/12 text-center md:text-left px-4">
+                        <h4 class="text-2xl font-black text-green-700">August 1945</h4>
+                        <span class="text-sm font-bold text-gray-500 uppercase">Peace returns</span>
+                    </div>
+                    <div class="w-8 h-8 bg-green-500 rounded-full hidden md:flex border-4 border-white shadow mx-auto items-center justify-center text-white text-xs">5</div>
+                    <div class="md:w-5/12 px-4">
+                        <div class="bg-white p-5 rounded-lg shadow-md border-l-4 border-green-600">
+                            <h5 class="text-lg font-bold mb-2">Japan announces its unconditional surrender</h5>
+                            <p class="text-sm text-gray-600">Japan announced its unconditional surrender, and the War of Resistance in Hong Kong ended in victory.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    
+    <section id="history-details" class="py-16 bg-white border-t">
+        <div class="container mx-auto px-4 max-w-4xl">
+            <div class="text-center mb-12">
+                    <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">The Fall of Hong Kong: Dark Years and the Suffering of the People</h2>
+            </div>    
+               
+            <div class="content-block">
+                <h4 class="text-2xl font-black text-gray-800">Japanese Atrocities in Hong Kong</h4>
+                <p class="text-lg text-gray-600">On 25 December 1941, the Japanese army formally took over Hong Kong. Historians call this day "Black Christmas".</p>
+                <h2>1. Hardship under Japanese Rule</h2>
+                <p>After the occupation, the Japanese army used extremely harsh measures against the people of Hong Kong to tighten its control.</p>
+                <p>The Japanese army imposed martial law in Hong Kong. Soldiers searched homes and arrested and killed civilians at will. To ease the shortage of food, the Japanese authorities also carried out a policy of reducing the population, forcing residents to return to their home villages. Large numbers of people left this "hell on earth" for the Mainland. The Japanese army sent people to the South China coast on junks, with no regard for their safety. Many junks were robbed on the way. Some were towed out to the open sea and then sunk or set on fire by the Japanese, and afterwards many burnt bodies drifted ashore. Along the roads home, refugees passed old people who had collapsed and died and babies who had been abandoned.</p>
+                <p>At the same time, the area around Lockhart Road in Wan Chai became a centre of "comfort stations", where women were forced to serve Japanese soldiers. Dr Li Shu-fan, who ran a hospital in Kowloon at the time, estimated that he treated at least 10,000 victims of rape during the Japanese Occupation (Ta Kung Wen Wei, 2025).</p>
+                <p>According to <em>Contemporary China</em> (2021), Hong Kong's population fell sharply from about 1.6 million before the war to only about 600,000 when Japan surrendered in 1945. This loss of a million people was mainly caused by deaths in the war, famine, and the forced repatriation carried out by the Japanese army to reduce the demand for food.</p>
+
+<span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/T7yyQMOWAnc" target="_blank">Mini-drama <em>The War of Resistance</em>, Episode 2: Sacrifice – in Chinese</a>)</strong></span>
+</p>
+                
+                
+                <div class="chart-container">
+                    <canvas id="populationChart"></canvas>
+                </div>
+                <p class="chart-caption">Figure 1.1: The sharp fall in Hong Kong's population, 1941–1945 (Source: <em>Contemporary China</em>)</p>
+
+                <h3>Japanese atrocities against civilians:</h3>
+                <ul>
+                    <li><strong>Brutal methods:</strong> The Japanese army often tortured people suspected of resistance, for example by forcing water into them or beating them, which filled society with fear (The University of Hong Kong, 2025).</li>
+                    <li><strong>Silver Mine Bay Massacre:</strong> Even after Japan announced its surrender in August 1945, some remaining Japanese troops at Silver Mine Bay on Lantau Island hunted down and arrested villagers without reason, killing and injuring innocent people.</li>
+                </ul>
+                <br>
+                <p>After the war, Noma Kennosuke, commander of the Kempeitai (Japanese military police) in Hong Kong, was convicted of war crimes for his atrocities and was executed at Stanley Prison. This was a symbol that justice had been done (Ta Kung Wen Wei, 2025).</p>
+
+                <h2>2. Economic Plunder: The Disaster of the Military Yen</h2>
+                <p>To strip the people of Hong Kong of their wealth, the Japanese occupation government introduced the "military yen":</p>
+                <ul>
+                    <li><strong>Forced to replace the Hong Kong dollar:</strong> From 1943, the Japanese authorities allowed only the military yen to be used. Anyone found holding Hong Kong dollars faced heavy punishment.</li>
+                    <li><strong>Savings turned into waste paper:</strong> After Japan surrendered, the Japanese side refused to exchange the military yen. Countless families in Hong Kong lost all their savings overnight, which was a heavy blow to people's lives after the war.</li>
+                </ul>
+
+                <h2>3. Shortage of Supplies: Memories of Hunger</h2>
+                <p>The Japanese army supplied its own troops first, so ordinary people lived in great hardship:</p>
+                <ul>
+                    <li><strong>The "6.4 taels" ration:</strong> Each person received a very small daily food ration, only about 6.4 taels (around 240 grams) of rice. Many people fell ill from malnutrition or hunger, and some even starved to death in the streets <strong>(Ta Kung Pao, 2025)</strong>.</li>
+                    <li><strong>Seizing metal:</strong> To make war supplies, the Japanese army removed the bronze lions of the HSBC building and many bronze statues from the Victorian era.</li>
+                </ul>
+
+                <h2>4. Cultural Destruction: Forced "Japanization" of Education</h2>
+                <p>To wipe out people's Chinese cultural identity, the Japanese army forced "Japanized" policies on Hong Kong:</p>
+                <ul>
+                    <li><strong>Forced to learn Japanese:</strong> Schools had to teach Japanese, and even place names were changed to Japanese names. For example, Queen's Road Central was renamed "Nakameiji-dori".</li>
+                    <li><strong>Education abandoned:</strong> Most schools closed because of the war, so a whole generation of children lost the chance of a normal education.</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    
+    <section id="resistance" class="py-16 bg-gray-800 text-white">
+        <div class="container mx-auto px-4">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl md:text-5xl font-bold">⚔️ Brave Resistance: The Spirit of Defending Home and Country</h2>
+                <p class="mt-4 text-gray-400 max-w-2xl mx-auto mb-8">Under the blockade of the Japanese Occupation, a group of heroes fought the invaders bravely for years, in both the countryside and the city of Hong Kong.</p>
+            </div>
+
+            
+            <div class="max-w-4xl mx-auto res-content-block">
+                <h2 id="res-intro"># Flames of Resistance: The Heroes of the Hong Kong-Kowloon Brigade behind Enemy Lines</h2>
+
+                <h3 class="mb-4">1. The War of Resistance in South China and the Birth of the Dongjiang Column</h3>
+                <p>In 1938, the Japanese army invaded Guangdong. This moved local people to form guerrilla units, made up mainly of farmers, students, seamen and other ordinary people. They were a self-defence force with wide support from the people. A guerrilla unit is an irregular military organisation. It moves quickly and flexibly and makes good use of the land to fight the enemy. The guerrillas' main tasks included gathering intelligence, carrying out rescues, and destroying the Japanese army's supply facilities to weaken its fighting strength. The guerrillas showed great patriotism and a strong sense of national unity. Even in harsh conditions, they kept up their determination to fight, showing how the Chinese nation stays strong and unyielding in hard times.</p>
+                <p>In October 1938, the Japanese army landed at Daya Bay in Huiyang, Guangdong. The Kuomintang defending troops quickly collapsed, and Guangzhou and large areas of the lower Dongjiang (East River) region fell. At that time, the Communist Party of China (CPC) set up a number of guerrilla units in Huiyang, Dongguan, Bao'an and other places, including the Huiyang-Bao'an People's Anti-Japanese Guerrilla Corps and the Dongguan-Bao'an-Huiyang Border People's Anti-Japanese Guerrilla Brigade. Between April and May 1939, these units accepted designations from the National Revolutionary Army and were reorganised as two brigades under the Dongjiang Guerrilla Command of the Fourth War Zone of the National Revolutionary Army. In September 1940, the two brigades were reorganised as the Guangdong People's Anti-Japanese Guerrillas, and in January 1942 as the Guangdong People's Anti-Japanese Guerrilla Corps. Following instructions from the CPC Central Committee, the CPC Guangdong Provincial Committee set up guerrilla zones behind the Japanese-occupied areas of the Dongjiang region and organised the people's armed forces against Japan. These forces gradually grew into what later became the Dongjiang Column.</p>
+                <p>In December 1943, the Dongjiang Column, formed by combining a number of people's armed forces, was officially founded. Its full name was the Dongjiang Column of the Guangdong People's Anti-Japanese Guerrilla. It was an anti-Japanese guerrilla force led by the Communist Party of China during the War of Resistance against Japanese Aggression.</p>
+                
+                
+                <div class="my-8 rounded-lg overflow-hidden border-2 border-gray-700 shadow-2xl relative bg-gray-900">
+                    <img src="https://dw-media.tkww.hk/dams/dwproduct/image/202508/22/68a7b250e4b0dd0b099089d4.jpg" 
+                         alt="The Hong Kong-Kowloon Independent Brigade of the Dongjiang Column" class="w-full h-auto opacity-90">
+                    <div class="p-3 bg-gray-900/90 text-center">
+                        <p class="text-amber-400 font-bold text-lg italic">"In the darkness, the Hong Kong-Kowloon Independent Brigade of the Dongjiang Column fought the enemy bravely to defend home and country."</p>
+                        <p class="text-[10px] text-gray-500 mt-1">
+                            <a href="https://dw-media.tkww.hk/dams/dwproduct/image/202508/22/68a7b250e4b0dd0b099089d4.jpg" target="_blank" class="hover:text-amber-300 transition-colors">Image source: Ta Kung Pao (2025)</a>
+                        </p>
+                    </div>
+                </div>
+
+                <p>This force fought a guerrilla war along the coast and in the mountains of Guangdong. It cut the Japanese army's transport routes, protected local people, and supported the nationwide counter-offensive against Japan. <span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/s46yoU7VK5Y" target="_blank">Mini-drama <em>The War of Resistance</em>, Episode 5: Raid – in Chinese</a>)</strong></span></p>
+
+                <h3>2. The Hong Kong-Kowloon Independent Brigade: Anti-Japanese Heroes among Us</h3>
+                <p>In February 1942, the Hong Kong-Kowloon Brigade was formed at Wong Mo Ying Village in Sai Kung to defend Hong Kong in particular. What made this force special was that most of its members were young local patriots and ordinary people of Hong Kong. <span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/pv3_oHoZm-w" target="_blank">Mini-drama <em>The War of Resistance</em>, Episode 4: Rescue – in Chinese</a>)</strong></span></p>
+                <p><strong>Their brave deeds included:</strong></p>
+                <ul>
+                    <li><strong>Raids in the city:</strong> They sent pistol squads to ambush Japanese posts in the urban areas.</li>
+                    <li><strong>Attacks at sea:</strong> Using fishing boats as cover, they attacked Japanese ships carrying supplies.</li>
+                    <li><strong>Psychological warfare:</strong> They handed out anti-Japanese leaflets in the streets, telling people "We will win", which raised everyone's confidence.</li>
+                </ul>
+                <h3>3. The Great Rescue of Cultural Figures</h3>
+                <p>The Hong Kong-Kowloon Brigade carried out an admirable mission. Under close searches by the Japanese army, it secretly rescued several hundred well-known cultural figures and patriots from Hong Kong, protecting the "seeds" of the nation's culture. <span style="color: rgb(0, 98, 255); text-decoration: underline; text-decoration-color: rgb(0, 98, 255);"><strong>(<a href="https://youtu.be/9cucrTlfDAA" target="_blank">Mini-drama <em>The War of Resistance</em>, Episode 1: Rescue Operation – in Chinese</a>)</strong></span></p>
+                <h3>4. Selfless Service after Victory</h3>
+                <p>After Japan surrendered in 1945, the Hong Kong-Kowloon Brigade did not leave at once. Seeing what society needed at the time, its members chose to help keep law and order in the New Territories and protect villages from bandits until normal order returned. People in Hong Kong still remember this sense of duty to defend home and country today.</p>
+                <p class="mt-6 italic border-t border-gray-600 pt-4 text-amber-200 text-center">Times were very hard, but the spirit of the Hong Kong-Kowloon Brigade shows us that anyone can become a hero who protects their home, as long as they care for their home and country and are brave enough to take responsibility.</p>
+            </div>
+        </div>    
+    </section>   
+ 
+    <section id="map" class="py-12 bg-gray-400" >
+            
+            <div class="text-center mt-12 mb-20">
+                <h4 class="text-xl font-bold text-amber-400 mb-4">📍 Interactive Learning: Explore the Hong Kong War Map</h4>
+                <!-- Points at the platform's own 互動地圖 part instead of the Moodle page.
+                     target="_top" because this document is embedded in an iframe: it
+                     navigates the whole app (keeping the header and back link) rather
+                     than loading the map inside this frame or spawning a new tab. -->
+                <a href="/humanities/anti-japanese-war/heritage-trail-map" target="_top" class="block">
+                    <div class="map-card">
+                        <div class="map-overlay">
+                            <div class="text-center p-8 bg-gray-900/80 rounded-xl backdrop-blur-sm border border-gray-700">
+                                <svg class="w-16 h-16 text-amber-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+                                </svg>
+                                <h5 class="text-2xl font-bold mb-2 text-white">Click to open the history map</h5>
+                                <p class="text-amber-200 text-sm mb-4">See where in Hong Kong the Dongjiang Column and the Hong Kong-Kowloon Brigade bravely fought the Japanese and defended our home</p>
+                                <p class="text-gray-400 text-xs mb-6">Produced by the Artificial Intelligence and Digital Competency Education Centre, The Education University of Hong Kong</p>
+                                <span class="inline-block bg-amber-500 text-gray-900 px-8 py-3 rounded-full font-bold hover:bg-amber-400 transition shadow-lg">Explore now</span>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+    </section>        
+    
+    
+    
+    <section id="game" class="relative bg-white overflow-hidden">
+        <div class="container mx-auto px-4 py-16 text-center">
+            <div class="max-w-3xl mx-auto mb-16">
+                <div id="game-container">
+                    <div id="game-intro" class="text-center">
+                        <div class="w-20 h-20 bg-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
+                            <svg class="w-10 h-10 text-gray-900" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0z"></path></svg>
+                        </div>
+                        <h2 class="text-3xl font-black text-amber-400 mb-4">War of Resistance History Class</h2>
+                        <p class="text-gray-300 mb-8 leading-relaxed">Test your memory! Can you pass every history level and become a "Young Historian"?</p>
+                        <button onclick="startGame()" class="bg-amber-500 hover:bg-amber-400 text-gray-900 px-12 py-4 rounded-full font-black text-xl transition transform hover:scale-105 shadow-lg">Start the challenge</button>
+                    </div>
+
+                    <div id="game-play" class="hidden">
+                        <div class="flex justify-between items-center mb-6 text-sm font-bold border-b border-gray-700 pb-4">
+                            <span class="text-amber-400">Question <span id="current-q">1</span> / 5</span>
+                            <span class="text-white">Score: <span id="game-score">0</span></span>
+                        </div>
+                        <h3 id="question-text" class="text-2xl font-bold text-white mb-8">Loading question...</h3>
+                        <div id="options-grid" class="grid grid-cols-1 gap-4 mb-8">
+                            
+                        </div>
+                        <div id="explanation" class="hidden p-4 rounded-lg bg-gray-700 border-l-4 border-amber-500 mb-6">
+                            <p class="text-sm text-gray-200" id="explanation-text"></p>
+                        </div>
+                        <button id="next-btn" onclick="nextQuestion()" class="hidden w-full bg-white text-gray-900 py-3 rounded-lg font-bold hover:bg-gray-200 transition">Next question</button>
+                    </div>
+
+                    <div id="game-result" class="hidden text-center">
+                        <h3 class="text-4xl font-black text-white mb-4">Challenge complete!</h3>
+                        <p class="text-2xl text-amber-400 mb-6">Your total score: <span id="final-score">0</span></p>
+                        <p id="result-message" class="text-gray-300 mb-8"></p>
+                        <button onclick="startGame()" class="bg-amber-500 hover:bg-amber-400 text-gray-900 px-10 py-3 rounded-full font-bold transition">Play again</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    
+    <footer class="bg-gray-900 text-gray-400 py-12 text-center border-t border-gray-800">
+        <div class="container mx-auto px-4 text-left">
+            <div class="max-w-4xl mx-auto">
+                <h5 class="text-white font-bold mb-4 border-b border-gray-700 pb-2">References</h5>
+                <!-- Most sources are in Chinese only. Original titles are kept, with an
+                     English translation in square brackets (APA style). Where the source
+                     has an official English page, that page is linked instead. -->
+                <ul class="text-xs space-y-2 list-disc pl-5">
+                    <li><strong>HKSAR Government Press Releases (2025)</strong>. 〈行政長官出席中國人民抗日戰爭暨世界反法西斯戰爭勝利80周年斬竹灣抗日英烈紀念碑園典禮致辭〉 [Speech by the Chief Executive at the ceremony at the Tsam Chuk Wan Memorial Garden for Martyrs of the War of Resistance against Japanese Aggression] (Chinese only). Retrieved from <a href="https://www.info.gov.hk/gia/general/202508/30/P2025083000278.htm" target="_blank">https://www.info.gov.hk/gia/general/202508/30/P2025083000278.htm</a></li>
+                    <li><strong>HKSAR Government website for the 80th Anniversary of the Victory of the Chinese People's War of Resistance Against Japanese Aggression and the World Anti-Fascist War (2025)</strong>. <em>Historic Sites of the Communist Party of China in the War of Resistance in Hong Kong</em>. Retrieved from <a href="https://www.80avictory.gov.hk/en/site.html" target="_blank">https://www.80avictory.gov.hk/en/site.html</a></li>
+                    <li><strong>Information Services Department, HKSAR Government (2025)</strong>. 〈微短劇《抗戰》〉 [Mini-drama <em>The War of Resistance</em>]. Retrieved from <a href="https://www.80avictory.gov.hk/tc/mini-drama.html" target="_blank">https://www.80avictory.gov.hk/tc/mini-drama.html</a></li>
+                    <li><strong>The University of Hong Kong (2025)</strong>. <em>Hong Kong's War Crimes Trials Collection</em>. Retrieved from <a href="https://hkwctc.lib.hku.edu.hk/" target="_blank">https://hkwctc.lib.hku.edu.hk/</a></li>
+                    <li><strong>Ta Kung Pao (2025)</strong>. 〈香港在日寇鐵蹄下的悲慘世界〉 [The miserable world of Hong Kong under the heel of the Japanese invaders]. Retrieved from <a href="https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html" target="_blank">https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html</a></li>
+                    <li><strong>Chinese Culture Studies Institute (2025a)</strong>. 〈（四）苦難的三年零八個月〉 [(4) The suffering of the three years and eight months]. Retrieved from <a href="https://chiculture.org.hk/tc/photo-story/3049" target="_blank">https://chiculture.org.hk/tc/photo-story/3049</a></li>
+                    <li><strong>Chinese Culture Studies Institute (2025b)</strong>. 〈（五）強迫歸鄉〉 [(5) Forced return to home villages]. Retrieved from <a href="https://chiculture.org.hk/tc/photo-story/3050" target="_blank">https://chiculture.org.hk/tc/photo-story/3050</a></li>
+                    <li><strong>Government Records Service, HKSAR Government (2025)</strong>. <em>Japanized Policies</em> (Hong Kong under Japanese Occupation). Retrieved from <a href="https://www.grs.gov.hk/ws/erp/japanocc/eng/eve03.htm" target="_blank">https://www.grs.gov.hk/ws/erp/japanocc/eng/eve03.htm</a></li>
+                    <li><strong>Ta Kung Wen Wei (2025)</strong>. 〈香港在日寇鐵蹄下的悲慘世界〉 [The miserable world of Hong Kong under the heel of the Japanese invaders]. Retrieved from <a href="https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html" target="_blank">https://www.tkww.hk/epaper/view/newsDetail/1346024436578521088.html</a></li>
+                    <li><strong>Wen Wei Po (2025)</strong>. 〈（有片）香港抗戰有段古｜滙豐銅獅　仍可見日軍炮彈痕跡〉 [(Video) Stories of Hong Kong's War of Resistance: Shell marks from the Japanese army can still be seen on the HSBC bronze lions]. Retrieved from <a href="https://www.wenweipo.com/a/202508/15/AP689f0a5ce4b0aefee15724c4.html" target="_blank">https://www.wenweipo.com/a/202508/15/AP689f0a5ce4b0aefee15724c4.html</a></li>
+                </ul>
+            </div>
+            <div class="text-[10px] mt-8 pt-8 border-t border-gray-800 text-center">
+                <p class="mb-2">This website and its resources were designed by the team at the Artificial Intelligence and Digital Competency Education Centre (AIDCEC), The Education University of Hong Kong, to support learning in primary Humanities.</p>
+                <p>@ AIDCEC EdUHK</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        
+        // Same figures as the Chinese page (160 and 60 萬人), shown in millions.
+        const ctxPop = document.getElementById('populationChart').getContext('2d');
+        new Chart(ctxPop, {
+            type: 'line',
+            data: {
+                labels: ['1941 (before the fall)', '1945 (at liberation)'],
+                datasets: [{
+                    label: 'Estimated population (millions)',
+                    data: [1.6, 0.6],
+                    borderColor: '#991B1B',
+                    backgroundColor: 'rgba(153, 27, 27, 0.2)',
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 8,
+                    pointBackgroundColor: '#991B1B'
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) { return context.raw + ' million'; }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'Population (millions)' } }
+                }
+            }
+        });
+
+        
+        const questions = [
+            {
+                q: "The period when Hong Kong was occupied is called the \"three years and eight months\". In which year did this dark period begin?",
+                options: ["1937", "1941", "1945", "1949"],
+                correct: 1,
+                exp: "The correct answer is 1941. The Japanese army formally occupied Hong Kong on 25 December (Black Christmas)."
+            },
+            {
+                q: "During the Japanese Occupation, which currency were people forced to use, which became worthless after the war?",
+                options: ["Hong Kong dollar", "Japanese yen", "Military yen", "Gold yuan"],
+                correct: 2,
+                exp: "The Japanese army forced people to use the \"military yen\" instead of the Hong Kong dollar. After Japan surrendered, the Japanese side refused to honour the military yen, and many families lost all their savings."
+            },
+            {
+                q: "Which guerrilla force fought in the countryside of Hong Kong and rescued several hundred cultural figures?",
+                options: ["The Flying Tigers", "The Volunteer Army", "The Hong Kong-Kowloon Independent Brigade of the Dongjiang Column", "The Red Army"],
+                correct: 2,
+                exp: "The Hong Kong-Kowloon Independent Brigade of the Dongjiang Column was made up mainly of young Hong Kong patriots. It carried out guerrilla attacks behind enemy lines and rescue missions."
+            },
+            {
+                q: "During the Japanese Occupation, each person's daily food ration was called \"6.4 taels\". What does this tell us?",
+                options: ["People were very rich", "Food was extremely scarce", "People did a lot of exercise", "The government was very generous"],
+                correct: 1,
+                exp: "A ration of 6.4 taels of rice was very small, so many people went hungry for a long time."
+            },
+            {
+                q: "In which year did Japan officially announce its unconditional surrender, so that Hong Kong saw the light again?",
+                options: ["1941", "1943", "1944", "1945"],
+                correct: 3,
+                exp: "In August 1945, Japan surrendered unconditionally. The War of Resistance was won and Hong Kong regained its freedom."
+            }
+        ];
+
+        let currentQIndex = 0;
+        let score = 0;
+        let canAnswer = true;
+
+        function startGame() {
+            currentQIndex = 0;
+            score = 0;
+            document.getElementById('game-intro').classList.add('hidden');
+            document.getElementById('game-result').classList.add('hidden');
+            document.getElementById('game-play').classList.remove('hidden');
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            canAnswer = true;
+            const q = questions[currentQIndex];
+            document.getElementById('current-q').innerText = currentQIndex + 1;
+            document.getElementById('game-score').innerText = score;
+            document.getElementById('question-text').innerText = q.q;
+            document.getElementById('explanation').classList.add('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+            
+            const optionsGrid = document.getElementById('options-grid');
+            optionsGrid.innerHTML = '';
+            
+            q.options.forEach((opt, index) => {
+                const btn = document.createElement('div');
+                btn.className = "quiz-option p-4 rounded-lg bg-gray-800 text-white font-medium text-center hover:shadow-lg";
+                btn.innerText = opt;
+                btn.onclick = () => selectOption(index, btn);
+                optionsGrid.appendChild(btn);
+            });
+        }
+
+        function selectOption(index, element) {
+            if (!canAnswer) return;
+            canAnswer = false;
+            
+            const q = questions[currentQIndex];
+            const allOptions = document.querySelectorAll('.quiz-option');
+            
+            if (index === q.correct) {
+                element.classList.add('correct');
+                score += 20;
+                document.getElementById('game-score').innerText = score;
+            } else {
+                element.classList.add('wrong');
+                allOptions[q.correct].classList.add('correct');
+            }
+            
+            document.getElementById('explanation-text').innerText = q.exp;
+            document.getElementById('explanation').classList.remove('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
+
+        function nextQuestion() {
+            currentQIndex++;
+            if (currentQIndex < questions.length) {
+                loadQuestion();
+            } else {
+                showResult();
+            }
+        }
+
+        function showResult() {
+            document.getElementById('game-play').classList.add('hidden');
+            document.getElementById('game-result').classList.remove('hidden');
+            document.getElementById('final-score').innerText = score;
+            
+            let msg = "";
+            if (score === 100) msg = "Amazing! You know this period of history inside out. You are a real Young Historian!";
+            else if (score >= 60) msg = "Well done! You have a good understanding of Hong Kong's War of Resistance history. Keep it up!";
+            else msg = "Don't give up! Read the page carefully once more, and you will get a high score next time!";
+            
+            document.getElementById('result-message').innerText = msg;
+        }
+    </script>
+</body>
+</html>

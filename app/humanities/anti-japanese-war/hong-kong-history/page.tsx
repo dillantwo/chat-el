@@ -9,16 +9,18 @@ import { defineCopy } from "@/lib/i18n/config";
 // Served straight out of public/ instead of the old Apps Script deployment:
 // the page is a static self-contained document, so hosting it locally drops the
 // third-party round trip and the Google sign-in prompt students used to hit.
-const EMBED_URL = "/humanities/humanities-war.html";
-
+// The document is written in one language, so each locale has its own copy;
+// keep humanities-war.html and humanities-war-en.html in step.
 const COPY = defineCopy({
   "zh-Hant": {
+    embedUrl: "/humanities/humanities-war.html",
     backLabel: "返回抗日戰爭",
     loading: "正在載入「認識香港歷史」…",
     frameTitle: "認識香港歷史",
     openInNewTab: "在新分頁開啟",
   },
   en: {
+    embedUrl: "/humanities/humanities-war-en.html",
     backLabel: "Back to War of Resistance",
     loading: "Loading “Hong Kong in the War”…",
     frameTitle: "Hong Kong in the War",
@@ -28,7 +30,10 @@ const COPY = defineCopy({
 
 export default function HongKongHistoryLearningPage() {
   const copy = useCopy(COPY);
-  const [loaded, setLoaded] = useState(false);
+  // Tracks which URL finished loading, so switching language (which swaps the
+  // frame's src) shows the loading overlay again until the other copy is up.
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const loaded = loadedUrl === copy.embedUrl;
 
   return (
     <>
@@ -43,15 +48,15 @@ export default function HongKongHistoryLearningPage() {
         )}
 
         <iframe
-          src={EMBED_URL}
+          src={copy.embedUrl}
           title={copy.frameTitle}
-          onLoad={() => setLoaded(true)}
+          onLoad={() => setLoadedUrl(copy.embedUrl)}
           className="h-full w-full flex-1 border-0"
           allow="fullscreen"
         />
 
         <a
-          href={EMBED_URL}
+          href={copy.embedUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-[#d8d8d8] bg-white/90 px-3 py-1.5 text-xs font-medium text-[#5a5a5a] shadow-sm backdrop-blur transition hover:border-[#080808] hover:text-[#080808]"

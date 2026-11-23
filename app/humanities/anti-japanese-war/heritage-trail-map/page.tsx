@@ -8,15 +8,18 @@ import { defineCopy } from "@/lib/i18n/config";
 
 // Self-hosted static map app (public/humanities/heritage-trail-map/).
 // Replaces the previous Google Apps Script embed, which is no longer available.
-const EMBED_URL = "/humanities/heritage-trail-map/index.html";
+// index.html is the Chinese edition and index-en.html the English one; they share
+// app.js, the styles and the photos, and differ only in their text files.
 
 const COPY = defineCopy({
   "zh-Hant": {
+    embedUrl: "/humanities/heritage-trail-map/index.html",
     backLabel: "返回抗日戰爭",
     loading: "正在載入互動地圖…",
     frameTitle: "香港抗戰文物徑互動地圖",
   },
   en: {
+    embedUrl: "/humanities/heritage-trail-map/index-en.html",
     backLabel: "Back to War of Resistance",
     loading: "Loading the interactive map…",
     frameTitle: "Hong Kong War Relics Trail Map",
@@ -81,7 +84,7 @@ export default function HeritageTrailMapPage() {
 
         <iframe
           ref={iframeRef}
-          src={EMBED_URL}
+          src={copy.embedUrl}
           title={copy.frameTitle}
           onLoad={() => setLoaded(true)}
           className="block h-full w-full flex-1 border-0"
