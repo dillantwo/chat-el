@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
       kind: 1,
       filename: 1,
       url: 1,
+      openInNewWindow: 1,
       contentType: 1,
       size: 1,
     })
@@ -90,6 +91,9 @@ export async function GET(req: NextRequest) {
           kind: d.kind === "link" ? "link" : "file",
           filename: d.filename ?? "",
           url: d.url ?? "",
+          // Missing on links stored before the option existed; they opened in a
+          // new window, so they still do.
+          openInNewWindow: d.openInNewWindow !== false,
           contentType: d.contentType ?? "",
           size: d.size ?? 0,
         })),

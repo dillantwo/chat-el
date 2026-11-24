@@ -47,6 +47,8 @@ export interface ILearningMaterial extends Document {
   filename: string;
   /** External https URL. Links only; `""` for files. */
   url: string;
+  /** Whether the link opens in a new window/tab. Links only; ignored for files. */
+  openInNewWindow: boolean;
   /** MIME type of the stored file. Files only. */
   contentType: string;
   /** File size in bytes. Files only; `0` for links. */
@@ -96,6 +98,9 @@ const LearningMaterialSchema = new Schema<ILearningMaterial>(
     fileId: { type: Schema.Types.ObjectId, required: isFile },
     filename: { type: String, default: "", required: isFile },
     url: { type: String, default: "", trim: true, required: isLink },
+    // Defaults to true: every link written before this option existed opened in
+    // a new window, so they keep doing so with no migration.
+    openInNewWindow: { type: Boolean, default: true },
     contentType: { type: String, default: "application/octet-stream" },
     size: { type: Number, default: 0 },
     uploadedBy: { type: String, required: true },

@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   return createFile(req, session.userId);
 }
 
-/** Body: { subject, title, description?, audience?, url } */
+/** Body: { subject, title, description?, audience?, url, openInNewWindow? } */
 async function createLink(req: NextRequest, userId: string) {
   try {
     const body = await req.json();
@@ -84,6 +84,8 @@ async function createLink(req: NextRequest, userId: string) {
       audience,
       kind: "link",
       url: link.url,
+      // Only an explicit `false` turns it off, so older clients keep the default.
+      openInNewWindow: body.openInNewWindow !== false,
       // A link has no file half. Stored empty rather than left unset so the
       // serialized shape is the same for both kinds.
       filename: "",

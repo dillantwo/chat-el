@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -68,6 +69,7 @@ export default function AdminMaterialsPage() {
   const [kind, setKind] = useState<MaterialKindValue>("file");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
+  const [openInNewWindow, setOpenInNewWindow] = useState(true);
 
   const loadMaterials = useCallback(async () => {
     setLoading(true);
@@ -94,6 +96,7 @@ export default function AdminMaterialsPage() {
     setKind("file");
     setFile(null);
     setUrl("");
+    setOpenInNewWindow(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
     setDialogOpen(true);
@@ -108,6 +111,7 @@ export default function AdminMaterialsPage() {
     setKind(m.kind);
     setFile(null);
     setUrl(m.url);
+    setOpenInNewWindow(m.openInNewWindow);
     setError(null);
     setDialogOpen(true);
   }
@@ -119,7 +123,7 @@ export default function AdminMaterialsPage() {
       if (editing) {
         // Metadata-only update: an uploaded file is immutable once stored, but a
         // link's url is metadata and can be corrected here.
-        const body: Record<string, string> = { title, description, audience };
+        const body: Record<string, string | boolean> = { title, description, audience };
         if (editing.kind === "link") {
           const link = parseLinkUrl(url);
           if (!link.ok) {
@@ -127,6 +131,7 @@ export default function AdminMaterialsPage() {
             return;
           }
           body.url = link.url;
+          body.openInNewWindow = openInNewWindow;
         }
         const res = await fetch(`${basePath}/api/admin/learning-materials/${editing.id}`, {
           method: "PATCH",
@@ -150,7 +155,14 @@ export default function AdminMaterialsPage() {
         const res = await fetch(`${basePath}/api/admin/learning-materials`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subject, title, description, audience, url: link.url }),
+          body: JSON.stringify({
+            subject,
+            title,
+            description,
+            audience,
+            url: link.url,
+            openInNewWindow,
+          }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -427,13 +439,25 @@ export default function AdminMaterialsPage() {
               <div className="space-y-2">
                 <Label>連結網址</Label>
                 <Input
+                  key="url-input"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://…"
                   inputMode="url"
                 />
+                <p className="text-xs text-muted-foreground">必須是 https:// 開頭的網址。</p>
+                <div className="flex items-center gap-2 pt-1">
+                  <Switch
+                    id="material-new-window"
+                    checked={openInNewWindow}
+                    onCheckedChange={(checked) => setOpenInNewWindow(checked)}
+                  />
+                  <Label htmlFor="material-new-window">在新視窗開啟</Label>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  必須是 https:// 開頭的網址。學生點擊後會在新視窗開啟。
+                  {openInNewWindow
+                    ? "學生點擊後會在新視窗開啟，原本的頁面保持不變。"
+                    : "學生點擊後會在目前視窗開啟，離開學習資源頁面。"}
                 </p>
               </div>
             ) : editing ? (
@@ -445,6 +469,7 @@ export default function AdminMaterialsPage() {
               <div className="space-y-2">
                 <Label>檔案</Label>
                 <Input
+                  key="file-input"
                   ref={fileInputRef}
                   type="file"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}

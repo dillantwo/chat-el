@@ -32,6 +32,8 @@ interface MaterialItem {
   filename: string;
   /** Links only. */
   url: string;
+  /** Links only: open in a new window/tab rather than this one. */
+  openInNewWindow: boolean;
   contentType: string;
   size: number;
 }
@@ -285,6 +287,7 @@ export default function MaterialsBrowser({
                     <ul className="space-y-2.5 p-3 sm:p-4">
                       {group.items.map((m) => {
                         const isLink = m.kind === "link";
+                        const newWindow = isLink && m.openInNewWindow !== false;
                         const { label: kindLabel, Icon }: KindInfo = isLink
                           ? { label: copy.kinds.link, Icon: ExternalLink }
                           : fileKind(m, copy);
@@ -299,11 +302,14 @@ export default function MaterialsBrowser({
                                   ? m.url
                                   : `${basePath}/api/learning-materials/${m.id}/download`
                               }
-                              // A link goes to someone else's site: its own tab,
-                              // and no handle back into this one.
-                              {...(isLink
+                              // A link goes to someone else's site. In a new tab
+                              // it gets no handle back into this one; otherwise
+                              // it just navigates away, as the admin chose.
+                              {...(newWindow
                                 ? { target: "_blank", rel: "noopener noreferrer" }
-                                : { download: m.filename })}
+                                : isLink
+                                  ? { rel: "noreferrer" }
+                                  : { download: m.filename })}
                               className="group flex min-h-[68px] items-center gap-3 rounded-[8px] border-2 border-[#dfe7f2] bg-white px-3 py-3 transition duration-200 hover:border-[#22304a] hover:shadow-[4px_4px_0_#bcd3ee] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3576cf] sm:gap-4 sm:px-4"
                               title={isLink ? m.url : m.filename}
                             >
@@ -343,7 +349,7 @@ export default function MaterialsBrowser({
                                 {/* The label is hidden on narrow screens and an
                                     icon has no accessible name, so state in text
                                     that this one leaves the app. */}
-                                {isLink && <span className="sr-only">{copy.newWindow}</span>}
+                                {newWindow && <span className="sr-only">{copy.newWindow}</span>}
                               </span>
                             </a>
                           </li>

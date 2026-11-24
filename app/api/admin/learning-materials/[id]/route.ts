@@ -53,6 +53,12 @@ export async function PATCH(
       }
       material.url = link.url;
     }
+    if (typeof body.openInNewWindow === "boolean") {
+      if (material.kind !== "link") {
+        return NextResponse.json({ error: "檔案資源沒有開啟方式設定" }, { status: 400 });
+      }
+      material.openInNewWindow = body.openInNewWindow;
+    }
 
     await material.save();
 

@@ -96,6 +96,8 @@ export interface MaterialDTO {
   filename: string;
   /** Links only; `""` for files. */
   url: string;
+  /** Links only: open in a new window/tab rather than the current one. */
+  openInNewWindow: boolean;
   contentType: string;
   size: number;
   /** ISO 8601, or `""` when unknown. */
@@ -112,6 +114,7 @@ export interface SerializableMaterial {
   kind?: string | null;
   filename?: string | null;
   url?: string | null;
+  openInNewWindow?: boolean | null;
   contentType?: string | null;
   size?: number | null;
   createdAt?: Date | string | null;
@@ -134,6 +137,9 @@ export function serializeMaterial(doc: SerializableMaterial): MaterialDTO {
     kind: doc.kind === "link" ? "link" : "file",
     filename: doc.filename ?? "",
     url: doc.url ?? "",
+    // `.lean()` skips the schema default, so a link stored before this option
+    // existed arrives without it; it opened in a new window then.
+    openInNewWindow: doc.openInNewWindow !== false,
     contentType: doc.contentType ?? "",
     size: doc.size ?? 0,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : "",
